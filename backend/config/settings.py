@@ -111,3 +111,22 @@ REST_FRAMEWORK = {
 
 # Gemini
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+
+# Email — Gmail SMTP (use console backend if no credentials)
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    DEFAULT_FROM_EMAIL = f'RxChat <{EMAIL_HOST_USER}>'
+else:
+    # Dev fallback — prints emails to terminal
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    DEFAULT_FROM_EMAIL = 'RxChat <noreply@rxchat.dev>'
+
+# Google OAuth (future)
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
