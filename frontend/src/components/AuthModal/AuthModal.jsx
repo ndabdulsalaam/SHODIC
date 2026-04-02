@@ -5,8 +5,8 @@ import './AuthModal.css'
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
-function AuthModal({ onClose, onLogin }) {
-    const [isLogin, setIsLogin] = useState(true)
+function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
+    const [isLogin, setIsLogin] = useState(initialMode === 'login')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -145,10 +145,10 @@ function AuthModal({ onClose, onLogin }) {
                             <input
                                 id="auth-confirm"
                                 className={`auth-modal__input ${passwordsMatch === true
-                                        ? 'auth-modal__input--match'
-                                        : passwordsMatch === false
-                                            ? 'auth-modal__input--mismatch'
-                                            : ''
+                                    ? 'auth-modal__input--match'
+                                    : passwordsMatch === false
+                                        ? 'auth-modal__input--mismatch'
+                                        : ''
                                     }`}
                                 type={showPassword ? 'text' : 'password'}
                                 placeholder="••••••••"
