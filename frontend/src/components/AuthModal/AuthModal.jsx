@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HiOutlineXMark } from 'react-icons/hi2'
 import './AuthModal.css'
@@ -10,10 +10,14 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    const [name, setName] = useState('')
+    const [username, setUsername] = useState('')
+    const [firstName, setFirstName] = useState('')
+    const [lastName, setLastName] = useState('')
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [usernameStatus, setUsernameStatus] = useState(null) // null | 'checking' | 'available' | 'taken' | 'error'
+    const [usernameError, setUsernameError] = useState('')
     const navigate = useNavigate()
 
     const passwordsMatch = useMemo(() => {
@@ -23,8 +27,76 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
 
     const canSubmit = useMemo(() => {
         if (isLogin) return email && password
-        return email && password && name && password.length >= 8 && passwordsMatch === true
-    }, [isLogin, email, password, name, passwordsMatch])
+        return (
+            email &&
+            password &&
+            username &&
+            firstName &&
+            password.length >= 8 &&
+            passwordsMatch === true &&
+            usernameStatus === 'available'
+        )
+    }, [isLogin, email, password, username, firstName, passwordsMatch, usernameStatus])
+
+    // Debounced username availability check
+    const checkUsername = useCallback(async (value) => {
+        if (!value || value.length < 3) {
+            setUsernameStatus(null)
+            setUsernameError('')
+            return
+        }
+        setUsernameStatus('checking')
+        try {
+            const res = await fetch(`${API}/auth/check-username/?username=${encodeURIComponent(value)}`, {
+                credentials: 'include',
+            })
+            const data = await res.json()
+            if (data.available) {
+                setUsernameStatus('available')
+                setUsernameError('')
+            } else {
+                setUsernameStatus(data.error ? 'error' : 'taken')
+                setUsernameError(data.error || 'Username is taken')
+            }
+        } catch {
+            setUsernameStatus('error')
+            setUsernameError('Could not check availability')
+        }
+    }, [])
+
+    useEffect(() => {
+        if (isLogin) return
+        const timer = setTimeout(() => checkUsername(username), 400)
+        return () => clearTimeout(timer)
+    }, [username, isLogin, checkUsername])
+
+    const handleForgotPassword = async () => {
+        if (!email) {
+            setError('Please enter your email address first')
+            return
+        }
+        setLoading(true)
+        setError('')
+        try {
+            const res = await fetch(`${API}/auth/forgot-password/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ email }),
+            })
+            const data = await res.json()
+            if (data.otp_required) {
+                navigate(`/auth?step=otp&email=${encodeURIComponent(data.email)}&purpose=password_reset`)
+                onClose()
+            } else {
+                setError(data.message || 'Check your email for the reset code')
+            }
+        } catch {
+            setError('Network error. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -34,8 +106,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
         try {
             const endpoint = isLogin ? '/auth/login/' : '/auth/register/'
             const body = isLogin
-                ? { email, password }
-                : { email, password, name }
+                ? { identifier: email, password }
+                : { email, password, username, first_name: firstName, last_name: lastName }
 
             const res = await fetch(`${API}${endpoint}`, {
                 method: 'POST',
@@ -98,27 +170,72 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                 {/* Form */}
                 <form className="auth-modal__form" onSubmit={handleSubmit}>
                     {!isLogin && (
-                        <div className="auth-modal__field">
-                            <label className="auth-modal__label" htmlFor="auth-name">Full Name</label>
-                            <input
-                                id="auth-name"
-                                className="auth-modal__input"
-                                type="text"
-                                placeholder="Enter your name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                required
-                            />
-                        </div>
+                        <>
+                            <div className="auth-modal__field">
+                                <label className="auth-modal__label" htmlFor="auth-username">Username</label>
+                                <input
+                                    id="auth-username"
+                                    className={`auth-modal__input ${usernameStatus === 'available'
+                                        ? 'auth-modal__input--match'
+                                        : usernameStatus === 'taken' || usernameStatus === 'error'
+                                            ? 'auth-modal__input--mismatch'
+                                            : ''
+                                        }`}
+                                    type="text"
+                                    placeholder="e.g. Nurudeen_Rx"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
+                                    required
+                                    minLength={3}
+                                />
+                                {usernameStatus && (
+                                    <div className={`auth-modal__match-indicator auth-modal__match-indicator--${usernameStatus === 'available' ? 'match' : 'mismatch'
+                                        }`}>
+                                        {usernameStatus === 'checking' && '⏳ Checking...'}
+                                        {usernameStatus === 'available' && '✓ Username available'}
+                                        {usernameStatus === 'taken' && '✗ Username is taken'}
+                                        {usernameStatus === 'error' && `✗ ${usernameError}`}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="auth-modal__row">
+                                <div className="auth-modal__field">
+                                    <label className="auth-modal__label" htmlFor="auth-firstname">First Name</label>
+                                    <input
+                                        id="auth-firstname"
+                                        className="auth-modal__input"
+                                        type="text"
+                                        placeholder="First name"
+                                        value={firstName}
+                                        onChange={(e) => setFirstName(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="auth-modal__field">
+                                    <label className="auth-modal__label" htmlFor="auth-lastname">Last Name</label>
+                                    <input
+                                        id="auth-lastname"
+                                        className="auth-modal__input"
+                                        type="text"
+                                        placeholder="Last name"
+                                        value={lastName}
+                                        onChange={(e) => setLastName(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </>
                     )}
 
                     <div className="auth-modal__field">
-                        <label className="auth-modal__label" htmlFor="auth-email">Email</label>
+                        <label className="auth-modal__label" htmlFor="auth-email">
+                            {isLogin ? 'Email or Username' : 'Email'}
+                        </label>
                         <input
                             id="auth-email"
                             className="auth-modal__input"
-                            type="email"
-                            placeholder="you@example.com"
+                            type={isLogin ? 'text' : 'email'}
+                            placeholder={isLogin ? 'Email or username' : 'you@example.com'}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
@@ -175,6 +292,16 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                         <label htmlFor="show-pass">Show password</label>
                     </div>
 
+                    {isLogin && (
+                        <button
+                            type="button"
+                            className="auth-modal__forgot"
+                            onClick={handleForgotPassword}
+                        >
+                            Forgot password?
+                        </button>
+                    )}
+
                     <button
                         type="submit"
                         className="auth-modal__submit"
@@ -199,7 +326,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                 {/* Toggle login/register */}
                 <div className="auth-modal__toggle">
                     {isLogin ? "Don't have an account? " : 'Already have an account? '}
-                    <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setConfirmPassword('') }}>
+                    <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setConfirmPassword(''); setUsernameStatus(null) }}>
                         {isLogin ? 'Register' : 'Sign In'}
                     </button>
                 </div>
