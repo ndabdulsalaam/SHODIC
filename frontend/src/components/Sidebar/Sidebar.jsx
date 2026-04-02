@@ -1,9 +1,7 @@
 import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle } from 'react-icons/hi2'
-import { useNavigate } from 'react-router-dom'
 import './Sidebar.css'
 
-function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, isOpen, onClose, user }) {
-    const navigate = useNavigate()
+function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, isOpen, onClose, user, onShowAuth }) {
 
     return (
         <>
@@ -60,9 +58,9 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                             <span>{user.name || user.email}</span>
                         </button>
                     ) : (
-                        <button className="sidebar__user-btn" onClick={() => navigate('/auth')}>
+                        <button className="sidebar__user-btn" onClick={onShowAuth}>
                             <HiOutlineArrowRightOnRectangle size={18} />
-                            <span>Sign in to save history</span>
+                            <span>Sign in</span>
                         </button>
                     )}
                 </div>
