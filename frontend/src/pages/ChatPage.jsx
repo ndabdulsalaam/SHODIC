@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
 import AuthModal from '../components/AuthModal/AuthModal'
@@ -122,9 +122,33 @@ function ChatPage() {
     const [authMode, setAuthMode] = useState('login')
     const [user, setUser] = useState(null)
 
+    const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
+    // Check if user is already logged in on mount
+    useEffect(() => {
+        const checkAuth = async () => {
+            try {
+                const res = await fetch(`${API}/auth/me/`, { credentials: 'include' })
+                const data = await res.json()
+                if (data.id) setUser(data)
+            } catch { /* not logged in */ }
+        }
+        checkAuth()
+    }, [API])
+
     const handleShowAuth = (mode = 'login') => {
         setAuthMode(mode)
         setShowAuthModal(true)
+    }
+
+    const handleLogout = async () => {
+        try {
+            await fetch(`${API}/auth/logout/`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+        } catch { /* ignore */ }
+        setUser(null)
     }
 
     const activeConversation = conversations.find((c) => c.id === activeConversationId)
@@ -218,6 +242,7 @@ function ChatPage() {
                 onClose={() => setSidebarOpen(false)}
                 user={user}
                 onShowAuth={() => handleShowAuth('login')}
+                onLogout={handleLogout}
             />
             <ChatWindow
                 messages={messages}
@@ -226,6 +251,7 @@ function ChatPage() {
                 onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
                 onShowAuth={handleShowAuth}
                 user={user}
+                onLogout={handleLogout}
             />
             {showAuthModal && (
                 <AuthModal
