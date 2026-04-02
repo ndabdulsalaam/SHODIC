@@ -7,6 +7,8 @@ const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     const [isLogin, setIsLogin] = useState(initialMode === 'login')
+    const [forgotMode, setForgotMode] = useState(false)
+    const [forgotEmail, setForgotEmail] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -70,9 +72,10 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
         return () => clearTimeout(timer)
     }, [username, isLogin, checkUsername])
 
-    const handleForgotPassword = async () => {
-        if (!email) {
-            setError('Please enter your email address first')
+    const handleForgotSubmit = async (e) => {
+        e.preventDefault()
+        if (!forgotEmail) {
+            setError('Please enter your email address')
             return
         }
         setLoading(true)
@@ -82,14 +85,16 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email: forgotEmail }),
             })
             const data = await res.json()
+            if (!res.ok) {
+                setError(data.error || 'Something went wrong')
+                return
+            }
             if (data.otp_required) {
                 navigate(`/auth?step=otp&email=${encodeURIComponent(data.email)}&purpose=password_reset`)
                 onClose()
-            } else {
-                setError(data.message || 'Check your email for the reset code')
             }
         } catch {
             setError('Network error. Please try again.')
@@ -145,6 +150,62 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
         window.location.href = `${API}/auth/google/login/`
     }
 
+    // ─── Forgot Password View ───
+    if (forgotMode) {
+        return (
+            <div className="auth-overlay" onClick={onClose}>
+                <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+                    <button className="auth-modal__close" onClick={onClose} aria-label="Close">
+                        <HiOutlineXMark size={20} />
+                    </button>
+
+                    <div className="auth-modal__logo">
+                        <div className="auth-modal__logo-icon">Rx</div>
+                        <div className="auth-modal__logo-text">
+                            Rx<span>Chat</span>
+                        </div>
+                    </div>
+
+                    <h1 className="auth-modal__title">Reset your password</h1>
+                    <p className="auth-modal__subtitle">Enter your email and we&apos;ll send you a code to reset your password.</p>
+
+                    {error && <div className="auth-modal__error">{error}</div>}
+
+                    <form className="auth-modal__form" onSubmit={handleForgotSubmit}>
+                        <div className="auth-modal__field">
+                            <label className="auth-modal__label" htmlFor="forgot-email">Email</label>
+                            <input
+                                id="forgot-email"
+                                className="auth-modal__input"
+                                type="email"
+                                placeholder="you@example.com"
+                                value={forgotEmail}
+                                onChange={(e) => setForgotEmail(e.target.value)}
+                                required
+                                autoFocus
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="auth-modal__submit"
+                            disabled={!forgotEmail || loading}
+                        >
+                            {loading ? 'Sending...' : 'Send Reset Code'}
+                        </button>
+                    </form>
+
+                    <div className="auth-modal__toggle">
+                        <button type="button" onClick={() => { setForgotMode(false); setError('') }}>
+                            ← Back to Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ─── Login / Register View ───
     return (
         <div className="auth-overlay" onClick={onClose}>
             <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
@@ -296,7 +357,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                         <button
                             type="button"
                             className="auth-modal__forgot"
-                            onClick={handleForgotPassword}
+                            onClick={() => { setForgotMode(true); setError('') }}
                         >
                             Forgot password?
                         </button>
