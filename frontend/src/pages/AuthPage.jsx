@@ -1,114 +1,184 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HiOutlineArrowLeft } from 'react-icons/hi2'
 import './AuthPage.css'
 
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
 function AuthPage() {
-    const [isLogin, setIsLogin] = useState(true)
-    const [email, setEmail] = useState('')
-    const [password, setPassword] = useState('')
-    const [name, setName] = useState('')
+    const [searchParams] = useSearchParams()
+    const email = searchParams.get('email') || ''
+    const purpose = searchParams.get('purpose') || 'registration'
     const navigate = useNavigate()
 
-    const handleSubmit = (e) => {
+    const [otp, setOtp] = useState(['', '', '', '', '', ''])
+    const [error, setError] = useState('')
+    const [success, setSuccess] = useState('')
+    const [loading, setLoading] = useState(false)
+    const [resendCooldown, setResendCooldown] = useState(0)
+    const inputRefs = useRef([])
+
+    // Resend cooldown timer
+    useEffect(() => {
+        if (resendCooldown <= 0) return
+        const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000)
+        return () => clearTimeout(timer)
+    }, [resendCooldown])
+
+    // If no email, redirect back
+    useEffect(() => {
+        if (!email) navigate('/')
+    }, [email, navigate])
+
+    const handleChange = (index, value) => {
+        if (!/^\d*$/.test(value)) return // Only digits
+        const newOtp = [...otp]
+        newOtp[index] = value.slice(-1)
+        setOtp(newOtp)
+        setError('')
+
+        // Auto-focus next input
+        if (value && index < 5) {
+            inputRefs.current[index + 1]?.focus()
+        }
+    }
+
+    const handleKeyDown = (index, e) => {
+        if (e.key === 'Backspace' && !otp[index] && index > 0) {
+            inputRefs.current[index - 1]?.focus()
+        }
+    }
+
+    const handlePaste = (e) => {
         e.preventDefault()
-        // TODO: Connect to Django backend auth API
-        console.log(isLogin ? 'Login' : 'Register', { email, password, name })
+        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+        if (pasted.length === 6) {
+            setOtp(pasted.split(''))
+            inputRefs.current[5]?.focus()
+        }
+    }
+
+    const handleVerify = async (e) => {
+        e.preventDefault()
+        const code = otp.join('')
+        if (code.length !== 6) {
+            setError('Please enter the 6-digit code')
+            return
+        }
+
+        setLoading(true)
+        setError('')
+
+        try {
+            const endpoint = purpose === 'registration'
+                ? '/auth/verify-otp/'
+                : '/auth/verify-device/'
+
+            const res = await fetch(`${API}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ email, otp: code }),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                setError(data.error || 'Verification failed')
+                return
+            }
+
+            setSuccess(purpose === 'registration'
+                ? 'Account created! Redirecting...'
+                : 'Device verified! Redirecting...'
+            )
+
+            setTimeout(() => navigate('/'), 1500)
+        } catch {
+            setError('Network error. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleResend = async () => {
+        setResendCooldown(60)
+        setError('')
+
+        try {
+            const res = await fetch(`${API}/auth/resend-otp/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ email, purpose }),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                setError(data.error || 'Failed to resend')
+                return
+            }
+
+            setSuccess('New code sent! Check your email.')
+            setTimeout(() => setSuccess(''), 3000)
+        } catch {
+            setError('Network error. Please try again.')
+        }
     }
 
     return (
-        <div className="auth">
-            <div className="auth__card">
-                {/* Logo */}
-                <div className="auth__logo">
-                    <div className="auth__logo-icon">Rx</div>
-                    <div className="auth__logo-text">
-                        Rx<span>Chat</span>
-                    </div>
+        <div className="auth-page">
+            <div className="auth-page__card">
+                <div className="auth-page__logo">
+                    <div className="auth-page__logo-icon">Rx</div>
                 </div>
 
-                <h1 className="auth__title">
-                    {isLogin ? 'Welcome back' : 'Create an account'}
-                </h1>
-                <p className="auth__subtitle">
-                    {isLogin
-                        ? 'Sign in to access your chat history'
-                        : 'Register to save your conversations'}
+                <h1 className="auth-page__title">Verify your email</h1>
+                <p className="auth-page__subtitle">
+                    We sent a 6-digit code to <strong>{email}</strong>
                 </p>
 
-                {/* Form */}
-                <form className="auth__form" onSubmit={handleSubmit}>
-                    {!isLogin && (
-                        <div className="auth__field">
-                            <label className="auth__label" htmlFor="name">Full Name</label>
+                {error && <div className="auth-page__error">{error}</div>}
+                {success && <div className="auth-page__success">{success}</div>}
+
+                <form onSubmit={handleVerify}>
+                    <div className="auth-page__otp-inputs" onPaste={handlePaste}>
+                        {otp.map((digit, i) => (
                             <input
-                                id="name"
-                                className="auth__input"
+                                key={i}
+                                ref={(el) => (inputRefs.current[i] = el)}
+                                className={`auth-page__otp-input ${digit ? 'auth-page__otp-input--filled' : ''}`}
                                 type="text"
-                                placeholder="Enter your name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                required
+                                inputMode="numeric"
+                                maxLength={1}
+                                value={digit}
+                                onChange={(e) => handleChange(i, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(i, e)}
+                                autoFocus={i === 0}
                             />
-                        </div>
-                    )}
-
-                    <div className="auth__field">
-                        <label className="auth__label" htmlFor="email">Email</label>
-                        <input
-                            id="email"
-                            className="auth__input"
-                            type="email"
-                            placeholder="you@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
+                        ))}
                     </div>
 
-                    <div className="auth__field">
-                        <label className="auth__label" htmlFor="password">Password</label>
-                        <input
-                            id="password"
-                            className="auth__input"
-                            type="password"
-                            placeholder="••••••••"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            minLength={8}
-                        />
-                    </div>
-
-                    <button type="submit" className="auth__submit">
-                        {isLogin ? 'Sign In' : 'Create Account'}
-                    </button>
-
-                    <div className="auth__divider">or</div>
-
-                    <button type="button" className="auth__google">
-                        <svg width="18" height="18" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                        </svg>
-                        Continue with Google
+                    <button
+                        type="submit"
+                        className="auth-page__submit"
+                        disabled={loading || otp.join('').length !== 6}
+                    >
+                        {loading ? 'Verifying...' : 'Verify Code'}
                     </button>
                 </form>
 
-                {/* Toggle login/register */}
-                <div className="auth__toggle">
-                    {isLogin ? "Don't have an account? " : 'Already have an account? '}
-                    <button type="button" onClick={() => setIsLogin(!isLogin)}>
-                        {isLogin ? 'Register' : 'Sign In'}
+                <div className="auth-page__resend">
+                    Didn&apos;t receive the code?{' '}
+                    <button onClick={handleResend} disabled={resendCooldown > 0}>
+                        {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
                     </button>
                 </div>
 
-                {/* Back to chat */}
-                <button className="auth__back" onClick={() => navigate('/')}>
+                <button className="auth-page__back" onClick={() => navigate('/')}>
                     <HiOutlineArrowLeft size={14} />
-                    Continue without signing in
+                    Back to chat
                 </button>
             </div>
         </div>
