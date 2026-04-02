@@ -6,7 +6,7 @@ import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
 import TypingIndicator from '../TypingIndicator/TypingIndicator'
 import './ChatWindow.css'
 
-function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar }) {
+function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onShowAuth, user }) {
     const messagesEndRef = useRef(null)
 
     useEffect(() => {
@@ -26,10 +26,11 @@ function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar }) {
                         <div className="chat-window__subtitle">AI Pharmacy Assistant</div>
                     </div>
                 </div>
-                <div className="chat-window__header-badge">
-                    <span className="chat-window__header-badge-dot" />
-                    Online
-                </div>
+                {!user && (
+                    <button className="chat-window__header-badge" onClick={onShowAuth}>
+                        Sign up for free
+                    </button>
+                )}
             </header>
 
             {/* Messages */}

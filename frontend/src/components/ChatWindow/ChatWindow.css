@@ -67,6 +67,14 @@
     font-size: var(--font-size-xs);
     font-weight: 500;
     color: var(--color-secondary-dark);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.chat-window__header-badge:hover {
+    background: rgba(46, 196, 182, 0.2);
+    border-color: var(--color-secondary);
 }
 
 .chat-window__header-badge-dot {
