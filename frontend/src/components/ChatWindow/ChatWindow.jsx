@@ -1,12 +1,12 @@
 import { useRef, useEffect } from 'react'
-import { HiOutlineBars3 } from 'react-icons/hi2'
+import { HiOutlineBars3, HiOutlineArrowRightOnRectangle } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
 import TypingIndicator from '../TypingIndicator/TypingIndicator'
 import './ChatWindow.css'
 
-function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onShowAuth, user }) {
+function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onShowAuth, user, onLogout }) {
     const messagesEndRef = useRef(null)
 
     useEffect(() => {
@@ -26,7 +26,12 @@ function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onSho
                         <div className="chat-window__subtitle">AI Pharmacy Assistant</div>
                     </div>
                 </div>
-                {!user && (
+                {user ? (
+                    <button className="chat-window__header-logout" onClick={onLogout}>
+                        <HiOutlineArrowRightOnRectangle size={16} />
+                        Logout
+                    </button>
+                ) : (
                     <div className="chat-window__header-actions">
                         <button className="chat-window__header-signin" onClick={() => onShowAuth('login')}>
                             Sign in
