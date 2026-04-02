@@ -1,0 +1,130 @@
+/* ============================================
+   MessageBubble Component
+   ============================================ */
+
+.message {
+    display: flex;
+    gap: var(--space-3);
+    animation: fadeInUp 0.3s ease;
+    animation-fill-mode: both;
+}
+
+.message--user {
+    flex-direction: row-reverse;
+}
+
+.message__avatar {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.message__avatar--ai {
+    background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
+    color: var(--color-primary);
+}
+
+.message__avatar--user {
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
+}
+
+.message__content {
+    max-width: 75%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.message__bubble {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-base);
+    line-height: 1.65;
+    word-wrap: break-word;
+}
+
+.message--ai .message__bubble {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-top-left-radius: var(--radius-sm);
+}
+
+.message--user .message__bubble {
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
+    border-top-right-radius: var(--radius-sm);
+}
+
+.message__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    padding: 0 var(--space-1);
+}
+
+.message--user .message__meta {
+    justify-content: flex-end;
+}
+
+.message__bubble p {
+    margin-bottom: var(--space-2);
+}
+
+.message__bubble p:last-child {
+    margin-bottom: 0;
+}
+
+.message__bubble strong {
+    font-weight: 600;
+    color: var(--color-secondary-dark);
+}
+
+.message--user .message__bubble strong {
+    color: var(--color-accent-light);
+}
+
+.message__bubble ul,
+.message__bubble ol {
+    margin: var(--space-2) 0;
+    padding-left: var(--space-5);
+}
+
+.message__bubble li {
+    list-style: disc;
+    margin-bottom: var(--space-1);
+}
+
+.message__bubble code {
+    background: rgba(46, 196, 182, 0.1);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: 'Fira Code', monospace;
+}
+
+/* Warning highlight for drug interactions */
+.message__bubble .warning {
+    background: rgba(230, 57, 70, 0.08);
+    border-left: 3px solid var(--color-error);
+    padding: var(--space-2) var(--space-3);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin: var(--space-2) 0;
+    font-size: var(--font-size-sm);
+}
+
+@media (max-width: 768px) {
+    .message__content {
+        max-width: 85%;
+    }
+}
