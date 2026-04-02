@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
+import AuthModal from '../components/AuthModal/AuthModal'
 import './ChatPage.css'
 
 // Simulated AI response (will be replaced by backend API call)
@@ -117,6 +118,8 @@ function ChatPage() {
     const [activeConversationId, setActiveConversationId] = useState(null)
     const [isLoading, setIsLoading] = useState(false)
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const [showAuthModal, setShowAuthModal] = useState(false)
+    const [user, setUser] = useState(null)
 
     const activeConversation = conversations.find((c) => c.id === activeConversationId)
     const messages = activeConversation?.messages || []
@@ -207,14 +210,23 @@ function ChatPage() {
                 onDeleteChat={handleDeleteChat}
                 isOpen={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
-                user={null}
+                user={user}
+                onShowAuth={() => setShowAuthModal(true)}
             />
             <ChatWindow
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
                 onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                onShowAuth={() => setShowAuthModal(true)}
+                user={user}
             />
+            {showAuthModal && (
+                <AuthModal
+                    onClose={() => setShowAuthModal(false)}
+                    onLogin={(userData) => setUser(userData)}
+                />
+            )}
         </div>
     )
 }
