@@ -119,7 +119,13 @@ function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [showAuthModal, setShowAuthModal] = useState(false)
+    const [authMode, setAuthMode] = useState('login')
     const [user, setUser] = useState(null)
+
+    const handleShowAuth = (mode = 'login') => {
+        setAuthMode(mode)
+        setShowAuthModal(true)
+    }
 
     const activeConversation = conversations.find((c) => c.id === activeConversationId)
     const messages = activeConversation?.messages || []
@@ -211,20 +217,21 @@ function ChatPage() {
                 isOpen={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
                 user={user}
-                onShowAuth={() => setShowAuthModal(true)}
+                onShowAuth={() => handleShowAuth('login')}
             />
             <ChatWindow
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
                 onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-                onShowAuth={() => setShowAuthModal(true)}
+                onShowAuth={handleShowAuth}
                 user={user}
             />
             {showAuthModal && (
                 <AuthModal
                     onClose={() => setShowAuthModal(false)}
                     onLogin={(userData) => setUser(userData)}
+                    initialMode={authMode}
                 />
             )}
         </div>
