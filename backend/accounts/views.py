@@ -2,6 +2,7 @@ import uuid
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.hashers import make_password
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -56,6 +57,7 @@ def _user_response(user):
 
 # ─── Registration Flow ───
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
@@ -106,6 +108,7 @@ def register(request):
     })
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_otp(request):
@@ -165,6 +168,7 @@ def verify_otp(request):
 
 # ─── Login Flow ───
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
@@ -204,6 +208,7 @@ def login_view(request):
     })
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_device(request):
@@ -257,6 +262,7 @@ def verify_device(request):
 
 # ─── Resend OTP ───
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def resend_otp(request):
@@ -306,6 +312,7 @@ def resend_otp(request):
 
 # ─── Session ───
 
+@csrf_exempt
 @api_view(['POST'])
 def logout_view(request):
     """POST /api/auth/logout/"""
@@ -313,6 +320,7 @@ def logout_view(request):
     return Response({'message': 'Logged out'})
 
 
+@csrf_exempt
 @api_view(['GET'])
 def me(request):
     """GET /api/auth/me/"""
