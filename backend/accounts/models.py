@@ -8,7 +8,9 @@ from datetime import timedelta
 class PendingRegistration(models.Model):
     """Stores registration data until OTP is verified."""
     email = models.EmailField(unique=True)
-    name = models.CharField(max_length=150, blank=True)
+    username = models.CharField(max_length=150)
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     password = models.CharField(max_length=128)  # Hashed
     otp_code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -19,7 +21,7 @@ class PendingRegistration(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=10)
+            self.expires_at = timezone.now() + timedelta(minutes=15)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -52,8 +54,28 @@ class PendingLoginOTP(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=10)
+            self.expires_at = timezone.now() + timedelta(minutes=15)
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Login OTP for {self.user.email}"
+
+
+class PasswordResetOTP(models.Model):
+    """Stores OTP for password reset via email."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    verified = models.BooleanField(default=False)
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(minutes=15)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Password reset OTP for {self.user.email}"
