@@ -77,6 +77,23 @@
     border-color: var(--color-secondary);
 }
 
+.chat-window__header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.chat-window__header-signin {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    transition: color var(--transition-fast);
+}
+
+.chat-window__header-signin:hover {
+    color: var(--color-text);
+}
+
 .chat-window__header-badge-dot {
     width: 6px;
     height: 6px;

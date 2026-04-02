@@ -27,9 +27,14 @@ function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onSho
                     </div>
                 </div>
                 {!user && (
-                    <button className="chat-window__header-badge" onClick={onShowAuth}>
-                        Sign up for free
-                    </button>
+                    <div className="chat-window__header-actions">
+                        <button className="chat-window__header-signin" onClick={() => onShowAuth('login')}>
+                            Sign in
+                        </button>
+                        <button className="chat-window__header-badge" onClick={() => onShowAuth('register')}>
+                            Sign up for free
+                        </button>
+                    </div>
                 )}
             </header>
 
