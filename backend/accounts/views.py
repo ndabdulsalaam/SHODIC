@@ -387,7 +387,7 @@ def forgot_password(request):
     user = _find_user_by_identifier(identifier)
     if user is None:
         return Response(
-            {'error': 'No account found with that email or username'},
+            {'error': 'No account found with this email'},
             status=status.HTTP_404_NOT_FOUND,
         )
 
