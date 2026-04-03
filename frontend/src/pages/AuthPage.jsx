@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HiOutlineArrowLeft } from 'react-icons/hi2'
 import './AuthPage.css'
@@ -9,6 +9,7 @@ function AuthPage() {
     const [searchParams] = useSearchParams()
     const email = searchParams.get('email') || ''
     const purpose = searchParams.get('purpose') || 'registration'
+    const step = searchParams.get('step') || 'otp'
     const navigate = useNavigate()
 
     const [otp, setOtp] = useState(['', '', '', '', '', ''])
@@ -24,6 +25,50 @@ function AuthPage() {
     const [newPassword, setNewPassword] = useState('')
     const [confirmNewPassword, setConfirmNewPassword] = useState('')
     const [showPassword, setShowPassword] = useState(false)
+
+    // Google setup state
+    const [googleUsername, setGoogleUsername] = useState('')
+    const [googlePassword, setGooglePassword] = useState('')
+    const [googleConfirmPassword, setGoogleConfirmPassword] = useState('')
+    const [usernameStatus, setUsernameStatus] = useState(null)
+    const [usernameError, setUsernameError] = useState('')
+
+    const googlePasswordsMatch = useMemo(() => {
+        if (!googleConfirmPassword) return null
+        return googlePassword === googleConfirmPassword
+    }, [googlePassword, googleConfirmPassword])
+
+    // Debounced username check for Google setup
+    const checkUsername = useCallback(async (value) => {
+        if (!value || value.length < 3) {
+            setUsernameStatus(null)
+            setUsernameError('')
+            return
+        }
+        setUsernameStatus('checking')
+        try {
+            const res = await fetch(`${API}/auth/check-username/?username=${encodeURIComponent(value)}`, {
+                credentials: 'include',
+            })
+            const data = await res.json()
+            if (data.available) {
+                setUsernameStatus('available')
+                setUsernameError('')
+            } else {
+                setUsernameStatus(data.error ? 'error' : 'taken')
+                setUsernameError(data.error || 'Username is taken')
+            }
+        } catch {
+            setUsernameStatus('error')
+            setUsernameError('Could not check availability')
+        }
+    }, [])
+
+    useEffect(() => {
+        if (step !== 'google_setup') return
+        const timer = setTimeout(() => checkUsername(googleUsername), 400)
+        return () => clearTimeout(timer)
+    }, [googleUsername, step, checkUsername])
 
     const passwordsMatch = useMemo(() => {
         if (!confirmNewPassword) return null
@@ -50,10 +95,10 @@ function AuthPage() {
         return `${m}:${s.toString().padStart(2, '0')}`
     }
 
-    // If no email, redirect back
+    // If no email and not google setup, redirect back
     useEffect(() => {
-        if (!email) navigate('/')
-    }, [email, navigate])
+        if (!email && step !== 'google_setup') navigate('/')
+    }, [email, step, navigate])
 
     const handleChange = (index, value) => {
         if (!/^\d*$/.test(value)) return // Only digits
@@ -203,6 +248,137 @@ function AuthPage() {
         }
     }
 
+    const handleGoogleSetup = async (e) => {
+        e.preventDefault()
+        setError('')
+        setSuccess('')
+
+        if (!googleUsername || googleUsername.length < 3) {
+            setError('Username must be at least 3 characters')
+            return
+        }
+        if (usernameStatus !== 'available') {
+            setError('Please choose an available username')
+            return
+        }
+        if (googlePassword.length < 8) {
+            setError('Password must be at least 8 characters')
+            return
+        }
+        if (googlePassword !== googleConfirmPassword) {
+            setError('Passwords do not match')
+            return
+        }
+
+        setLoading(true)
+        try {
+            const res = await fetch(`${API}/auth/google/complete-setup/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    username: googleUsername,
+                    password: googlePassword,
+                }),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                setError(data.error || 'Failed to create account')
+                return
+            }
+
+            setSuccess('Account created! Redirecting...')
+            setTimeout(() => navigate('/'), 1500)
+        } catch {
+            setError('Network error. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Google setup form (new Google users pick username + password)
+    if (step === 'google_setup') {
+        return (
+            <div className="auth-page">
+                <div className="auth-page__card">
+                    <div className="auth-page__logo">
+                        <div className="auth-page__logo-icon">Rx</div>
+                    </div>
+
+                    <h1 className="auth-page__title">Complete Your Profile</h1>
+                    <p className="auth-page__subtitle">
+                        You're signing in with Google. Choose a username and set a password for your RxChat account.
+                    </p>
+
+                    <form className="auth-page__form" onSubmit={handleGoogleSetup}>
+                        <div className="auth-page__input-group">
+                            <label htmlFor="google-username">Username</label>
+                            <div className="auth-page__input-with-status">
+                                <input
+                                    id="google-username"
+                                    type="text"
+                                    value={googleUsername}
+                                    onChange={(e) => setGoogleUsername(e.target.value)}
+                                    placeholder="Choose a username"
+                                    autoFocus
+                                />
+                                {usernameStatus === 'checking' && (
+                                    <span className="auth-page__status auth-page__status--checking">⏳</span>
+                                )}
+                                {usernameStatus === 'available' && (
+                                    <span className="auth-page__status auth-page__status--available">✓</span>
+                                )}
+                                {(usernameStatus === 'taken' || usernameStatus === 'error') && (
+                                    <span className="auth-page__status auth-page__status--taken">✗</span>
+                                )}
+                            </div>
+                            {usernameError && <span className="auth-page__field-error">{usernameError}</span>}
+                        </div>
+
+                        <div className="auth-page__input-group">
+                            <label htmlFor="google-password">Password</label>
+                            <input
+                                id="google-password"
+                                type="password"
+                                value={googlePassword}
+                                onChange={(e) => setGooglePassword(e.target.value)}
+                                placeholder="At least 8 characters"
+                            />
+                        </div>
+
+                        <div className="auth-page__input-group">
+                            <label htmlFor="google-confirm-password">
+                                Confirm Password
+                                {googlePasswordsMatch === true && <span className="auth-page__match auth-page__match--yes"> ✓ Match</span>}
+                                {googlePasswordsMatch === false && <span className="auth-page__match auth-page__match--no"> ✗ Mismatch</span>}
+                            </label>
+                            <input
+                                id="google-confirm-password"
+                                type="password"
+                                value={googleConfirmPassword}
+                                onChange={(e) => setGoogleConfirmPassword(e.target.value)}
+                                placeholder="Re-enter password"
+                            />
+                        </div>
+
+                        {error && <div className="auth-page__error">{error}</div>}
+                        {success && <div className="auth-page__success">{success}</div>}
+
+                        <button
+                            type="submit"
+                            className="auth-page__submit"
+                            disabled={loading || usernameStatus !== 'available'}
+                        >
+                            {loading ? 'Creating account...' : 'Create Account'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )
+    }
+
     // New password form (after OTP verified for password reset)
     if (purpose === 'password_reset' && resetStep === 'new_password') {
         return (
@@ -241,8 +417,8 @@ function AuthPage() {
                             <input
                                 id="confirm-new-pass"
                                 className={`auth-page__input ${passwordsMatch === true ? 'auth-page__input--match'
-                                        : passwordsMatch === false ? 'auth-page__input--mismatch'
-                                            : ''
+                                    : passwordsMatch === false ? 'auth-page__input--mismatch'
+                                        : ''
                                     }`}
                                 type={showPassword ? 'text' : 'password'}
                                 placeholder="••••••••"

@@ -280,3 +280,108 @@
   cursor: pointer;
   user-select: none;
 }
+
+/* Google Setup Form */
+.auth-page__form {
+  text-align: left;
+}
+
+.auth-page__input-group {
+  margin-bottom: var(--space-4);
+}
+
+.auth-page__input-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.auth-page__input-group input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.auth-page__input-group input:focus {
+  outline: none;
+  border-color: var(--color-secondary);
+}
+
+.auth-page__input-with-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-page__input-with-status input {
+  padding-right: 2.5rem;
+}
+
+.auth-page__status {
+  position: absolute;
+  right: 12px;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.auth-page__status--checking {
+  opacity: 0.6;
+}
+
+.auth-page__status--available {
+  color: var(--color-secondary);
+}
+
+.auth-page__status--taken {
+  color: var(--color-error);
+}
+
+.auth-page__field-error {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  margin-top: var(--space-1);
+}
+
+.auth-page__match {
+  font-weight: 500;
+  font-size: var(--font-size-xs);
+}
+
+.auth-page__match--yes {
+  color: var(--color-secondary);
+}
+
+.auth-page__match--no {
+  color: var(--color-error);
+}
+
+.auth-page__submit {
+  width: 100%;
+  padding: var(--space-3);
+  background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+  margin-top: var(--space-2);
+}
+
+.auth-page__submit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.auth-page__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
