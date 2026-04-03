@@ -18,9 +18,13 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
-    const [usernameStatus, setUsernameStatus] = useState(null) // null | 'checking' | 'available' | 'taken' | 'error'
+    const [usernameStatus, setUsernameStatus] = useState(null)
     const [usernameError, setUsernameError] = useState('')
     const navigate = useNavigate()
+
+    // Track which fields have been focused (for deferred autoComplete)
+    const [focused, setFocused] = useState({})
+    const onFieldFocus = (name) => setFocused((prev) => ({ ...prev, [name]: true }))
 
     const passwordsMatch = useMemo(() => {
         if (!confirmPassword) return null
@@ -71,6 +75,22 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
         const timer = setTimeout(() => checkUsername(username), 400)
         return () => clearTimeout(timer)
     }, [username, isLogin, checkUsername])
+
+    // Clear ALL fields when switching between login/register
+    const handleModeSwitch = () => {
+        setIsLogin(!isLogin)
+        setEmail('')
+        setPassword('')
+        setConfirmPassword('')
+        setUsername('')
+        setFirstName('')
+        setLastName('')
+        setError('')
+        setUsernameStatus(null)
+        setUsernameError('')
+        setShowPassword(false)
+        setFocused({})
+    }
 
     const handleForgotSubmit = async (e) => {
         e.preventDefault()
@@ -129,7 +149,6 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
             }
 
             if (data.otp_required) {
-                // Navigate to OTP verification page
                 const purpose = isLogin ? 'login' : 'registration'
                 navigate(`/auth?step=otp&email=${encodeURIComponent(data.email)}&purpose=${purpose}`)
                 onClose()
@@ -181,6 +200,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                 placeholder="you@example.com"
                                 value={forgotEmail}
                                 onChange={(e) => setForgotEmail(e.target.value)}
+                                autoComplete="email"
                                 required
                                 autoFocus
                             />
@@ -228,8 +248,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
 
                 {error && <div className="auth-modal__error">{error}</div>}
 
-                {/* Form */}
-                <form className="auth-modal__form" onSubmit={handleSubmit}>
+                {/* Form — autoComplete off prevents eager auto-fill */}
+                <form className="auth-modal__form" onSubmit={handleSubmit} autoComplete="off">
                     {!isLogin && (
                         <>
                             <div className="auth-modal__field">
@@ -246,6 +266,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                     placeholder="e.g. Nurudeen_Rx"
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
+                                    autoComplete="off"
                                     required
                                     minLength={3}
                                 />
@@ -270,7 +291,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                         placeholder="First name"
                                         value={firstName}
                                         onChange={(e) => setFirstName(e.target.value)}
-                                        required
+                                        autoComplete={focused.firstName ? 'given-name' : 'off'}
+                                        onFocus={() => onFieldFocus('firstName')}
                                     />
                                 </div>
                                 <div className="auth-modal__field">
@@ -282,6 +304,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                         placeholder="Last name"
                                         value={lastName}
                                         onChange={(e) => setLastName(e.target.value)}
+                                        autoComplete={focused.lastName ? 'family-name' : 'off'}
+                                        onFocus={() => onFieldFocus('lastName')}
                                     />
                                 </div>
                             </div>
@@ -299,6 +323,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                             placeholder={isLogin ? 'Email or username' : 'you@example.com'}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            autoComplete={focused.email ? (isLogin ? 'username' : 'email') : 'off'}
+                            onFocus={() => onFieldFocus('email')}
                             required
                         />
                     </div>
@@ -312,6 +338,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                             placeholder="••••••••"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            autoComplete={focused.password ? (isLogin ? 'current-password' : 'new-password') : 'off'}
+                            onFocus={() => onFieldFocus('password')}
                             required
                             minLength={8}
                         />
@@ -319,7 +347,11 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
 
                     {!isLogin && (
                         <div className="auth-modal__field">
-                            <label className="auth-modal__label" htmlFor="auth-confirm">Confirm Password</label>
+                            <label className="auth-modal__label" htmlFor="auth-confirm">
+                                Confirm Password
+                                {passwordsMatch === true && <span className="auth-modal__match-inline auth-modal__match-inline--yes"> ✓ Match</span>}
+                                {passwordsMatch === false && <span className="auth-modal__match-inline auth-modal__match-inline--no"> ✗ Mismatch</span>}
+                            </label>
                             <input
                                 id="auth-confirm"
                                 className={`auth-modal__input ${passwordsMatch === true
@@ -332,13 +364,9 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                 placeholder="••••••••"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
+                                autoComplete="off"
                                 required
                             />
-                            {passwordsMatch !== null && (
-                                <div className={`auth-modal__match-indicator auth-modal__match-indicator--${passwordsMatch ? 'match' : 'mismatch'}`}>
-                                    {passwordsMatch ? '✓ Passwords match' : '✗ Passwords do not match'}
-                                </div>
-                            )}
                         </div>
                     )}
 
@@ -387,7 +415,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                 {/* Toggle login/register */}
                 <div className="auth-modal__toggle">
                     {isLogin ? "Don't have an account? " : 'Already have an account? '}
-                    <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setConfirmPassword(''); setUsernameStatus(null) }}>
+                    <button type="button" onClick={handleModeSwitch}>
                         {isLogin ? 'Register' : 'Sign In'}
                     </button>
                 </div>

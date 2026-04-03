@@ -175,6 +175,20 @@
     color: var(--color-error);
 }
 
+/* Inline match indicators (inside label) */
+.auth-modal__match-inline {
+    font-weight: 500;
+    font-size: var(--font-size-xs);
+}
+
+.auth-modal__match-inline--yes {
+    color: var(--color-success);
+}
+
+.auth-modal__match-inline--no {
+    color: var(--color-error);
+}
+
 /* Show/hide password */
 .auth-modal__show-password {
     display: flex;

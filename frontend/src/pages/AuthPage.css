@@ -385,3 +385,25 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Show/hide password */
+.auth-page__show-password {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.auth-page__show-password input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.auth-page__show-password label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}

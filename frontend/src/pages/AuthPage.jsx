@@ -341,10 +341,11 @@ function AuthPage() {
                             <label htmlFor="google-password">Password</label>
                             <input
                                 id="google-password"
-                                type="password"
+                                type={showPassword ? 'text' : 'password'}
                                 value={googlePassword}
                                 onChange={(e) => setGooglePassword(e.target.value)}
                                 placeholder="At least 8 characters"
+                                autoComplete="new-password"
                             />
                         </div>
 
@@ -356,11 +357,23 @@ function AuthPage() {
                             </label>
                             <input
                                 id="google-confirm-password"
-                                type="password"
+                                type={showPassword ? 'text' : 'password'}
                                 value={googleConfirmPassword}
                                 onChange={(e) => setGoogleConfirmPassword(e.target.value)}
                                 placeholder="Re-enter password"
+                                autoComplete="new-password"
                             />
+                        </div>
+
+                        {/* Show password toggle */}
+                        <div className="auth-page__show-password">
+                            <input
+                                type="checkbox"
+                                id="google-show-pass"
+                                checked={showPassword}
+                                onChange={(e) => setShowPassword(e.target.checked)}
+                            />
+                            <label htmlFor="google-show-pass">Show password</label>
                         </div>
 
                         {error && <div className="auth-page__error">{error}</div>}
