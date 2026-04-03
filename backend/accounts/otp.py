@@ -2,10 +2,13 @@
 
 import random
 import logging
-from django.core.mail import EmailMultiAlternatives
+import threading
+import requests
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
 
 def generate_otp():
@@ -71,8 +74,52 @@ def _build_html_email(otp_code, purpose):
 </html>"""
 
 
+def _send_via_brevo(to_email, subject, plain_text, html_content):
+    """Send email via Brevo HTTP API (never blocked by network firewalls)."""
+    api_key = getattr(settings, 'BREVO_API_KEY', '')
+    sender_email = getattr(settings, 'BREVO_SENDER_EMAIL', '')
+    sender_name = getattr(settings, 'BREVO_SENDER_NAME', 'RxChat')
+
+    headers = {
+        'accept': 'application/json',
+        'api-key': api_key,
+        'content-type': 'application/json',
+    }
+
+    payload = {
+        'sender': {'name': sender_name, 'email': sender_email},
+        'to': [{'email': to_email}],
+        'subject': subject,
+        'htmlContent': html_content,
+        'textContent': plain_text,
+    }
+
+    resp = requests.post(BREVO_API_URL, headers=headers, json=payload, timeout=10)
+    resp.raise_for_status()
+    logger.info(f"OTP email sent to {to_email} via Brevo (messageId={resp.json().get('messageId')})")
+
+
+def _send_via_django(to_email, subject, plain_text, html_content):
+    """Fallback: send via Django's configured email backend (console in dev)."""
+    from django.core.mail import EmailMultiAlternatives
+
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=plain_text,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[to_email],
+    )
+    msg.attach_alternative(html_content, 'text/html')
+    msg.send(fail_silently=False)
+    logger.info(f"OTP email sent to {to_email} via Django backend")
+
+
 def send_otp_email(email, otp_code, purpose='registration'):
-    """Send branded HTML OTP email to user (non-blocking)."""
+    """Send branded HTML OTP email to user (non-blocking).
+
+    Uses Brevo HTTP API if BREVO_API_KEY is set, otherwise falls back
+    to Django's email backend (console in dev, SMTP in prod).
+    """
     if purpose == 'registration':
         subject = 'RxChat — Verify Your Email'
         plain = f"Welcome to RxChat! Your code: {otp_code} (expires in 15 min)"
@@ -85,22 +132,17 @@ def send_otp_email(email, otp_code, purpose='registration'):
 
     html_content = _build_html_email(otp_code, purpose)
 
+    use_brevo = bool(getattr(settings, 'BREVO_API_KEY', ''))
+
     def _send():
         try:
-            msg = EmailMultiAlternatives(
-                subject=subject,
-                body=plain,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[email],
-            )
-            msg.attach_alternative(html_content, 'text/html')
-            msg.send(fail_silently=False)
-            logger.info(f"OTP email sent to {email}")
+            if use_brevo:
+                _send_via_brevo(email, subject, plain, html_content)
+            else:
+                _send_via_django(email, subject, plain, html_content)
         except Exception as e:
             logger.error(f"Failed to send OTP email to {email}: {e}")
 
     # Send in background thread so the HTTP response returns immediately
-    import threading
     threading.Thread(target=_send, daemon=True).start()
     return True
-

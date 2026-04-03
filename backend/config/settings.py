@@ -113,21 +113,14 @@ REST_FRAMEWORK = {
 # Gemini
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 
-# Email — Gmail SMTP (use console backend if no credentials)
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+# Email — Brevo HTTP API (primary), Django console (dev fallback)
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
+BREVO_SENDER_EMAIL = os.getenv('BREVO_SENDER_EMAIL', '')
+BREVO_SENDER_NAME = os.getenv('BREVO_SENDER_NAME', 'RxChat')
 
-if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = 'smtp.gmail.com'
-    EMAIL_PORT = 587
-    EMAIL_USE_TLS = True
-    EMAIL_TIMEOUT = 10  # seconds — prevent SMTP from blocking forever
-    DEFAULT_FROM_EMAIL = f'RxChat <{EMAIL_HOST_USER}>'
-else:
-    # Dev fallback — prints emails to terminal
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    DEFAULT_FROM_EMAIL = 'RxChat <noreply@rxchat.dev>'
+# Django email backend (used as fallback when BREVO_API_KEY is not set)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = f'RxChat <{BREVO_SENDER_EMAIL}>' if BREVO_SENDER_EMAIL else 'RxChat <noreply@rxchat.dev>'
 
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')

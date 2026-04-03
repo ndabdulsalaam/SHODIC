@@ -4,13 +4,15 @@
 - [ ] **Google Gemini API Key** — Go to [aistudio.google.com](https://aistudio.google.com) → "Get API Key" → Create → Copy key → Paste in `backend/.env` as `GEMINI_API_KEY`
 - [ ] **PostgreSQL Database** — Set up a PostgreSQL database (local or Render managed) → Copy URL → Paste in `backend/.env` as `DATABASE_URL`
 
-## 📧 Email (Gmail App Password — Required for OTP)
-- [ ] **Enable 2-Step Verification** on your Google Account (required for app passwords)
-- [ ] Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → App: "RxChat" → Generate → Copy the 16-char password
-- [ ] Paste in `backend/.env`:
+## 📧 Brevo Email API (Required for OTP Delivery)
+- [ ] **Sign up** at [brevo.com](https://brevo.com) (free — 300 emails/day, no credit card)
+- [ ] **Get API key**: Settings → SMTP & API → API Keys → Generate a New API Key → Copy
+- [ ] **Add verified sender**: Settings → Senders, Domains & Dedicated IPs → Add Sender → Enter your email (e.g. `ndabdulsalaam@gmail.com`) → Check inbox and click verification link
+- [ ] **Paste in `backend/.env`**:
   ```
-  EMAIL_HOST_USER=your_gmail@gmail.com
-  EMAIL_HOST_PASSWORD=xxxx xxxx xxxx xxxx
+  BREVO_API_KEY=xkeysib-xxxxxxxxxxxx
+  BREVO_SENDER_EMAIL=your_verified_email@gmail.com
+  BREVO_SENDER_NAME=RxChat
   ```
 - [ ] Without these, OTP codes print to the Django terminal (dev fallback)
 
