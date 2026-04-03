@@ -317,18 +317,22 @@ function AuthPage() {
                             <label htmlFor="google-username">
                                 Username
                                 {usernameStatus === 'checking' && <span className="auth-page__match" style={{ opacity: 0.6 }}> ⏳</span>}
-                                {usernameStatus === 'available' && <span className="auth-page__match auth-page__match--yes"> ✓</span>}
-                                {usernameStatus === 'taken' && <span className="auth-page__match auth-page__match--no"> ✗ Taken</span>}
+                                {usernameStatus === 'taken' && <span className="auth-page__match auth-page__match--no"> ✗ Username taken</span>}
                                 {usernameStatus === 'error' && <span className="auth-page__match auth-page__match--no"> ✗ {usernameError}</span>}
                             </label>
-                            <input
-                                id="google-username"
-                                type="text"
-                                value={googleUsername}
-                                onChange={(e) => setGoogleUsername(e.target.value)}
-                                placeholder="Choose a username"
-                                autoFocus
-                            />
+                            <div className="auth-page__input-with-status">
+                                <input
+                                    id="google-username"
+                                    type="text"
+                                    value={googleUsername}
+                                    onChange={(e) => setGoogleUsername(e.target.value)}
+                                    placeholder="Choose a username"
+                                    autoFocus
+                                />
+                                {usernameStatus === 'available' && (
+                                    <span className="auth-page__status auth-page__status--available">✓</span>
+                                )}
+                            </div>
                         </div>
 
                         <div className="auth-page__input-group">

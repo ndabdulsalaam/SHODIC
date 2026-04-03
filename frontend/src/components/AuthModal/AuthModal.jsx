@@ -256,26 +256,30 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                 <label className="auth-modal__label" htmlFor="auth-username">
                                     Username
                                     {usernameStatus === 'checking' && <span className="auth-modal__match-inline" style={{ opacity: 0.6 }}> ⏳</span>}
-                                    {usernameStatus === 'available' && <span className="auth-modal__match-inline auth-modal__match-inline--yes"> ✓</span>}
-                                    {usernameStatus === 'taken' && <span className="auth-modal__match-inline auth-modal__match-inline--no"> ✗ Taken</span>}
+                                    {usernameStatus === 'taken' && <span className="auth-modal__match-inline auth-modal__match-inline--no"> ✗ Username taken</span>}
                                     {usernameStatus === 'error' && <span className="auth-modal__match-inline auth-modal__match-inline--no"> ✗ {usernameError}</span>}
                                 </label>
-                                <input
-                                    id="auth-username"
-                                    className={`auth-modal__input ${usernameStatus === 'available'
-                                        ? 'auth-modal__input--match'
-                                        : usernameStatus === 'taken' || usernameStatus === 'error'
-                                            ? 'auth-modal__input--mismatch'
-                                            : ''
-                                        }`}
-                                    type="text"
-                                    placeholder="e.g. Nurudeen_Rx"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
-                                    autoComplete="off"
-                                    required
-                                    minLength={3}
-                                />
+                                <div className="auth-modal__input-wrap">
+                                    <input
+                                        id="auth-username"
+                                        className={`auth-modal__input ${usernameStatus === 'available'
+                                            ? 'auth-modal__input--match'
+                                            : usernameStatus === 'taken' || usernameStatus === 'error'
+                                                ? 'auth-modal__input--mismatch'
+                                                : ''
+                                            }`}
+                                        type="text"
+                                        placeholder="e.g. Nurudeen_Rx"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
+                                        autoComplete="off"
+                                        required
+                                        minLength={3}
+                                    />
+                                    {usernameStatus === 'available' && (
+                                        <span className="auth-modal__input-tick">✓</span>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="auth-modal__row">

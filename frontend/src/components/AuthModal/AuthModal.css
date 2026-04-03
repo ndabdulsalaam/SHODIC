@@ -159,6 +159,26 @@
     box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.08);
 }
 
+/* Input wrapper for tick inside field */
+.auth-modal__input-wrap {
+    position: relative;
+}
+
+.auth-modal__input-wrap .auth-modal__input {
+    padding-right: 40px;
+}
+
+.auth-modal__input-tick {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-success);
+    font-size: 1.1rem;
+    font-weight: 700;
+    pointer-events: none;
+}
+
 .auth-modal__match-indicator {
     font-size: var(--font-size-xs);
     margin-top: var(--space-1);
