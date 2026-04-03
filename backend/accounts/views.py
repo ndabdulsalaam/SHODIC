@@ -108,7 +108,7 @@ def register(request):
             status=status.HTTP_409_CONFLICT,
         )
 
-    if User.objects.filter(email__iexact=email).exists():
+    if User.objects.filter(email__iexact=email, is_staff=False).exists():
         return Response(
             {'error': 'An account with this email already exists'},
             status=status.HTTP_409_CONFLICT,
@@ -266,7 +266,7 @@ def verify_device(request):
     otp = request.data.get('otp', '').strip()
 
     try:
-        user = User.objects.get(email__iexact=email)
+        user = User.objects.get(email__iexact=email, is_staff=False)
     except User.DoesNotExist:
         return Response(
             {'error': 'User not found'},
@@ -341,7 +341,7 @@ def resend_otp(request):
             )
     elif purpose == 'password_reset':
         try:
-            user = User.objects.get(email__iexact=email)
+            user = User.objects.get(email__iexact=email, is_staff=False)
             PasswordResetOTP.objects.filter(user=user).delete()
             PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
         except User.DoesNotExist:
@@ -351,7 +351,7 @@ def resend_otp(request):
             )
     else:
         try:
-            user = User.objects.get(email__iexact=email)
+            user = User.objects.get(email__iexact=email, is_staff=False)
             PendingLoginOTP.objects.filter(user=user).delete()
             PendingLoginOTP.objects.create(user=user, otp_code=otp_code)
         except User.DoesNotExist:
@@ -418,7 +418,7 @@ def verify_reset_otp(request):
     otp = request.data.get('otp', '').strip()
 
     try:
-        user = User.objects.get(email__iexact=email)
+        user = User.objects.get(email__iexact=email, is_staff=False)
     except User.DoesNotExist:
         return Response(
             {'error': 'Invalid request'},
@@ -478,7 +478,7 @@ def reset_password(request):
         )
 
     try:
-        user = User.objects.get(email__iexact=email)
+        user = User.objects.get(email__iexact=email, is_staff=False)
     except User.DoesNotExist:
         return Response(
             {'error': 'Invalid request'},
