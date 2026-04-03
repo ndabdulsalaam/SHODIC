@@ -34,7 +34,7 @@ def _is_trusted_device(user, request):
 def _trust_device(user, request, response):
     """Create a trusted device entry and set the cookie."""
     user_agent = _get_user_agent(request)
-    device = TrustedDevice.objects.create(
+    device, _created = TrustedDevice.objects.get_or_create(
         user=user,
         user_agent=user_agent,
     )
