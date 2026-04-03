@@ -72,7 +72,7 @@ def _build_html_email(otp_code, purpose):
 
 
 def send_otp_email(email, otp_code, purpose='registration'):
-    """Send branded HTML OTP email to user."""
+    """Send branded HTML OTP email to user (non-blocking)."""
     if purpose == 'registration':
         subject = 'RxChat — Verify Your Email'
         plain = f"Welcome to RxChat! Your code: {otp_code} (expires in 15 min)"
@@ -85,17 +85,22 @@ def send_otp_email(email, otp_code, purpose='registration'):
 
     html_content = _build_html_email(otp_code, purpose)
 
-    try:
-        msg = EmailMultiAlternatives(
-            subject=subject,
-            body=plain,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[email],
-        )
-        msg.attach_alternative(html_content, 'text/html')
-        msg.send(fail_silently=False)
-        logger.info(f"OTP email sent to {email}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send OTP email to {email}: {e}")
-        return False
+    def _send():
+        try:
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=plain,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[email],
+            )
+            msg.attach_alternative(html_content, 'text/html')
+            msg.send(fail_silently=False)
+            logger.info(f"OTP email sent to {email}")
+        except Exception as e:
+            logger.error(f"Failed to send OTP email to {email}: {e}")
+
+    # Send in background thread so the HTTP response returns immediately
+    import threading
+    threading.Thread(target=_send, daemon=True).start()
+    return True
+

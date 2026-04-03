@@ -122,6 +122,7 @@ if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     EMAIL_HOST = 'smtp.gmail.com'
     EMAIL_PORT = 587
     EMAIL_USE_TLS = True
+    EMAIL_TIMEOUT = 10  # seconds — prevent SMTP from blocking forever
     DEFAULT_FROM_EMAIL = f'RxChat <{EMAIL_HOST_USER}>'
 else:
     # Dev fallback — prints emails to terminal
