@@ -387,7 +387,7 @@ def forgot_password(request):
     user = _find_user_by_identifier(identifier)
     if user is None:
         return Response(
-            {'error': 'No account found with this email'},
+            {'error': 'No account found for this email'},
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -532,3 +532,159 @@ def check_username(request):
     # Case-insensitive check
     taken = User.objects.filter(username__iexact=username).exists()
     return Response({'available': not taken})
+
+
+# ─── Google OAuth ───
+
+import requests as http_requests
+from urllib.parse import urlencode
+from django.shortcuts import redirect
+from django.conf import settings
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def google_login(request):
+    """GET /api/auth/google/login/ — Redirect to Google consent screen."""
+    params = urlencode({
+        'client_id': settings.GOOGLE_CLIENT_ID,
+        'redirect_uri': settings.GOOGLE_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'access_type': 'offline',
+        'prompt': 'select_account',
+    })
+    return redirect(f'https://accounts.google.com/o/oauth2/v2/auth?{params}')
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def google_callback(request):
+    """
+    GET /api/auth/google/callback/?code=...
+    Exchanges code for tokens, fetches profile, finds/creates user.
+    New Google users are redirected to a setup page to pick username + password.
+    """
+    code = request.query_params.get('code')
+    error = request.query_params.get('error')
+    frontend = settings.FRONTEND_URL
+
+    if error or not code:
+        return redirect(f'{frontend}/?auth_error=google_denied')
+
+    # Exchange code for tokens
+    try:
+        token_resp = http_requests.post(
+            'https://oauth2.googleapis.com/token',
+            data={
+                'code': code,
+                'client_id': settings.GOOGLE_CLIENT_ID,
+                'client_secret': settings.GOOGLE_CLIENT_SECRET,
+                'redirect_uri': settings.GOOGLE_REDIRECT_URI,
+                'grant_type': 'authorization_code',
+            },
+            timeout=10,
+        )
+        token_data = token_resp.json()
+        access_token = token_data.get('access_token')
+        if not access_token:
+            return redirect(f'{frontend}/?auth_error=token_failed')
+    except Exception:
+        return redirect(f'{frontend}/?auth_error=token_failed')
+
+    # Fetch user profile
+    try:
+        profile_resp = http_requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
+        profile = profile_resp.json()
+        google_email = profile.get('email', '').lower()
+        google_first = profile.get('given_name', '')
+        google_last = profile.get('family_name', '')
+        if not google_email:
+            return redirect(f'{frontend}/?auth_error=no_email')
+    except Exception:
+        return redirect(f'{frontend}/?auth_error=profile_failed')
+
+    # Find or create user
+    user = User.objects.filter(email__iexact=google_email).first()
+
+    if user:
+        # Existing user — log in directly
+        login(request, user)
+        resp = redirect(frontend)
+        resp = _trust_device(user, request, resp)
+        return resp
+    else:
+        # New user — store Google profile in session, redirect to setup page
+        request.session['google_pending'] = {
+            'email': google_email,
+            'first_name': google_first,
+            'last_name': google_last,
+        }
+        return redirect(f'{frontend}/auth?step=google_setup')
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_complete_setup(request):
+    """
+    POST /api/auth/google/complete-setup/
+    Body: { "username": "...", "password": "..." }
+    Creates account for a new Google user with chosen username + password.
+    """
+    pending = request.session.get('google_pending')
+    if not pending:
+        return Response(
+            {'error': 'No pending Google sign-up. Please try again.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    username = request.data.get('username', '').strip()
+    password = request.data.get('password', '')
+
+    if not username or len(username) < 3:
+        return Response(
+            {'error': 'Username must be at least 3 characters'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not all(c.isalnum() or c in '_-' for c in username):
+        return Response(
+            {'error': 'Username can only contain letters, numbers, hyphens, and underscores'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if User.objects.filter(username__iexact=username).exists():
+        return Response(
+            {'error': 'Username is already taken'},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if len(password) < 8:
+        return Response(
+            {'error': 'Password must be at least 8 characters'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = User.objects.create_user(
+        username=username,
+        email=pending['email'],
+        password=password,
+        first_name=pending.get('first_name', ''),
+        last_name=pending.get('last_name', ''),
+    )
+
+    # Clean up session
+    del request.session['google_pending']
+
+    login(request, user)
+    resp_data = {
+        **_user_response(user),
+        'message': 'Account created successfully',
+    }
+    response = Response(resp_data, status=status.HTTP_201_CREATED)
+    return response
+
