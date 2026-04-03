@@ -366,19 +366,21 @@
 .auth-page__submit {
   width: 100%;
   padding: var(--space-3);
-  background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
   font-weight: 600;
   font-size: var(--font-size-sm);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: opacity var(--transition-fast);
+  transition: all var(--transition-fast);
   margin-top: var(--space-2);
 }
 
 .auth-page__submit:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--color-primary-light);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .auth-page__submit:disabled {

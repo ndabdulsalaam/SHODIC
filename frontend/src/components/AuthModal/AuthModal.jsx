@@ -253,7 +253,13 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                     {!isLogin && (
                         <>
                             <div className="auth-modal__field">
-                                <label className="auth-modal__label" htmlFor="auth-username">Username</label>
+                                <label className="auth-modal__label" htmlFor="auth-username">
+                                    Username
+                                    {usernameStatus === 'checking' && <span className="auth-modal__match-inline" style={{ opacity: 0.6 }}> ⏳</span>}
+                                    {usernameStatus === 'available' && <span className="auth-modal__match-inline auth-modal__match-inline--yes"> ✓</span>}
+                                    {usernameStatus === 'taken' && <span className="auth-modal__match-inline auth-modal__match-inline--no"> ✗ Taken</span>}
+                                    {usernameStatus === 'error' && <span className="auth-modal__match-inline auth-modal__match-inline--no"> ✗ {usernameError}</span>}
+                                </label>
                                 <input
                                     id="auth-username"
                                     className={`auth-modal__input ${usernameStatus === 'available'
@@ -270,15 +276,6 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                     required
                                     minLength={3}
                                 />
-                                {usernameStatus && (
-                                    <div className={`auth-modal__match-indicator auth-modal__match-indicator--${usernameStatus === 'available' ? 'match' : 'mismatch'
-                                        }`}>
-                                        {usernameStatus === 'checking' && '⏳ Checking...'}
-                                        {usernameStatus === 'available' && '✓ Username available'}
-                                        {usernameStatus === 'taken' && '✗ Username is taken'}
-                                        {usernameStatus === 'error' && `✗ ${usernameError}`}
-                                    </div>
-                                )}
                             </div>
 
                             <div className="auth-modal__row">

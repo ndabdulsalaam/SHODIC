@@ -314,27 +314,21 @@ function AuthPage() {
 
                     <form className="auth-page__form" onSubmit={handleGoogleSetup}>
                         <div className="auth-page__input-group">
-                            <label htmlFor="google-username">Username</label>
-                            <div className="auth-page__input-with-status">
-                                <input
-                                    id="google-username"
-                                    type="text"
-                                    value={googleUsername}
-                                    onChange={(e) => setGoogleUsername(e.target.value)}
-                                    placeholder="Choose a username"
-                                    autoFocus
-                                />
-                                {usernameStatus === 'checking' && (
-                                    <span className="auth-page__status auth-page__status--checking">⏳</span>
-                                )}
-                                {usernameStatus === 'available' && (
-                                    <span className="auth-page__status auth-page__status--available">✓</span>
-                                )}
-                                {(usernameStatus === 'taken' || usernameStatus === 'error') && (
-                                    <span className="auth-page__status auth-page__status--taken">✗</span>
-                                )}
-                            </div>
-                            {usernameError && <span className="auth-page__field-error">{usernameError}</span>}
+                            <label htmlFor="google-username">
+                                Username
+                                {usernameStatus === 'checking' && <span className="auth-page__match" style={{ opacity: 0.6 }}> ⏳</span>}
+                                {usernameStatus === 'available' && <span className="auth-page__match auth-page__match--yes"> ✓</span>}
+                                {usernameStatus === 'taken' && <span className="auth-page__match auth-page__match--no"> ✗ Taken</span>}
+                                {usernameStatus === 'error' && <span className="auth-page__match auth-page__match--no"> ✗ {usernameError}</span>}
+                            </label>
+                            <input
+                                id="google-username"
+                                type="text"
+                                value={googleUsername}
+                                onChange={(e) => setGoogleUsername(e.target.value)}
+                                placeholder="Choose a username"
+                                autoFocus
+                            />
                         </div>
 
                         <div className="auth-page__input-group">
