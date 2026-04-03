@@ -59,10 +59,11 @@ def _user_response(user):
 
 
 def _find_user_by_identifier(identifier):
-    """Find user by email or username (case-insensitive)."""
+    """Find a non-staff user by email or username (case-insensitive).
+    Staff/superusers are excluded — they should use /admin/ instead."""
     return User.objects.filter(
         Q(email__iexact=identifier) | Q(username__iexact=identifier)
-    ).first()
+    ).filter(is_staff=False).first()
 
 
 # ─── Registration Flow ───
@@ -514,7 +515,7 @@ def logout_view(request):
 @api_view(['GET'])
 def me(request):
     """GET /api/auth/me/"""
-    if request.user.is_authenticated:
+    if request.user.is_authenticated and not request.user.is_staff:
         return Response(_user_response(request.user))
     return Response({'user': None})
 
@@ -611,7 +612,8 @@ def google_callback(request):
         return redirect(f'{frontend}/?auth_error=profile_failed')
 
     # Find or create user
-    user = User.objects.filter(email__iexact=google_email).first()
+    # Find existing non-staff user with this email
+    user = User.objects.filter(email__iexact=google_email, is_staff=False).first()
 
     if user:
         # Existing user — log in directly
