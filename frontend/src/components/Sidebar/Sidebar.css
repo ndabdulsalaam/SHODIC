@@ -25,28 +25,23 @@
     margin-bottom: var(--space-5);
 }
 
-.sidebar__logo-icon {
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: var(--font-size-lg);
-    color: var(--color-primary);
-}
-
 .sidebar__logo-text {
-    font-size: var(--font-size-xl);
-    font-weight: 700;
-    color: var(--color-text-inverse);
-    letter-spacing: -0.01em;
+    font-size: var(--font-size-2xl);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
 }
 
-.sidebar__logo-text span {
-    color: var(--color-secondary);
+.sidebar__logo-r {
+    color: #5CB832;
+}
+
+.sidebar__logo-x {
+    color: #1A6BC4;
+}
+
+.sidebar__logo-chat {
+    color: var(--color-text-inverse);
 }
 
 .sidebar__new-chat {

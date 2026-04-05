@@ -304,7 +304,11 @@ function AuthPage() {
             <div className="auth-page">
                 <div className="auth-page__card">
                     <div className="auth-page__logo">
-                        <div className="auth-page__logo-icon">Rx</div>
+                        <span className="auth-page__logo-text">
+                            <span className="auth-page__logo-r">R</span>
+                            <span className="auth-page__logo-x">x</span>
+                            <span className="auth-page__logo-chat">Chat</span>
+                        </span>
                     </div>
 
                     <h1 className="auth-page__title">Complete Your Profile</h1>
@@ -396,7 +400,11 @@ function AuthPage() {
             <div className="auth-page">
                 <div className="auth-page__card">
                     <div className="auth-page__logo">
-                        <div className="auth-page__logo-icon">Rx</div>
+                        <span className="auth-page__logo-text">
+                            <span className="auth-page__logo-r">R</span>
+                            <span className="auth-page__logo-x">x</span>
+                            <span className="auth-page__logo-chat">Chat</span>
+                        </span>
                     </div>
 
                     <h1 className="auth-page__title">Set New Password</h1>
@@ -476,7 +484,11 @@ function AuthPage() {
         <div className="auth-page">
             <div className="auth-page__card">
                 <div className="auth-page__logo">
-                    <div className="auth-page__logo-icon">Rx</div>
+                    <span className="auth-page__logo-text">
+                        <span className="auth-page__logo-r">R</span>
+                        <span className="auth-page__logo-x">x</span>
+                        <span className="auth-page__logo-chat">Chat</span>
+                    </span>
                 </div>
 
                 <h1 className="auth-page__title">

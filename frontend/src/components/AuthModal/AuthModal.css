@@ -55,31 +55,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--space-3);
     margin-bottom: var(--space-6);
 }
 
-.auth-modal__logo-icon {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: var(--font-size-lg);
-    color: var(--color-primary);
-}
-
 .auth-modal__logo-text {
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    color: var(--color-text);
+    font-size: var(--font-size-3xl);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
 }
 
-.auth-modal__logo-text span {
-    color: var(--color-secondary);
+.auth-modal__logo-r {
+    color: #5CB832;
+}
+
+.auth-modal__logo-x {
+    color: #1A6BC4;
+}
+
+.auth-modal__logo-chat {
+    color: var(--color-text);
 }
 
 /* Title */

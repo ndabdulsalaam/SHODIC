@@ -27,7 +27,7 @@ const suggestions = [
 function WelcomeScreen({ onSuggestionClick }) {
     return (
         <div className="welcome">
-            <div className="welcome__icon">Rx</div>
+            <img className="welcome__icon" src="/rx-logo.png" alt="RxChat" />
             <h1 className="welcome__title">How can I help you today?</h1>
             <p className="welcome__subtitle">
                 I can answer questions about medications, check drug interactions, and suggest over-the-counter alternatives.

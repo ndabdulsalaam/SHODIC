@@ -23,7 +23,7 @@ function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onSho
                     </button>
                     <div>
                         <div className="chat-window__title">RxChat</div>
-                        <div className="chat-window__subtitle">AI Pharmacy Assistant</div>
+                        <div className="chat-window__subtitle">AI Pharmacist</div>
                     </div>
                 </div>
                 {user ? (

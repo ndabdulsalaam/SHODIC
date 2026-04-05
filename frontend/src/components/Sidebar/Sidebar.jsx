@@ -10,10 +10,11 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                 {/* Header */}
                 <div className="sidebar__header">
                     <div className="sidebar__logo">
-                        <div className="sidebar__logo-icon">Rx</div>
-                        <div className="sidebar__logo-text">
-                            Rx<span>Chat</span>
-                        </div>
+                        <span className="sidebar__logo-text">
+                            <span className="sidebar__logo-r">R</span>
+                            <span className="sidebar__logo-x">x</span>
+                            <span className="sidebar__logo-chat">Chat</span>
+                        </span>
                     </div>
                     <button className="sidebar__new-chat" onClick={onNewChat}>
                         <HiOutlinePlus size={16} />

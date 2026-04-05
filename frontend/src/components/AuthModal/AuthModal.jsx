@@ -179,10 +179,11 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                     </button>
 
                     <div className="auth-modal__logo">
-                        <div className="auth-modal__logo-icon">Rx</div>
-                        <div className="auth-modal__logo-text">
-                            Rx<span>Chat</span>
-                        </div>
+                        <span className="auth-modal__logo-text">
+                            <span className="auth-modal__logo-r">R</span>
+                            <span className="auth-modal__logo-x">x</span>
+                            <span className="auth-modal__logo-chat">Chat</span>
+                        </span>
                     </div>
 
                     <h1 className="auth-modal__title">Reset your password</h1>
@@ -236,10 +237,11 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
 
                 {/* Logo */}
                 <div className="auth-modal__logo">
-                    <div className="auth-modal__logo-icon">Rx</div>
-                    <div className="auth-modal__logo-text">
-                        Rx<span>Chat</span>
-                    </div>
+                    <span className="auth-modal__logo-text">
+                        <span className="auth-modal__logo-r">R</span>
+                        <span className="auth-modal__logo-x">x</span>
+                        <span className="auth-modal__logo-chat">Chat</span>
+                    </span>
                 </div>
 
                 <h1 className="auth-modal__title">

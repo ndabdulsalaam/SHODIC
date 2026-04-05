@@ -14,18 +14,10 @@
 }
 
 .welcome__icon {
-    width: 72px;
     height: 72px;
-    background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
-    border-radius: var(--radius-xl);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    font-weight: 800;
-    color: var(--color-primary);
+    width: auto;
     margin-bottom: var(--space-6);
-    box-shadow: 0 8px 32px rgba(46, 196, 182, 0.25);
+    object-fit: contain;
 }
 
 .welcome__title {
