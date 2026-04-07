@@ -1,8 +1,35 @@
 import uuid
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
+
+
+ROLE_CHOICES = [
+    ('patient', 'Patient'),
+    ('pharmacist', 'Pharmacist'),
+    ('physician', 'Physician'),
+    ('nurse', 'Nurse'),
+    ('other_health_professional', 'Other Health Professional'),
+]
+
+
+class UserProfile(models.Model):
+    """Extends Django User with a role for Audience-Aware Prompting."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='patient')
+
+    def __str__(self):
+        return f"{self.user.username} — {self.get_role_display()}"
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    """Auto-create a UserProfile when a new User is created."""
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
 
 
 class PendingRegistration(models.Model):
@@ -11,6 +38,7 @@ class PendingRegistration(models.Model):
     username = models.CharField(max_length=150)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='patient')
     password = models.CharField(max_length=128)  # Hashed
     otp_code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
