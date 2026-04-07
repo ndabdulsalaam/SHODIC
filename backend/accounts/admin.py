@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.contrib.auth.admin import UserAdmin
-from .models import PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP
+from .models import PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP, UserProfile
 
 
 # Unregister default, re-register with customizations
@@ -17,8 +17,9 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(PendingRegistration)
 class PendingRegistrationAdmin(admin.ModelAdmin):
-    list_display = ['email', 'username', 'first_name', 'last_name', 'created_at', 'expires_at']
+    list_display = ['email', 'username', 'first_name', 'last_name', 'role', 'created_at', 'expires_at']
     search_fields = ['email', 'username']
+    list_filter = ['role']
 
 
 @admin.register(TrustedDevice)
@@ -37,3 +38,10 @@ class PendingLoginOTPAdmin(admin.ModelAdmin):
 class PasswordResetOTPAdmin(admin.ModelAdmin):
     list_display = ['user', 'verified', 'created_at', 'expires_at']
     search_fields = ['user__email', 'user__username']
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'role']
+    search_fields = ['user__email', 'user__username']
+    list_filter = ['role']
