@@ -8,8 +8,10 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .models import PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP
+from .models import PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP, UserProfile, ROLE_CHOICES
 from .otp import generate_otp, send_otp_email
+
+VALID_ROLES = [choice[0] for choice in ROLE_CHOICES]
 
 
 def _get_user_agent(request):
@@ -49,12 +51,14 @@ def _trust_device(user, request, response):
 
 
 def _user_response(user):
+    profile = getattr(user, 'profile', None)
     return {
         'id': user.id,
         'username': user.username,
         'email': user.email,
         'first_name': user.first_name,
         'last_name': user.last_name,
+        'role': profile.role if profile else 'patient',
     }
 
 
@@ -82,6 +86,13 @@ def register(request):
     username = request.data.get('username', '').strip()
     first_name = request.data.get('first_name', '').strip()
     last_name = request.data.get('last_name', '').strip()
+    role = request.data.get('role', '').strip().lower()
+
+    if role not in VALID_ROLES:
+        return Response(
+            {'error': 'Please select a valid role'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if not email or not password or not username:
         return Response(
@@ -123,6 +134,7 @@ def register(request):
         username=username,
         first_name=first_name,
         last_name=last_name,
+        role=role,
         password=make_password(password),
         otp_code=otp_code,
     )
@@ -183,6 +195,9 @@ def verify_otp(request):
         first_name=pending.first_name,
         last_name=pending.last_name,
     )
+    # Update profile role (profile auto-created via signal)
+    user.profile.role = pending.role
+    user.profile.save()
     pending.delete()
 
     login(request, user)
@@ -649,6 +664,13 @@ def google_complete_setup(request):
 
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '')
+    role = request.data.get('role', '').strip().lower()
+
+    if role not in VALID_ROLES:
+        return Response(
+            {'error': 'Please select a valid role'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if not username or len(username) < 3:
         return Response(
@@ -678,6 +700,9 @@ def google_complete_setup(request):
         first_name=pending.get('first_name', ''),
         last_name=pending.get('last_name', ''),
     )
+    # Update profile role (profile auto-created via signal)
+    user.profile.role = role
+    user.profile.save()
 
     # Clean up session
     del request.session['google_pending']
