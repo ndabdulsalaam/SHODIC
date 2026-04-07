@@ -5,6 +5,15 @@ import './AuthPage.css'
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
+const ROLE_OPTIONS = [
+    { value: '', label: 'Select your role' },
+    { value: 'patient', label: 'Patient' },
+    { value: 'pharmacist', label: 'Pharmacist' },
+    { value: 'physician', label: 'Physician' },
+    { value: 'nurse', label: 'Nurse' },
+    { value: 'other_health_professional', label: 'Other Health Professional' },
+]
+
 function AuthPage() {
     const [searchParams] = useSearchParams()
     const email = searchParams.get('email') || ''
@@ -32,6 +41,7 @@ function AuthPage() {
     const [googleConfirmPassword, setGoogleConfirmPassword] = useState('')
     const [usernameStatus, setUsernameStatus] = useState(null)
     const [usernameError, setUsernameError] = useState('')
+    const [googleRole, setGoogleRole] = useState('')
 
     const googlePasswordsMatch = useMemo(() => {
         if (!googleConfirmPassword) return null
@@ -261,6 +271,10 @@ function AuthPage() {
             setError('Please choose an available username')
             return
         }
+        if (!googleRole) {
+            setError('Please select your role')
+            return
+        }
         if (googlePassword.length < 8) {
             setError('Password must be at least 8 characters')
             return
@@ -279,6 +293,7 @@ function AuthPage() {
                 body: JSON.stringify({
                     username: googleUsername,
                     password: googlePassword,
+                    role: googleRole,
                 }),
             })
 
@@ -340,6 +355,23 @@ function AuthPage() {
                         </div>
 
                         <div className="auth-page__input-group">
+                            <label htmlFor="google-role">Role</label>
+                            <select
+                                id="google-role"
+                                className="auth-page__select"
+                                value={googleRole}
+                                onChange={(e) => setGoogleRole(e.target.value)}
+                                required
+                            >
+                                {ROLE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value} disabled={!opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="auth-page__input-group">
                             <label htmlFor="google-password">Password</label>
                             <input
                                 id="google-password"
@@ -384,7 +416,7 @@ function AuthPage() {
                         <button
                             type="submit"
                             className="auth-page__submit"
-                            disabled={loading || usernameStatus !== 'available'}
+                            disabled={loading || usernameStatus !== 'available' || !googleRole}
                         >
                             {loading ? 'Creating account...' : 'Create Account'}
                         </button>
