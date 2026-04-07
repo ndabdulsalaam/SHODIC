@@ -5,6 +5,15 @@ import './AuthModal.css'
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
+const ROLE_OPTIONS = [
+    { value: '', label: 'Select your role' },
+    { value: 'patient', label: 'Patient' },
+    { value: 'pharmacist', label: 'Pharmacist' },
+    { value: 'physician', label: 'Physician' },
+    { value: 'nurse', label: 'Nurse' },
+    { value: 'other_health_professional', label: 'Other Health Professional' },
+]
+
 function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     const [isLogin, setIsLogin] = useState(initialMode === 'login')
     const [forgotMode, setForgotMode] = useState(false)
@@ -15,6 +24,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     const [username, setUsername] = useState('')
     const [firstName, setFirstName] = useState('')
     const [lastName, setLastName] = useState('')
+    const [role, setRole] = useState('')
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
@@ -38,11 +48,12 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
             password &&
             username &&
             firstName &&
+            role &&
             password.length >= 8 &&
             passwordsMatch === true &&
             usernameStatus === 'available'
         )
-    }, [isLogin, email, password, username, firstName, passwordsMatch, usernameStatus])
+    }, [isLogin, email, password, username, firstName, role, passwordsMatch, usernameStatus])
 
     // Debounced username availability check
     const checkUsername = useCallback(async (value) => {
@@ -85,6 +96,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
         setUsername('')
         setFirstName('')
         setLastName('')
+        setRole('')
         setError('')
         setUsernameStatus(null)
         setUsernameError('')
@@ -132,7 +144,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
             const endpoint = isLogin ? '/auth/login/' : '/auth/register/'
             const body = isLogin
                 ? { identifier: email, password }
-                : { email, password, username, first_name: firstName, last_name: lastName }
+                : { email, password, username, first_name: firstName, last_name: lastName, role }
 
             const res = await fetch(`${API}${endpoint}`, {
                 method: 'POST',
@@ -311,6 +323,23 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                                         onFocus={() => onFieldFocus('lastName')}
                                     />
                                 </div>
+                            </div>
+
+                            <div className="auth-modal__field">
+                                <label className="auth-modal__label" htmlFor="auth-role">Role</label>
+                                <select
+                                    id="auth-role"
+                                    className="auth-modal__select"
+                                    value={role}
+                                    onChange={(e) => setRole(e.target.value)}
+                                    required
+                                >
+                                    {ROLE_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value} disabled={!opt.value}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </>
                     )}
