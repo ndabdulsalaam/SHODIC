@@ -1,8 +1,6 @@
 import uuid
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.hashers import make_password
-from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -54,20 +52,17 @@ def _user_response(user):
     profile = getattr(user, 'profile', None)
     return {
         'id': user.id,
-        'username': user.username,
         'email': user.email,
-        'first_name': user.first_name,
-        'last_name': user.last_name,
+        'first_name': profile.first_name if profile else '',
+        'last_name': profile.last_name if profile else '',
+        'preferred_name': profile.preferred_name if profile else '',
         'role': profile.role if profile else 'patient',
     }
 
 
-def _find_user_by_identifier(identifier):
-    """Find a non-staff user by email or username (case-insensitive).
-    Staff/superusers are excluded — they should use /admin/ instead."""
-    return User.objects.filter(
-        Q(email__iexact=identifier) | Q(username__iexact=identifier)
-    ).filter(is_staff=False).first()
+def _find_user_by_email(email):
+    """Find a user by email (case-insensitive)."""
+    return User.objects.filter(email__iexact=email).first()
 
 
 # ─── Registration Flow ───
@@ -78,48 +73,18 @@ def _find_user_by_identifier(identifier):
 def register(request):
     """
     POST /api/auth/register/
-    Body: { "email", "password", "username", "first_name", "last_name" }
+    Body: { "email" }
     Sends OTP email. Does NOT create user yet.
     """
     email = request.data.get('email', '').strip().lower()
-    password = request.data.get('password', '')
-    username = request.data.get('username', '').strip()
-    first_name = request.data.get('first_name', '').strip()
-    last_name = request.data.get('last_name', '').strip()
-    role = request.data.get('role', '').strip().lower()
 
-    if role not in VALID_ROLES:
+    if not email:
         return Response(
-            {'error': 'Please select a valid role'},
+            {'error': 'Email is required'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not email or not password or not username:
-        return Response(
-            {'error': 'Email, username, and password are required'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if len(password) < 8:
-        return Response(
-            {'error': 'Password must be at least 8 characters'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not all(c.isalnum() or c in '_-' for c in username):
-        return Response(
-            {'error': 'Username can only contain letters, numbers, hyphens, and underscores'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Case-insensitive username uniqueness
-    if User.objects.filter(username__iexact=username).exists():
-        return Response(
-            {'error': 'This username is already taken'},
-            status=status.HTTP_409_CONFLICT,
-        )
-
-    if User.objects.filter(email__iexact=email, is_staff=False).exists():
+    if User.objects.filter(email__iexact=email).exists():
         return Response(
             {'error': 'An account with this email already exists'},
             status=status.HTTP_409_CONFLICT,
@@ -131,11 +96,6 @@ def register(request):
     PendingRegistration.objects.filter(email=email).delete()
     PendingRegistration.objects.create(
         email=email,
-        username=username,
-        first_name=first_name,
-        last_name=last_name,
-        role=role,
-        password=make_password(password),
         otp_code=otp_code,
     )
 
@@ -155,7 +115,7 @@ def verify_otp(request):
     """
     POST /api/auth/verify-otp/
     Body: { "email": "...", "otp": "..." }
-    Verifies OTP, creates user, trusts device, logs in.
+    Verifies OTP, stores verified email in session, returns setup_required.
     """
     email = request.data.get('email', '').strip().lower()
     otp = request.data.get('otp', '').strip()
@@ -187,18 +147,87 @@ def verify_otp(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Create user
-    user = User.objects.create(
-        username=pending.username,
-        email=email,
-        password=pending.password,  # Already hashed
-        first_name=pending.first_name,
-        last_name=pending.last_name,
-    )
-    # Update profile role (profile auto-created via signal)
-    user.profile.role = pending.role
-    user.profile.save()
+    # Email verified — store in session for complete_setup
+    request.session['verified_email'] = email
     pending.delete()
+
+    return Response({
+        'message': 'Email verified! Complete your profile.',
+        'email': email,
+        'setup_required': True,
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def complete_setup(request):
+    """
+    POST /api/auth/complete-setup/
+    Body: { "preferred_name", "first_name", "last_name", "role", "password" }
+    Creates account after email has been verified via OTP.
+    """
+    verified_email = request.session.get('verified_email')
+    if not verified_email:
+        return Response(
+            {'error': 'No verified email found. Please verify your email first.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    preferred_name = request.data.get('preferred_name', '').strip()
+    first_name = request.data.get('first_name', '').strip()
+    last_name = request.data.get('last_name', '').strip()
+    role = request.data.get('role', '').strip().lower()
+    password = request.data.get('password', '')
+
+    if not preferred_name:
+        return Response(
+            {'error': 'Please tell us what Rx should call you'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not first_name:
+        return Response(
+            {'error': 'First name is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if role not in VALID_ROLES:
+        return Response(
+            {'error': 'Please select a valid role'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(password) < 8:
+        return Response(
+            {'error': 'Password must be at least 8 characters'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check email not already taken (edge case: someone registered between OTP and setup)
+    if User.objects.filter(email__iexact=verified_email).exists():
+        del request.session['verified_email']
+        return Response(
+            {'error': 'An account with this email already exists'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    # Create user — username auto-set to email
+    user = User.objects.create_user(
+        username=verified_email,
+        email=verified_email,
+        password=password,
+    )
+    # Update profile (auto-created via signal)
+    profile = user.profile
+    profile.preferred_name = preferred_name
+    profile.first_name = first_name
+    profile.last_name = last_name
+    profile.role = role
+    profile.save()
+
+    # Clean up session
+    del request.session['verified_email']
 
     login(request, user)
 
@@ -222,20 +251,20 @@ def login_view(request):
     If trusted device → logs in directly.
     If new device → sends OTP, returns otp_required.
     """
-    identifier = request.data.get('identifier', '').strip()
-    # Fallback: also accept 'email' field for backwards compatibility
-    if not identifier:
-        identifier = request.data.get('email', '').strip()
+    email = request.data.get('email', '').strip().lower()
+    # Fallback: also accept 'identifier' field for backwards compatibility
+    if not email:
+        email = request.data.get('identifier', '').strip().lower()
     password = request.data.get('password', '')
 
-    if not identifier or not password:
+    if not email or not password:
         return Response(
-            {'error': 'Email/username and password are required'},
+            {'error': 'Email and password are required'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Find user by email or username (case-insensitive)
-    user = _find_user_by_identifier(identifier)
+    # Find user by email
+    user = _find_user_by_email(email)
     if user is None:
         return Response(
             {'error': 'Invalid credentials'},
@@ -281,7 +310,7 @@ def verify_device(request):
     otp = request.data.get('otp', '').strip()
 
     try:
-        user = User.objects.get(email__iexact=email, is_staff=False)
+        user = User.objects.get(email__iexact=email)
     except User.DoesNotExist:
         return Response(
             {'error': 'User not found'},
@@ -356,7 +385,7 @@ def resend_otp(request):
             )
     elif purpose == 'password_reset':
         try:
-            user = User.objects.get(email__iexact=email, is_staff=False)
+            user = User.objects.get(email__iexact=email)
             PasswordResetOTP.objects.filter(user=user).delete()
             PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
         except User.DoesNotExist:
@@ -391,16 +420,16 @@ def forgot_password(request):
     Body: { "email": "email or username" }
     Sends OTP to reset password.
     """
-    identifier = request.data.get('email', '').strip()
+    email = request.data.get('email', '').strip().lower()
 
-    if not identifier:
+    if not email:
         return Response(
-            {'error': 'Email or username is required'},
+            {'error': 'Email is required'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Look up by email or username
-    user = _find_user_by_identifier(identifier)
+    # Look up by email
+    user = _find_user_by_email(email)
     if user is None:
         return Response(
             {'error': 'No account found for this email'},
@@ -433,7 +462,7 @@ def verify_reset_otp(request):
     otp = request.data.get('otp', '').strip()
 
     try:
-        user = User.objects.get(email__iexact=email, is_staff=False)
+        user = User.objects.get(email__iexact=email)
     except User.DoesNotExist:
         return Response(
             {'error': 'Invalid request'},
@@ -493,7 +522,7 @@ def reset_password(request):
         )
 
     try:
-        user = User.objects.get(email__iexact=email, is_staff=False)
+        user = User.objects.get(email__iexact=email)
     except User.DoesNotExist:
         return Response(
             {'error': 'Invalid request'},
@@ -530,24 +559,12 @@ def logout_view(request):
 @api_view(['GET'])
 def me(request):
     """GET /api/auth/me/"""
-    if request.user.is_authenticated and not request.user.is_staff:
+    if request.user.is_authenticated:
         return Response(_user_response(request.user))
     return Response({'user': None})
 
 
-@csrf_exempt
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def check_username(request):
-    """GET /api/auth/check-username/?username=xxx"""
-    username = request.query_params.get('username', '').strip()
-    if not username or len(username) < 3:
-        return Response({'available': False, 'error': 'Username must be at least 3 characters'})
-    if not all(c.isalnum() or c in '_-' for c in username):
-        return Response({'available': False, 'error': 'Only letters, numbers, hyphens, underscores'})
-    # Case-insensitive check
-    taken = User.objects.filter(username__iexact=username).exists()
-    return Response({'available': not taken})
+
 
 
 # ─── Google OAuth ───
@@ -628,7 +645,7 @@ def google_callback(request):
 
     # Find or create user
     # Find existing non-staff user with this email
-    user = User.objects.filter(email__iexact=google_email, is_staff=False).first()
+    user = User.objects.filter(email__iexact=google_email).first()
 
     if user:
         # Existing user — log in directly
@@ -652,8 +669,8 @@ def google_callback(request):
 def google_complete_setup(request):
     """
     POST /api/auth/google/complete-setup/
-    Body: { "username": "...", "password": "..." }
-    Creates account for a new Google user with chosen username + password.
+    Body: { "preferred_name", "first_name", "last_name", "role", "password" }
+    Creates account for a new Google user.
     """
     pending = request.session.get('google_pending')
     if not pending:
@@ -662,9 +679,23 @@ def google_complete_setup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    username = request.data.get('username', '').strip()
-    password = request.data.get('password', '')
+    preferred_name = request.data.get('preferred_name', '').strip()
+    first_name = request.data.get('first_name', '').strip()
+    last_name = request.data.get('last_name', '').strip()
     role = request.data.get('role', '').strip().lower()
+    password = request.data.get('password', '')
+
+    if not preferred_name:
+        return Response(
+            {'error': 'Please tell us what Rx should call you'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not first_name:
+        return Response(
+            {'error': 'First name is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if role not in VALID_ROLES:
         return Response(
@@ -672,37 +703,27 @@ def google_complete_setup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not username or len(username) < 3:
-        return Response(
-            {'error': 'Username must be at least 3 characters'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if not all(c.isalnum() or c in '_-' for c in username):
-        return Response(
-            {'error': 'Username can only contain letters, numbers, hyphens, and underscores'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if User.objects.filter(username__iexact=username).exists():
-        return Response(
-            {'error': 'Username is already taken'},
-            status=status.HTTP_409_CONFLICT,
-        )
     if len(password) < 8:
         return Response(
             {'error': 'Password must be at least 8 characters'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    google_email = pending['email']
+
+    # Create user — username auto-set to email
     user = User.objects.create_user(
-        username=username,
-        email=pending['email'],
+        username=google_email,
+        email=google_email,
         password=password,
-        first_name=pending.get('first_name', ''),
-        last_name=pending.get('last_name', ''),
     )
-    # Update profile role (profile auto-created via signal)
-    user.profile.role = role
-    user.profile.save()
+    # Update profile (auto-created via signal)
+    profile = user.profile
+    profile.preferred_name = preferred_name
+    profile.first_name = first_name or pending.get('first_name', '')
+    profile.last_name = last_name or pending.get('last_name', '')
+    profile.role = role
+    profile.save()
 
     # Clean up session
     del request.session['google_pending']
