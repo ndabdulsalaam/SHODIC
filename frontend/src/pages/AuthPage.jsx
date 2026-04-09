@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HiOutlineArrowLeft } from 'react-icons/hi2'
 import './AuthPage.css'
@@ -35,12 +35,20 @@ function AuthPage() {
     const [confirmNewPassword, setConfirmNewPassword] = useState('')
     const [showPassword, setShowPassword] = useState(false)
 
+    // Profile setup state (after OTP verified for registration)
+    const [preferredName, setPreferredName] = useState('')
+    const [firstName, setFirstName] = useState('')
+    const [lastName, setLastName] = useState('')
+    const [setupRole, setSetupRole] = useState('')
+    const [setupPassword, setSetupPassword] = useState('')
+    const [setupConfirmPassword, setSetupConfirmPassword] = useState('')
+
     // Google setup state
-    const [googleUsername, setGoogleUsername] = useState('')
+    const [googlePreferredName, setGooglePreferredName] = useState('')
+    const [googleFirstName, setGoogleFirstName] = useState('')
+    const [googleLastName, setGoogleLastName] = useState('')
     const [googlePassword, setGooglePassword] = useState('')
     const [googleConfirmPassword, setGoogleConfirmPassword] = useState('')
-    const [usernameStatus, setUsernameStatus] = useState(null)
-    const [usernameError, setUsernameError] = useState('')
     const [googleRole, setGoogleRole] = useState('')
 
     const googlePasswordsMatch = useMemo(() => {
@@ -48,37 +56,10 @@ function AuthPage() {
         return googlePassword === googleConfirmPassword
     }, [googlePassword, googleConfirmPassword])
 
-    // Debounced username check for Google setup
-    const checkUsername = useCallback(async (value) => {
-        if (!value || value.length < 3) {
-            setUsernameStatus(null)
-            setUsernameError('')
-            return
-        }
-        setUsernameStatus('checking')
-        try {
-            const res = await fetch(`${API}/auth/check-username/?username=${encodeURIComponent(value)}`, {
-                credentials: 'include',
-            })
-            const data = await res.json()
-            if (data.available) {
-                setUsernameStatus('available')
-                setUsernameError('')
-            } else {
-                setUsernameStatus(data.error ? 'error' : 'taken')
-                setUsernameError(data.error || 'Username is taken')
-            }
-        } catch {
-            setUsernameStatus('error')
-            setUsernameError('Could not check availability')
-        }
-    }, [])
-
-    useEffect(() => {
-        if (step !== 'google_setup') return
-        const timer = setTimeout(() => checkUsername(googleUsername), 400)
-        return () => clearTimeout(timer)
-    }, [googleUsername, step, checkUsername])
+    const setupPasswordsMatch = useMemo(() => {
+        if (!setupConfirmPassword) return null
+        return setupPassword === setupConfirmPassword
+    }, [setupPassword, setupConfirmPassword])
 
     const passwordsMatch = useMemo(() => {
         if (!confirmNewPassword) return null
@@ -105,9 +86,9 @@ function AuthPage() {
         return `${m}:${s.toString().padStart(2, '0')}`
     }
 
-    // If no email and not google setup, redirect back
+    // If no email and not google/profile setup, redirect back
     useEffect(() => {
-        if (!email && step !== 'google_setup') navigate('/')
+        if (!email && step !== 'google_setup' && step !== 'profile_setup') navigate('/')
     }, [email, step, navigate])
 
     const handleChange = (index, value) => {
@@ -180,11 +161,13 @@ function AuthPage() {
                 return
             }
 
-            setSuccess(purpose === 'registration'
-                ? 'Account created! Redirecting...'
-                : 'Device verified! Redirecting...'
-            )
+            if (purpose === 'registration' && data.setup_required) {
+                // Redirect to profile setup
+                navigate(`/auth?step=profile_setup&email=${encodeURIComponent(email)}`)
+                return
+            }
 
+            setSuccess('Device verified! Redirecting...')
             setTimeout(() => navigate('/'), 1500)
         } catch {
             setError('Network error. Please try again.')
@@ -258,17 +241,76 @@ function AuthPage() {
         }
     }
 
+    // ─── Profile Setup (after OTP verified for registration) ───
+    const handleProfileSetup = async (e) => {
+        e.preventDefault()
+        setError('')
+        setSuccess('')
+
+        if (!preferredName) {
+            setError('Please tell us what Rx should call you')
+            return
+        }
+        if (!firstName) {
+            setError('First name is required')
+            return
+        }
+        if (!setupRole) {
+            setError('Please select your role')
+            return
+        }
+        if (setupPassword.length < 8) {
+            setError('Password must be at least 8 characters')
+            return
+        }
+        if (setupPassword !== setupConfirmPassword) {
+            setError('Passwords do not match')
+            return
+        }
+
+        setLoading(true)
+        try {
+            const res = await fetch(`${API}/auth/complete-setup/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    preferred_name: preferredName,
+                    first_name: firstName,
+                    last_name: lastName,
+                    role: setupRole,
+                    password: setupPassword,
+                }),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                setError(data.error || 'Failed to create account')
+                return
+            }
+
+            setSuccess('Account created! Redirecting...')
+            setTimeout(() => navigate('/'), 1500)
+        } catch {
+            setError('Network error. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // ─── Google Setup ───
     const handleGoogleSetup = async (e) => {
         e.preventDefault()
         setError('')
         setSuccess('')
 
-        if (!googleUsername || googleUsername.length < 3) {
-            setError('Username must be at least 3 characters')
+        if (!googlePreferredName) {
+            setError('Please tell us what Rx should call you')
             return
         }
-        if (usernameStatus !== 'available') {
-            setError('Please choose an available username')
+        if (!googleFirstName) {
+            setError('First name is required')
             return
         }
         if (!googleRole) {
@@ -291,9 +333,11 @@ function AuthPage() {
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
-                    username: googleUsername,
-                    password: googlePassword,
+                    preferred_name: googlePreferredName,
+                    first_name: googleFirstName,
+                    last_name: googleLastName,
                     role: googleRole,
+                    password: googlePassword,
                 }),
             })
 
@@ -313,7 +357,137 @@ function AuthPage() {
         }
     }
 
-    // Google setup form (new Google users pick username + password)
+    // ─── Profile Setup Form (registration step 3) ───
+    if (step === 'profile_setup') {
+        return (
+            <div className="auth-page">
+                <div className="auth-page__card">
+                    <div className="auth-page__logo">
+                        <span className="auth-page__logo-text">
+                            <span className="auth-page__logo-r">R</span>
+                            <span className="auth-page__logo-x">x</span>
+                            <span className="auth-page__logo-chat">Chat</span>
+                        </span>
+                    </div>
+
+                    <h1 className="auth-page__title">Complete Your Profile</h1>
+                    <p className="auth-page__subtitle">
+                        Email verified! Set up your profile for <strong>{email}</strong>
+                    </p>
+
+                    <form className="auth-page__form" onSubmit={handleProfileSetup}>
+                        <div className="auth-page__input-group">
+                            <label htmlFor="setup-preferred-name">What should Rx call you?</label>
+                            <input
+                                id="setup-preferred-name"
+                                type="text"
+                                value={preferredName}
+                                onChange={(e) => setPreferredName(e.target.value)}
+                                placeholder="e.g. Nurudeen"
+                                autoFocus
+                                required
+                            />
+                        </div>
+
+                        <div className="auth-page__row">
+                            <div className="auth-page__input-group">
+                                <label htmlFor="setup-first-name">First Name</label>
+                                <input
+                                    id="setup-first-name"
+                                    type="text"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    placeholder="First name"
+                                    required
+                                />
+                            </div>
+                            <div className="auth-page__input-group">
+                                <label htmlFor="setup-last-name">Last Name</label>
+                                <input
+                                    id="setup-last-name"
+                                    type="text"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    placeholder="Last name"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="auth-page__input-group">
+                            <label htmlFor="setup-role">Role</label>
+                            <select
+                                id="setup-role"
+                                className="auth-page__select"
+                                value={setupRole}
+                                onChange={(e) => setSetupRole(e.target.value)}
+                                required
+                            >
+                                {ROLE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value} disabled={!opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="auth-page__input-group">
+                            <label htmlFor="setup-password">Password</label>
+                            <input
+                                id="setup-password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={setupPassword}
+                                onChange={(e) => setSetupPassword(e.target.value)}
+                                placeholder="At least 8 characters"
+                                autoComplete="new-password"
+                                required
+                            />
+                        </div>
+
+                        <div className="auth-page__input-group">
+                            <label htmlFor="setup-confirm-password">
+                                Confirm Password
+                                {setupPasswordsMatch === true && <span className="auth-page__match auth-page__match--yes"> ✓ Match</span>}
+                                {setupPasswordsMatch === false && <span className="auth-page__match auth-page__match--no"> ✗ Mismatch</span>}
+                            </label>
+                            <input
+                                id="setup-confirm-password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={setupConfirmPassword}
+                                onChange={(e) => setSetupConfirmPassword(e.target.value)}
+                                placeholder="Re-enter password"
+                                autoComplete="new-password"
+                                required
+                            />
+                        </div>
+
+                        {/* Show password toggle */}
+                        <div className="auth-page__show-password">
+                            <input
+                                type="checkbox"
+                                id="setup-show-pass"
+                                checked={showPassword}
+                                onChange={(e) => setShowPassword(e.target.checked)}
+                            />
+                            <label htmlFor="setup-show-pass">Show password</label>
+                        </div>
+
+                        {error && <div className="auth-page__error">{error}</div>}
+                        {success && <div className="auth-page__success">{success}</div>}
+
+                        <button
+                            type="submit"
+                            className="auth-page__submit"
+                            disabled={loading || !setupRole || !preferredName || !firstName}
+                        >
+                            {loading ? 'Creating account...' : 'Create Account'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )
+    }
+
+    // ─── Google Setup Form ───
     if (step === 'google_setup') {
         return (
             <div className="auth-page">
@@ -328,29 +502,44 @@ function AuthPage() {
 
                     <h1 className="auth-page__title">Complete Your Profile</h1>
                     <p className="auth-page__subtitle">
-                        You're signing in with Google. Choose a username and set a password for your RxChat account.
+                        You&apos;re signing in with Google. Set up your RxChat profile.
                     </p>
 
                     <form className="auth-page__form" onSubmit={handleGoogleSetup}>
                         <div className="auth-page__input-group">
-                            <label htmlFor="google-username">
-                                Username
-                                {usernameStatus === 'checking' && <span className="auth-page__match" style={{ opacity: 0.6 }}> ⏳</span>}
-                                {usernameStatus === 'taken' && <span className="auth-page__match auth-page__match--no"> ✗ Username taken</span>}
-                                {usernameStatus === 'error' && <span className="auth-page__match auth-page__match--no"> ✗ {usernameError}</span>}
-                            </label>
-                            <div className="auth-page__input-with-status">
+                            <label htmlFor="google-preferred-name">What should Rx call you?</label>
+                            <input
+                                id="google-preferred-name"
+                                type="text"
+                                value={googlePreferredName}
+                                onChange={(e) => setGooglePreferredName(e.target.value)}
+                                placeholder="e.g. Nurudeen"
+                                autoFocus
+                                required
+                            />
+                        </div>
+
+                        <div className="auth-page__row">
+                            <div className="auth-page__input-group">
+                                <label htmlFor="google-first-name">First Name</label>
                                 <input
-                                    id="google-username"
+                                    id="google-first-name"
                                     type="text"
-                                    value={googleUsername}
-                                    onChange={(e) => setGoogleUsername(e.target.value)}
-                                    placeholder="Choose a username"
-                                    autoFocus
+                                    value={googleFirstName}
+                                    onChange={(e) => setGoogleFirstName(e.target.value)}
+                                    placeholder="First name"
+                                    required
                                 />
-                                {usernameStatus === 'available' && (
-                                    <span className="auth-page__status auth-page__status--available">✓</span>
-                                )}
+                            </div>
+                            <div className="auth-page__input-group">
+                                <label htmlFor="google-last-name">Last Name</label>
+                                <input
+                                    id="google-last-name"
+                                    type="text"
+                                    value={googleLastName}
+                                    onChange={(e) => setGoogleLastName(e.target.value)}
+                                    placeholder="Last name"
+                                />
                             </div>
                         </div>
 
@@ -416,7 +605,7 @@ function AuthPage() {
                         <button
                             type="submit"
                             className="auth-page__submit"
-                            disabled={loading || usernameStatus !== 'available' || !googleRole}
+                            disabled={loading || !googleRole || !googlePreferredName || !googleFirstName}
                         >
                             {loading ? 'Creating account...' : 'Create Account'}
                         </button>
@@ -426,7 +615,7 @@ function AuthPage() {
         )
     }
 
-    // New password form (after OTP verified for password reset)
+    // ─── New Password Form (after OTP verified for password reset) ───
     if (purpose === 'password_reset' && resetStep === 'new_password') {
         return (
             <div className="auth-page">
@@ -512,6 +701,7 @@ function AuthPage() {
         )
     }
 
+    // ─── OTP Verification ───
     return (
         <div className="auth-page">
             <div className="auth-page__card">

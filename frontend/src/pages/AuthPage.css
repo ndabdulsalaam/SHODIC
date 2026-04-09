@@ -287,9 +287,15 @@
     user-select: none;
 }
 
-/* Google Setup Form */
+/* Google / Profile Setup Form */
 .auth-page__form {
     text-align: left;
+}
+
+.auth-page__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
 }
 
 .auth-page__input-group {
