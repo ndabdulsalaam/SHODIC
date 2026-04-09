@@ -3,6 +3,21 @@ import './Sidebar.css'
 
 function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, isOpen, onClose, user, onShowAuth, onLogout }) {
 
+    // Build avatar initials from profile first/last name
+    const getInitials = () => {
+        const first = user?.first_name?.charAt(0)?.toUpperCase() || ''
+        const last = user?.last_name?.charAt(0)?.toUpperCase() || ''
+        if (first && last) return `${first}${last}`
+        if (first) return first
+        return user?.email?.charAt(0)?.toUpperCase() || 'U'
+    }
+
+    // Display name: first + last from profile
+    const getDisplayName = () => {
+        const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
+        return name || user?.email || 'User'
+    }
+
     return (
         <>
             <div className={`sidebar__overlay ${isOpen ? 'sidebar__overlay--visible' : ''}`} onClick={onClose} />
@@ -55,13 +70,12 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                         <div className="sidebar__user-profile">
                             <div className="sidebar__user-info">
                                 <div className="sidebar__user-avatar">
-                                    {user.first_name?.charAt(0).toUpperCase() || user.username?.charAt(0).toUpperCase() || 'U'}
+                                    {getInitials()}
                                 </div>
                                 <div className="sidebar__user-details">
                                     <span className="sidebar__user-name">
-                                        {user.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user.username}
+                                        {getDisplayName()}
                                     </span>
-                                    <span className="sidebar__user-username">@{user.username}</span>
                                 </div>
                             </div>
                             <button className="sidebar__settings-btn" title="Settings (coming soon)">
