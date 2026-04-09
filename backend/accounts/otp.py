@@ -43,7 +43,6 @@ def _build_html_email(otp_code, purpose):
           <td style="background:linear-gradient(135deg,#0d1b3e,#1a2d5a); padding:32px 40px; text-align:center;">
             <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
               <tr>
-                <td style="background:linear-gradient(135deg,#2ec4b6,#a8e6cf); width:40px; height:40px; border-radius:10px; text-align:center; vertical-align:middle; font-weight:700; font-size:18px; color:#0d1b3e;">Rx</td>
                 <td style="padding-left:12px; font-size:24px; font-weight:700; color:#ffffff;">Rx<span style="color:#2ec4b6;">Chat</span></td>
               </tr>
             </table>
@@ -121,13 +120,13 @@ def send_otp_email(email, otp_code, purpose='registration'):
     to Django's email backend (console in dev, SMTP in prod).
     """
     if purpose == 'registration':
-        subject = 'RxChat — Verify Your Email'
+        subject = 'Verify Your Email'
         plain = f"Welcome to RxChat! Your code: {otp_code} (expires in 15 min)"
     elif purpose == 'password_reset':
-        subject = 'RxChat — Reset Your Password'
+        subject = 'Reset Your Password'
         plain = f"Your password reset code: {otp_code} (expires in 15 min)"
     else:
-        subject = 'RxChat — Login Verification'
+        subject = 'Login Verification'
         plain = f"Login from new device. Your code: {otp_code} (expires in 15 min)"
 
     html_content = _build_html_email(otp_code, purpose)
