@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     path('register/', views.register, name='register'),
     path('verify-otp/', views.verify_otp, name='verify-otp'),
+    path('complete-setup/', views.complete_setup, name='complete-setup'),
     path('login/', views.login_view, name='login'),
     path('verify-device/', views.verify_device, name='verify-device'),
     path('resend-otp/', views.resend_otp, name='resend-otp'),
@@ -15,5 +16,4 @@ urlpatterns = [
     path('google/complete-setup/', views.google_complete_setup, name='google-complete-setup'),
     path('logout/', views.logout_view, name='logout'),
     path('me/', views.me, name='me'),
-    path('check-username/', views.check_username, name='check-username'),
 ]
