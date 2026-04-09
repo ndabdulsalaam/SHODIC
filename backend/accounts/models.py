@@ -17,12 +17,15 @@ ROLE_CHOICES = [
 
 
 class UserProfile(models.Model):
-    """Extends Django User with a role for Audience-Aware Prompting."""
+    """Extends Django User with identity and role for Audience-Aware Prompting."""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
+    preferred_name = models.CharField(max_length=150, blank=True, help_text="What should Rx call you?")
     role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='patient')
 
     def __str__(self):
-        return f"{self.user.username} — {self.get_role_display()}"
+        return f"{self.user.email} — {self.get_role_display()}"
 
 
 @receiver(post_save, sender=User)
@@ -33,13 +36,8 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 
 class PendingRegistration(models.Model):
-    """Stores registration data until OTP is verified."""
+    """Stores pending email verification until OTP is confirmed."""
     email = models.EmailField(unique=True)
-    username = models.CharField(max_length=150)
-    first_name = models.CharField(max_length=150, blank=True)
-    last_name = models.CharField(max_length=150, blank=True)
-    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='patient')
-    password = models.CharField(max_length=128)  # Hashed
     otp_code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
