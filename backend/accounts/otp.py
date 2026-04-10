@@ -63,7 +63,7 @@ def _build_html_email(otp_code, purpose):
         <!-- Footer -->
         <tr>
           <td style="background:#f7fafc; padding:20px 40px; text-align:center; border-top:1px solid #e2e8f0;">
-            <p style="margin:0; font-size:12px; color:#a0aec0;">© RxChat — Your trusted AI pharmacy companion</p>
+            <p style="margin:0; font-size:12px; color:#a0aec0;">© RxChat — Your trusted AI pharmacist</p>
           </td>
         </tr>
       </table>
