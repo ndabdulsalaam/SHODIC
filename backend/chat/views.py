@@ -7,7 +7,7 @@ from .serializers import (
     ConversationListSerializer,
     ChatInputSerializer,
 )
-from .ai_service import get_gemini_response
+from .ai_service import get_ai_response
 
 
 def _get_owner_filter(request):
@@ -32,6 +32,7 @@ def send_message(request):
 
     user_text = serializer.validated_data['message']
     conv_id = serializer.validated_data.get('conversation_id')
+    role = serializer.validated_data.get('role', 'patient')
     owner = _get_owner_filter(request)
 
     # Get or create conversation
@@ -62,7 +63,7 @@ def send_message(request):
     )[:-1]  # Exclude the message we just saved (already in user_text)
 
     # Get AI response
-    ai_text = get_gemini_response(user_text, conversation_history=history)
+    ai_text = get_ai_response(user_text, conversation_history=history, role=role)
 
     # Save AI message
     ai_message = Message.objects.create(
