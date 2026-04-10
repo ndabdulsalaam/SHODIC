@@ -36,5 +36,8 @@ class ConversationListSerializer(serializers.ModelSerializer):
 
 class ChatInputSerializer(serializers.Serializer):
     """Validates incoming chat messages."""
+    ROLE_CHOICES = ["patient", "pharmacist", "physician", "nurse", "other"]
+
     message = serializers.CharField(max_length=4000)
     conversation_id = serializers.UUIDField(required=False)
+    role = serializers.ChoiceField(choices=ROLE_CHOICES, default="patient", required=False)
