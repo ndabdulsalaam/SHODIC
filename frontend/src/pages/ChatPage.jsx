@@ -4,115 +4,6 @@ import ChatWindow from '../components/ChatWindow/ChatWindow'
 import AuthModal from '../components/AuthModal/AuthModal'
 import './ChatPage.css'
 
-// Simulated AI response (will be replaced by backend API call)
-const simulateAIResponse = async (message) => {
-    await new Promise((resolve) => setTimeout(resolve, 1200 + Math.random() * 800))
-
-    const responses = {
-        default: `Thank you for your question about "${message.slice(0, 40)}..."
-
-I'd be happy to help with that. Here are some key points:
-
-- **Always consult your pharmacist** or doctor before starting any new medication
-- **Drug interactions** can vary based on individual health conditions
-- **Dosage guidelines** should be followed as prescribed
-
-⚠️ This is a demo response. Once connected to the backend, I'll provide accurate, evidence-based pharmaceutical information from verified drug databases.
-
-Would you like to know more about a specific medication?`,
-
-        'metformin': `**Metformin** is one of the most commonly prescribed medications for **Type 2 Diabetes**.
-
-**Common Side Effects:**
-- Nausea and stomach upset (usually temporary)
-- Diarrhea
-- Metallic taste in mouth
-- Reduced appetite
-
-**Serious Side Effects (seek medical attention):**
-- Lactic acidosis (rare but serious)
-- Severe allergic reactions
-- Unusual muscle pain or weakness
-
-**Key Information:**
-- Take with food to minimize stomach upset
-- Avoid excessive alcohol consumption
-- Regular kidney function monitoring recommended
-- Do not crush extended-release tablets
-
-⚠️ Warning: Metformin should be temporarily discontinued before certain medical procedures involving contrast dye.`,
-
-        'ibuprofen': `**Ibuprofen** is a nonsteroidal anti-inflammatory drug (NSAID) used for pain, inflammation, and fever.
-
-**Common Side Effects:**
-- Stomach upset or pain
-- Nausea
-- Dizziness
-- Headache
-
-**Drug Interactions to watch:**
-- **Blood thinners** (warfarin, aspirin) — increased bleeding risk
-- **ACE inhibitors** — reduced blood pressure effect
-- **Lithium** — increased lithium levels
-- **Other NSAIDs** — increased side effect risk
-
-**Recommended Dosage (Adults):**
-- 200–400mg every 4–6 hours as needed
-- Maximum: 1200mg/day (OTC) or 3200mg/day (prescription)
-
-⚠️ Warning: Long-term use may increase risk of heart attack, stroke, and gastrointestinal bleeding.`,
-
-        'allergies': `For **seasonal allergies**, here are some effective OTC options:
-
-**Antihistamines (Non-drowsy):**
-- **Cetirizine** (Zyrtec) — once daily, fast-acting
-- **Loratadine** (Claritin) — once daily, minimal drowsiness
-- **Fexofenadine** (Allegra) — once daily, least sedating
-
-**Nasal Sprays:**
-- **Fluticasone** (Flonase) — steroid spray, very effective
-- **Cromolyn sodium** (NasalCrom) — mast cell stabilizer
-
-**Eye Drops:**
-- **Ketotifen** (Zaditor) — antihistamine eye drops for itchy eyes
-
-**Tips:**
-- Start medications before allergy season begins
-- Nasal sprays work best with consistent daily use
-- Combine an antihistamine with a nasal spray for severe symptoms
-
-Would you like more details about any of these options?`,
-
-        'amoxicillin': `**Amoxicillin** is a penicillin-type antibiotic used to treat bacterial infections.
-
-**Standard Adult Dosage:**
-- **Mild infections:** 250mg every 8 hours or 500mg every 12 hours
-- **Moderate/severe:** 500mg every 8 hours or 875mg every 12 hours
-- **Duration:** Typically 7–14 days depending on infection
-
-**Common Side Effects:**
-- Diarrhea
-- Nausea
-- Skin rash
-- Headache
-
-**Important Notes:**
-- Complete the full course even if feeling better
-- Can be taken with or without food
-- Store suspension in refrigerator
-- May reduce effectiveness of oral contraceptives
-
-⚠️ Warning: Tell your doctor if you have a penicillin or cephalosporin allergy before taking amoxicillin.`,
-    }
-
-    const lowerMsg = message.toLowerCase()
-    if (lowerMsg.includes('metformin')) return responses.metformin
-    if (lowerMsg.includes('ibuprofen') || lowerMsg.includes('blood thinner')) return responses.ibuprofen
-    if (lowerMsg.includes('allerg')) return responses.allergies
-    if (lowerMsg.includes('amoxicillin') || lowerMsg.includes('dosage') || lowerMsg.includes('dose')) return responses.amoxicillin
-    return responses.default
-}
-
 function ChatPage() {
     const [conversations, setConversations] = useState([])
     const [activeConversationId, setActiveConversationId] = useState(null)
@@ -136,6 +27,25 @@ function ChatPage() {
         checkAuth()
     }, [API])
 
+    // Load conversations from backend on mount and when user changes
+    useEffect(() => {
+        const loadConversations = async () => {
+            try {
+                const res = await fetch(`${API}/chat/conversations/`, { credentials: 'include' })
+                if (res.ok) {
+                    const data = await res.json()
+                    setConversations(data.map(c => ({
+                        id: c.id,
+                        title: c.title,
+                        messages: [],
+                        _loaded: false,
+                    })))
+                }
+            } catch { /* offline or error */ }
+        }
+        loadConversations()
+    }, [API, user])
+
     const handleShowAuth = (mode = 'login') => {
         setAuthMode(mode)
         setShowAuthModal(true)
@@ -149,69 +59,182 @@ function ChatPage() {
             })
         } catch { /* ignore */ }
         setUser(null)
+        setConversations([])
+        setActiveConversationId(null)
     }
 
     const activeConversation = conversations.find((c) => c.id === activeConversationId)
     const messages = activeConversation?.messages || []
 
-    const createConversation = useCallback((firstMessage) => {
-        const id = Date.now().toString()
-        const title = firstMessage.length > 35 ? firstMessage.slice(0, 35) + '...' : firstMessage
-        const newConv = { id, title, messages: [] }
-        setConversations((prev) => [newConv, ...prev])
-        setActiveConversationId(id)
-        return id
-    }, [])
+    // Load messages when selecting a conversation that hasn't been loaded
+    const loadConversationMessages = useCallback(async (convId) => {
+        const conv = conversations.find(c => c.id === convId)
+        if (conv && conv._loaded) return
+
+        try {
+            const res = await fetch(`${API}/chat/conversations/${convId}/`, { credentials: 'include' })
+            if (res.ok) {
+                const data = await res.json()
+                setConversations(prev => prev.map(c =>
+                    c.id === convId
+                        ? { ...c, messages: data.messages || [], _loaded: true }
+                        : c
+                ))
+            }
+        } catch { /* error */ }
+    }, [API, conversations])
 
     const handleSendMessage = useCallback(async (text) => {
         let convId = activeConversationId
 
-        if (!convId) {
-            convId = createConversation(text)
-        }
-
         const userMsg = {
             role: 'user',
             content: text,
-            timestamp: new Date().toISOString(),
+            created_at: new Date().toISOString(),
         }
 
-        setConversations((prev) =>
-            prev.map((c) =>
-                c.id === convId ? { ...c, messages: [...c.messages, userMsg] } : c
+        // Optimistically add user message
+        if (convId) {
+            setConversations((prev) =>
+                prev.map((c) =>
+                    c.id === convId ? { ...c, messages: [...c.messages, userMsg] } : c
+                )
             )
-        )
+        }
 
         setIsLoading(true)
 
         try {
-            const aiText = await simulateAIResponse(text)
-            const aiMsg = {
-                role: 'assistant',
-                content: aiText,
-                timestamp: new Date().toISOString(),
+            const res = await fetch(`${API}/chat/send/`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: text,
+                    ...(convId ? { conversation_id: convId } : {}),
+                }),
+            })
+
+            if (!res.ok) {
+                throw new Error(`API error: ${res.status}`)
             }
 
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let aiContent = ''
+            let actualConvId = convId
+            let buffer = ''
+
+            // Create a placeholder AI message
+            const aiMsg = {
+                role: 'assistant',
+                content: '',
+                created_at: new Date().toISOString(),
+                _streaming: true,
+            }
+
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+
+                buffer += decoder.decode(value, { stream: true })
+
+                // Parse SSE events from buffer
+                const lines = buffer.split('\n')
+                buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('event: meta')) {
+                        // Next data line will contain metadata
+                        continue
+                    }
+
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6)
+
+                        // Check if this is a JSON meta/done event
+                        if (data.startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(data)
+                                if (parsed.conversation_id) {
+                                    actualConvId = parsed.conversation_id
+
+                                    // If this is a new conversation, add it
+                                    if (!convId) {
+                                        const newConv = {
+                                            id: actualConvId,
+                                            title: parsed.conversation_title || text.slice(0, 35) + '...',
+                                            messages: [userMsg, aiMsg],
+                                            _loaded: true,
+                                        }
+                                        setConversations((prev) => [newConv, ...prev])
+                                        setActiveConversationId(actualConvId)
+                                    }
+                                }
+                                if (parsed.message_id) {
+                                    // Done event — mark streaming complete
+                                    aiMsg._streaming = false
+                                    aiMsg.id = parsed.message_id
+                                }
+                                continue
+                            } catch { /* not JSON, treat as text chunk */ }
+                        }
+
+                        // Text chunk — unescape newlines
+                        const textChunk = data.replace(/\\n/g, '\n')
+                        aiContent += textChunk
+
+                        // Update the AI message in state
+                        setConversations((prev) =>
+                            prev.map((c) => {
+                                if (c.id !== actualConvId) return c
+                                const msgs = [...c.messages]
+                                const lastMsg = msgs[msgs.length - 1]
+                                if (lastMsg?.role === 'assistant' && lastMsg?._streaming) {
+                                    msgs[msgs.length - 1] = { ...lastMsg, content: aiContent }
+                                } else {
+                                    msgs.push({ ...aiMsg, content: aiContent })
+                                }
+                                return { ...c, messages: msgs }
+                            })
+                        )
+                    }
+
+                    if (line.startsWith('event: done')) {
+                        continue
+                    }
+                }
+            }
+
+            // Final update: mark streaming complete
             setConversations((prev) =>
-                prev.map((c) =>
-                    c.id === convId ? { ...c, messages: [...c.messages, aiMsg] } : c
-                )
+                prev.map((c) => {
+                    if (c.id !== actualConvId) return c
+                    const msgs = c.messages.map((m) =>
+                        m._streaming ? { ...m, content: aiContent, _streaming: false } : m
+                    )
+                    return { ...c, messages: msgs }
+                })
             )
-        } catch {
+        } catch (err) {
+            console.error('Send message error:', err)
             const errorMsg = {
                 role: 'assistant',
                 content: 'Sorry, I encountered an error processing your request. Please try again.',
-                timestamp: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                _error: true,
             }
             setConversations((prev) =>
                 prev.map((c) =>
-                    c.id === convId ? { ...c, messages: [...c.messages, errorMsg] } : c
+                    c.id === (activeConversationId || convId)
+                        ? { ...c, messages: [...c.messages.filter(m => !m._streaming), errorMsg] }
+                        : c
                 )
             )
         } finally {
             setIsLoading(false)
         }
-    }, [activeConversationId, createConversation])
+    }, [activeConversationId, API])
 
     const handleNewChat = useCallback(() => {
         setActiveConversationId(null)
@@ -221,14 +244,176 @@ function ChatPage() {
     const handleSelectChat = useCallback((id) => {
         setActiveConversationId(id)
         setSidebarOpen(false)
-    }, [])
+        loadConversationMessages(id)
+    }, [loadConversationMessages])
 
-    const handleDeleteChat = useCallback((id) => {
+    const handleDeleteChat = useCallback(async (id) => {
+        try {
+            await fetch(`${API}/chat/conversations/${id}/delete/`, {
+                method: 'DELETE',
+                credentials: 'include',
+            })
+        } catch { /* ignore */ }
         setConversations((prev) => prev.filter((c) => c.id !== id))
         if (activeConversationId === id) {
             setActiveConversationId(null)
         }
-    }, [activeConversationId])
+    }, [activeConversationId, API])
+
+    const handleRenameChat = useCallback(async (id, newTitle) => {
+        try {
+            await fetch(`${API}/chat/conversations/${id}/rename/`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: newTitle }),
+            })
+        } catch { /* ignore */ }
+        setConversations((prev) =>
+            prev.map((c) => c.id === id ? { ...c, title: newTitle } : c)
+        )
+    }, [API])
+
+    const handleEditMessage = useCallback(async (messageId, newContent) => {
+        if (!activeConversationId) return
+        setIsLoading(true)
+
+        // Optimistically trim messages after the edited one
+        setConversations((prev) =>
+            prev.map((c) => {
+                if (c.id !== activeConversationId) return c
+                const idx = c.messages.findIndex(m => m.id === messageId)
+                if (idx === -1) return c
+                const msgs = c.messages.slice(0, idx + 1)
+                msgs[idx] = { ...msgs[idx], content: newContent }
+                return { ...c, messages: msgs }
+            })
+        )
+
+        try {
+            const res = await fetch(`${API}/chat/messages/${messageId}/`, {
+                method: 'PUT',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: newContent }),
+            })
+
+            if (!res.ok) throw new Error(`API error: ${res.status}`)
+
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let aiContent = ''
+            let buffer = ''
+
+            const aiMsg = { role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
+
+            // Add placeholder AI message
+            setConversations((prev) =>
+                prev.map((c) => c.id === activeConversationId ? { ...c, messages: [...c.messages, aiMsg] } : c)
+            )
+
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split('\n')
+                buffer = lines.pop() || ''
+                for (const line of lines) {
+                    if (line.startsWith('data: ') && !line.slice(6).startsWith('{')) {
+                        aiContent += line.slice(6).replace(/\\n/g, '\n')
+                        setConversations((prev) =>
+                            prev.map((c) => {
+                                if (c.id !== activeConversationId) return c
+                                const msgs = [...c.messages]
+                                const last = msgs[msgs.length - 1]
+                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, content: aiContent }
+                                return { ...c, messages: msgs }
+                            })
+                        )
+                    }
+                }
+            }
+
+            setConversations((prev) =>
+                prev.map((c) => {
+                    if (c.id !== activeConversationId) return c
+                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, content: aiContent, _streaming: false } : m) }
+                })
+            )
+        } catch (err) {
+            console.error('Edit message error:', err)
+        } finally {
+            setIsLoading(false)
+        }
+    }, [activeConversationId, API])
+
+    const handleResendMessage = useCallback(async (messageId) => {
+        if (!activeConversationId) return
+        setIsLoading(true)
+
+        // Remove messages after the target message
+        setConversations((prev) =>
+            prev.map((c) => {
+                if (c.id !== activeConversationId) return c
+                const idx = c.messages.findIndex(m => m.id === messageId)
+                if (idx === -1) return c
+                return { ...c, messages: c.messages.slice(0, idx + 1) }
+            })
+        )
+
+        try {
+            const res = await fetch(`${API}/chat/messages/${messageId}/resend/`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+
+            if (!res.ok) throw new Error(`API error: ${res.status}`)
+
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let aiContent = ''
+            let buffer = ''
+
+            const aiMsg = { role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
+
+            setConversations((prev) =>
+                prev.map((c) => c.id === activeConversationId ? { ...c, messages: [...c.messages, aiMsg] } : c)
+            )
+
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split('\n')
+                buffer = lines.pop() || ''
+                for (const line of lines) {
+                    if (line.startsWith('data: ') && !line.slice(6).startsWith('{')) {
+                        aiContent += line.slice(6).replace(/\\n/g, '\n')
+                        setConversations((prev) =>
+                            prev.map((c) => {
+                                if (c.id !== activeConversationId) return c
+                                const msgs = [...c.messages]
+                                const last = msgs[msgs.length - 1]
+                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, content: aiContent }
+                                return { ...c, messages: msgs }
+                            })
+                        )
+                    }
+                }
+            }
+
+            setConversations((prev) =>
+                prev.map((c) => {
+                    if (c.id !== activeConversationId) return c
+                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, content: aiContent, _streaming: false } : m) }
+                })
+            )
+        } catch (err) {
+            console.error('Resend message error:', err)
+        } finally {
+            setIsLoading(false)
+        }
+    }, [activeConversationId, API])
 
     return (
         <div className="chat-layout">
@@ -238,6 +423,7 @@ function ChatPage() {
                 onNewChat={handleNewChat}
                 onSelectChat={handleSelectChat}
                 onDeleteChat={handleDeleteChat}
+                onRenameChat={handleRenameChat}
                 isOpen={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
                 user={user}
@@ -252,6 +438,8 @@ function ChatPage() {
                 onShowAuth={handleShowAuth}
                 user={user}
                 onLogout={handleLogout}
+                onEditMessage={handleEditMessage}
+                onResendMessage={handleResendMessage}
             />
             {showAuthModal && (
                 <AuthModal
