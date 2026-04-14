@@ -9,6 +9,7 @@ function ChatPage() {
     const [activeConversationId, setActiveConversationId] = useState(null)
     const [isLoading, setIsLoading] = useState(false)
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [showAuthModal, setShowAuthModal] = useState(false)
     const [authMode, setAuthMode] = useState('login')
     const [user, setUser] = useState(null)
@@ -416,7 +417,7 @@ function ChatPage() {
     }, [activeConversationId, API])
 
     return (
-        <div className="chat-layout">
+        <div className={`chat-layout ${sidebarCollapsed ? 'chat-layout--collapsed' : ''}`}>
             <Sidebar
                 conversations={conversations}
                 activeId={activeConversationId}
@@ -426,6 +427,8 @@ function ChatPage() {
                 onRenameChat={handleRenameChat}
                 isOpen={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
+                collapsed={sidebarCollapsed}
+                onCollapse={() => setSidebarCollapsed((prev) => !prev)}
                 user={user}
                 onShowAuth={() => handleShowAuth('login')}
                 onLogout={handleLogout}
@@ -434,7 +437,7 @@ function ChatPage() {
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
-                onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                onToggleSidebar={() => sidebarCollapsed ? setSidebarCollapsed(false) : setSidebarOpen((prev) => !prev)}
                 onShowAuth={handleShowAuth}
                 user={user}
                 onLogout={handleLogout}
