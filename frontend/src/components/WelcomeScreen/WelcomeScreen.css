@@ -100,3 +100,21 @@
         min-height: 50vh;
     }
 }
+
+/* Disclaimer – only visible on home screen */
+.welcome__disclaimer {
+    max-width: 560px;
+    width: 100%;
+    margin-top: var(--space-6);
+    padding: var(--space-3) var(--space-4);
+    background: rgba(244, 162, 97, 0.08);
+    border: 1px solid rgba(244, 162, 97, 0.2);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    text-align: center;
+}
+
+.welcome__disclaimer strong {
+    color: var(--color-warning);
+}
