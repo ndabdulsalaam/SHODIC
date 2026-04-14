@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
+import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import './Sidebar.css'
 
-function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, user, onShowAuth, onLogout }) {
+function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onLogout }) {
     const [editingId, setEditingId] = useState(null)
     const [editTitle, setEditTitle] = useState('')
     const editInputRef = useRef(null)
@@ -60,15 +60,20 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
     return (
         <>
             <div className={`sidebar__overlay ${isOpen ? 'sidebar__overlay--visible' : ''}`} onClick={onClose} />
-            <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''}`}>
+            <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''} ${collapsed ? 'sidebar--collapsed' : ''}`}>
                 {/* Header */}
                 <div className="sidebar__header">
-                    <div className="sidebar__logo">
-                        <span className="sidebar__logo-text">
-                            <span className="sidebar__logo-r">R</span>
-                            <span className="sidebar__logo-x">x</span>
-                            <span className="sidebar__logo-chat">Chat</span>
-                        </span>
+                    <div className="sidebar__header-top">
+                        <div className="sidebar__logo">
+                            <span className="sidebar__logo-text">
+                                <span className="sidebar__logo-r">R</span>
+                                <span className="sidebar__logo-x">x</span>
+                                <span className="sidebar__logo-chat">Chat</span>
+                            </span>
+                        </div>
+                        <button className="sidebar__collapse-btn" onClick={onCollapse} title="Hide sidebar">
+                            <HiOutlineChevronDoubleLeft size={16} />
+                        </button>
                     </div>
                     <button className="sidebar__new-chat" onClick={onNewChat}>
                         <HiOutlinePlus size={16} />
