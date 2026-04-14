@@ -9,6 +9,11 @@ class Conversation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='conversations')
     session_key = models.CharField(max_length=40, null=True, blank=True, db_index=True)
     title = models.CharField(max_length=200, default='New Conversation')
+    role_override = models.CharField(
+        max_length=30, null=True, blank=True,
+        help_text='Per-conversation role override (e.g. nurse, physician). '
+                  'If set, overrides the user profile role for this conversation only.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -31,6 +36,7 @@ class Message(models.Model):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['created_at']
