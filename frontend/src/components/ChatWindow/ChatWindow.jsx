@@ -67,11 +67,6 @@ function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onSho
                 </div>
             </div>
 
-            {/* Disclaimer */}
-            <div className="chat-window__disclaimer">
-                <strong>⚠️ Disclaimer:</strong> RxChat provides general health information only. Always consult a qualified healthcare professional for medical advice.
-            </div>
-
             {/* Input */}
             <div className="chat-window__input-area">
                 <div className="chat-window__input-wrapper">
