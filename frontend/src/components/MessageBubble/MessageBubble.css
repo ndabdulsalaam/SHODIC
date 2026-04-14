@@ -1,48 +1,32 @@
 /* ============================================
-   MessageBubble Component
+   MessageBubble Component – Modern chat layout
    ============================================ */
 
 .message {
     display: flex;
-    gap: var(--space-3);
     animation: fadeInUp 0.3s ease;
     animation-fill-mode: both;
 }
 
+/* --- User messages: right-aligned with background --- */
 .message--user {
-    flex-direction: row-reverse;
+    justify-content: flex-end;
 }
 
-.message__avatar {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-full);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    margin-top: 2px;
+/* --- AI messages: left-aligned, no special background --- */
+.message--ai {
+    justify-content: flex-start;
 }
 
-.message__avatar--ai {
-    background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
-    color: var(--color-primary);
-}
-
-.message__avatar--user {
-    background: var(--color-primary);
-    color: var(--color-text-inverse);
-}
-
+/* Content wrapper */
 .message__content {
     max-width: 75%;
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
 }
 
+/* Bubble */
 .message__bubble {
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-lg);
@@ -51,32 +35,38 @@
     word-wrap: break-word;
 }
 
-.message--ai .message__bubble {
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-top-left-radius: var(--radius-sm);
-}
-
 .message--user .message__bubble {
     background: var(--color-primary);
     color: var(--color-text-inverse);
     border-top-right-radius: var(--radius-sm);
 }
 
-.message__meta {
+.message--ai .message__bubble {
+    background: transparent;
+    color: var(--color-text);
+    padding-left: var(--space-1);
+    padding-right: var(--space-1);
+}
+
+/* Bottom row: time + action icons inline */
+.message__bottom {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
     padding: 0 var(--space-1);
 }
 
-.message--user .message__meta {
+.message--user .message__bottom {
     justify-content: flex-end;
 }
 
+.message__time {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+/* Bubble text formatting */
 .message__bubble p {
     margin-bottom: var(--space-2);
 }
@@ -136,7 +126,6 @@
     gap: var(--space-1);
     opacity: 0;
     transition: opacity var(--transition-fast);
-    padding: 0 var(--space-1);
 }
 
 .message:hover .message__actions {
