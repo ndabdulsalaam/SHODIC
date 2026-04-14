@@ -36,8 +36,8 @@
 }
 
 .message--user .message__bubble {
-    background: var(--color-primary);
-    color: var(--color-text-inverse);
+    background: #E8ECF1;
+    color: var(--color-text);
     border-top-right-radius: var(--radius-sm);
 }
 
@@ -81,7 +81,7 @@
 }
 
 .message--user .message__bubble strong {
-    color: var(--color-accent-light);
+    color: var(--color-secondary-dark);
 }
 
 .message__bubble ul,
