@@ -297,11 +297,62 @@ def _get_client():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 7. STREAMING ENTRYPOINT
+# 7. COMPLEXITY CLASSIFICATION
+# ──────────────────────────────────────────────────────────────────────
+
+# Keywords / patterns that suggest the query needs deeper reasoning.
+_COMPLEX_INDICATORS = [
+    # Drug interactions & polypharmacy
+    "interaction", "interactions", "combine", "combining", "together with",
+    "concomitant", "polypharmacy", "contraindicated",
+    # Dosing adjustments
+    "dose adjustment", "renal impairment", "hepatic impairment",
+    "creatinine clearance", "gfr", "weight-based", "paediatric dosing",
+    "neonatal", "elderly dosing", "pregnancy", "breastfeeding",
+    # High-risk scenarios
+    "overdose", "toxicity", "narrow therapeutic index", "therapeutic drug monitoring",
+    "warfarin", "lithium", "digoxin", "phenytoin", "aminoglycoside",
+    # Multi-step clinical reasoning
+    "differential", "first-line", "second-line", "step-up", "step-down",
+    "algorithm", "guideline", "protocol", "compare", "versus", " vs ",
+    # Professional-depth queries
+    "pharmacokinetic", "pharmacodynamic", "mechanism of action",
+    "bioavailability", "half-life", "cyp450", "cyp3a4", "cyp2d6",
+]
+
+
+def _is_complex_query(query: str, role: str) -> bool:
+    """Determine if a query warrants the reasoning model.
+
+    Returns True when the question involves drug interactions, dosing
+    adjustments, or multi-step clinical reasoning — regardless of role.
+    """
+    query_lower = query.lower()
+
+    # Check for complexity indicators
+    for indicator in _COMPLEX_INDICATORS:
+        if indicator in query_lower:
+            return True
+
+    # Multiple drug names (crude heuristic: query has 2+ capitalised
+    # words that could be drug names after removing common words)
+    words = query.split()
+    if len(words) >= 15:  # Longer queries tend to be more complex
+        return True
+
+    return False
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 8. STREAMING ENTRYPOINT
 # ──────────────────────────────────────────────────────────────────────
 
 def stream_ai_response(user_message, conversation_history=None, role="patient"):
     """Stream an AI response for a pharmacy-related query.
+
+    Automatically routes between ``deepseek-chat`` (fast, general
+    questions) and ``deepseek-reasoner`` (complex clinical reasoning)
+    based on query complexity and user role.
 
     Yields text chunks as they arrive from DeepSeek.
 
@@ -320,6 +371,11 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
         return
 
     try:
+        use_reasoner = _is_complex_query(user_message, role)
+        model = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+
+        logger.info(f"Model selected: {model} (role={role}, reasoner={use_reasoner})")
+
         system_message = build_system_message(role)
 
         messages = [{"role": "system", "content": system_message}]
@@ -336,13 +392,19 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
             "content": build_user_message(user_message, chunks=None, role=role),
         })
 
-        stream = client.chat.completions.create(
-            model="deepseek-chat",
+        # Reasoner model parameters differ slightly
+        create_kwargs = dict(
+            model=model,
             messages=messages,
-            temperature=0.7,
-            max_tokens=2048,
             stream=True,
         )
+        if use_reasoner:
+            create_kwargs["max_tokens"] = 4096
+        else:
+            create_kwargs["temperature"] = 0.7
+            create_kwargs["max_tokens"] = 2048
+
+        stream = client.chat.completions.create(**create_kwargs)
 
         for chunk in stream:
             delta = chunk.choices[0].delta
@@ -373,3 +435,4 @@ def _get_fallback_response():
         "⚠️ For emergencies, please call emergency services or visit "
         "the nearest hospital immediately."
     )
+
