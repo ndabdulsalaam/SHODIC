@@ -49,7 +49,6 @@
 }
 
 .chat-input__send:hover:not(:disabled) {
-    background: var(--color-primary-light);
     transform: scale(1.05);
 }
 
