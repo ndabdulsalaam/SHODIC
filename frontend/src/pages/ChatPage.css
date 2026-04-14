@@ -7,3 +7,15 @@
     height: 100vh;
     overflow: hidden;
 }
+
+/* When sidebar is collapsed on desktop, hide it */
+.chat-layout--collapsed .sidebar {
+    width: 0;
+    overflow: hidden;
+    border-right: none;
+}
+
+/* Show the menu/toggle button when sidebar is collapsed */
+.chat-layout--collapsed .chat-window__menu-btn {
+    display: flex;
+}
