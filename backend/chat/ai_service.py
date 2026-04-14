@@ -14,8 +14,8 @@ Prompt hierarchy (top → cached, bottom → dynamic per-request):
   6. RAG context + query    — retrieved chunks + user msg  [never cached]
 """
 
-import os
 import logging
+from openai import OpenAI
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -182,6 +182,7 @@ ROLE_PROMPTS = {
     "physician": ROLE_PHYSICIAN,
     "nurse": ROLE_NURSE,
     "other": ROLE_OTHER,
+    "other_health_professional": ROLE_OTHER,
 }
 
 
@@ -281,14 +282,28 @@ def build_user_message(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 6. MAIN ENTRYPOINT  (will be updated to call DeepSeek + RAG)
+# 6. DeepSeek CLIENT
 # ──────────────────────────────────────────────────────────────────────
 
-def get_ai_response(user_message, conversation_history=None, role="patient"):
-    """Get an AI response for a pharmacy-related query.
+def _get_client():
+    """Return an OpenAI-compatible client pointed at DeepSeek."""
+    api_key = settings.DEEPSEEK_API_KEY
+    if not api_key:
+        return None
+    return OpenAI(
+        api_key=api_key,
+        base_url=settings.DEEPSEEK_BASE_URL,
+    )
 
-    Currently calls Gemini as a placeholder. Will be replaced with
-    DeepSeek + RAG pipeline in the next implementation step.
+
+# ──────────────────────────────────────────────────────────────────────
+# 7. STREAMING ENTRYPOINT
+# ──────────────────────────────────────────────────────────────────────
+
+def stream_ai_response(user_message, conversation_history=None, role="patient"):
+    """Stream an AI response for a pharmacy-related query.
+
+    Yields text chunks as they arrive from DeepSeek.
 
     Args:
         user_message:  The user's question.
@@ -296,55 +311,58 @@ def get_ai_response(user_message, conversation_history=None, role="patient"):
             [{'role': 'user'|'assistant', 'content': '...'}]
         role:  One of 'patient', 'pharmacist', 'physician', 'nurse', 'other'.
 
-    Returns:
-        str: The AI response text.
+    Yields:
+        str: Text chunks as they are generated.
     """
-    api_key = settings.GEMINI_API_KEY
-
-    if not api_key:
-        return _get_fallback_response()
+    client = _get_client()
+    if not client:
+        yield _get_fallback_response()
+        return
 
     try:
-        from google import genai
-
-        client = genai.Client(api_key=api_key)
-
         system_message = build_system_message(role)
 
-        # Build conversation contents
-        contents = []
+        messages = [{"role": "system", "content": system_message}]
+
         if conversation_history:
             for msg in conversation_history[-10:]:
-                msg_role = "user" if msg["role"] == "user" else "model"
-                contents.append(
-                    genai.types.Content(
-                        role=msg_role,
-                        parts=[genai.types.Part(text=msg["content"])],
-                    )
-                )
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"],
+                })
 
-        contents.append(
-            genai.types.Content(
-                role="user",
-                parts=[genai.types.Part(text=build_user_message(user_message, chunks=None, role=role))],
-            )
+        messages.append({
+            "role": "user",
+            "content": build_user_message(user_message, chunks=None, role=role),
+        })
+
+        stream = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=2048,
+            stream=True,
         )
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=contents,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=system_message,
-                temperature=0.7,
-                max_output_tokens=2048,
-            ),
-        )
-
-        return response.text
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                yield delta.content
 
     except Exception as e:
-        logger.error(f"Gemini API error: {e}")
-        return _get_fallback_response()
+        logger.error(f"DeepSeek API error: {e}")
+        yield _get_fallback_response()
+
+
+def get_ai_response(user_message, conversation_history=None, role="patient"):
+    """Non-streaming wrapper — collects the full response.
+
+    Kept for backward compatibility and non-streaming endpoints.
+    """
+    parts = []
+    for chunk in stream_ai_response(user_message, conversation_history, role):
+        parts.append(chunk)
+    return "".join(parts)
 
 
 def _get_fallback_response():
