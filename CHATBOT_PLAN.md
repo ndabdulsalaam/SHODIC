@@ -10,14 +10,14 @@ Your current stack:
 
 | Component | Status |
 |:---|:---|
-| **LLM** | Google Gemini 2.0 Flash (via `google-genai`) | ✅ Working |
+| **LLM** | DeepSeek (via `openai` / DeepSeek API) | ✅ Target Stack |
 | **Framework** | LangChain + LangGraph | ✅ Installed |
 | **Vector DB** | ChromaDB (`langchain-chroma`) | ✅ Installed, not wired |
 | **Backend** | Django + DRF | ✅ Working |
 | **Chat History** | Conversation/Message models | ✅ Working |
 | **Drug Data** | WHO, DrugBank, OpenFDA | 📋 Listed in TODO, not downloaded |
 
-Your `ai_service.py` currently sends user messages directly to Gemini with a pharmacy system prompt. There is **no RAG pipeline** and **no fine-tuned model** yet.
+Your `ai_service.py` currently has placeholders for Gemini but is structured for DeepSeek's prefix caching.
 
 ---
 
@@ -32,9 +32,9 @@ Inject into LLM Prompt as Context → LLM Generates Answer Grounded in Data
 
 **How it works for RxChat:**
 1. **Ingest Phase (one-time):** Download drug data (WHO, DrugBank, OpenFDA) → Parse into text chunks → Generate embeddings → Store in ChromaDB
-2. **Query Phase (every chat):** User asks "What are side effects of metformin?" → Query is embedded → ChromaDB finds the top 3-5 most relevant drug information chunks → Those chunks are injected into the Gemini prompt → Gemini generates a response *grounded in real drug data*
+2. **Query Phase (every chat):** User asks "What are side effects of metformin?" → Query is embedded → ChromaDB finds the top 3-5 most relevant drug information chunks → Those chunks are injected into the DeepSeek prompt → DeepSeek generates a response *grounded in real drug data*
 
-**Your existing stack already supports this.** LangChain + ChromaDB + Gemini is a textbook RAG pipeline.
+**Your existing stack supports this.** LangChain + ChromaDB + DeepSeek is a textbook RAG pipeline.
 
 ---
 
@@ -134,19 +134,19 @@ User Message: "Can I take ibuprofen with blood thinners?"
         │  [Chunk 2: "NSAID + anticoagulant warnings from FDA..."]
         │  [Chunk 3: "WHO guidelines on NSAID safety..."]
         ▼
-   Augmented Prompt to Gemini:
+   Augmented Prompt to DeepSeek:
         │  System: "You are RxChat..."
         │  Context: {retrieved chunks}
         │  User: "Can I take ibuprofen with blood thinners?"
         ▼
-   Gemini Response (grounded in retrieved data)
+   DeepSeek Response (streamed & grounded in data)
 ```
 
 ### Step 3: Key Design Decisions for RAG
 
 | Decision | Recommended Choice | Why |
 |:---|:---|:---|
-| **Embedding Model** | `text-embedding-004` (Gemini) | Free tier available, same ecosystem as your LLM |
+| **Embedding Model** | `text-embedding-004` (Gemini) or DeepSeek | Cost-effective and high quality |
 | **Vector DB** | ChromaDB (already installed) | Free, local, good for <1M documents |
 | **Chunk Size** | 1000 characters, 200 overlap | Balances context richness with retrieval precision |
 | **Top-K Retrieval** | 5 chunks | Enough context without overwhelming the prompt |
