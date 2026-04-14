@@ -140,25 +140,6 @@
     gap: var(--space-4);
 }
 
-/* Disclaimer */
-.chat-window__disclaimer {
-    max-width: var(--chat-max-width);
-    margin: 0 auto;
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    background: rgba(244, 162, 97, 0.08);
-    border: 1px solid rgba(244, 162, 97, 0.2);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
-    text-align: center;
-    flex-shrink: 0;
-}
-
-.chat-window__disclaimer strong {
-    color: var(--color-warning);
-}
-
 /* Input Area */
 .chat-window__input-area {
     padding: var(--space-4) var(--space-4) var(--space-5);
