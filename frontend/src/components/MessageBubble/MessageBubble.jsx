@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { HiOutlineUser, HiOutlinePencil, HiOutlineClipboard, HiOutlineArrowPath, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
+import { HiOutlinePencil, HiOutlineClipboard, HiOutlineArrowPath, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
 import './MessageBubble.css'
 
 function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
@@ -52,9 +52,6 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
             className={`message message--${isUser ? 'user' : 'ai'}`}
             style={{ animationDelay: `${index * 0.05}s` }}
         >
-            <div className={`message__avatar message__avatar--${isUser ? 'user' : 'ai'}`}>
-                {isUser ? <HiOutlineUser size={16} /> : 'Rx'}
-            </div>
             <div className="message__content">
                 <div className="message__bubble">
                     {isEditing ? (
@@ -81,55 +78,56 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                     )}
                 </div>
 
-                {/* Action buttons */}
-                {!isEditing && !message._streaming && (
-                    <div className="message__actions">
-                        <button
-                            className={`message__action-btn ${copied ? 'message__action-btn--copied' : ''}`}
-                            onClick={handleCopy}
-                            title={copied ? 'Copied!' : 'Copy'}
-                        >
-                            {copied ? <HiOutlineCheck size={13} /> : <HiOutlineClipboard size={13} />}
-                        </button>
+                {/* Bottom row: time + actions */}
+                {!isEditing && (
+                    <div className="message__bottom">
+                        {time && <span className="message__time">{time}</span>}
 
-                        {isUser && onEdit && (
-                            <button
-                                className="message__action-btn"
-                                onClick={handleEditStart}
-                                title="Edit message"
-                                disabled={isLoading}
-                            >
-                                <HiOutlinePencil size={13} />
-                            </button>
+                        {!message._streaming && (
+                            <div className="message__actions">
+                                <button
+                                    className={`message__action-btn ${copied ? 'message__action-btn--copied' : ''}`}
+                                    onClick={handleCopy}
+                                    title={copied ? 'Copied!' : 'Copy'}
+                                >
+                                    {copied ? <HiOutlineCheck size={13} /> : <HiOutlineClipboard size={13} />}
+                                </button>
+
+                                {isUser && onEdit && (
+                                    <button
+                                        className="message__action-btn"
+                                        onClick={handleEditStart}
+                                        title="Edit message"
+                                        disabled={isLoading}
+                                    >
+                                        <HiOutlinePencil size={13} />
+                                    </button>
+                                )}
+
+                                {/* Regenerate on AI messages only */}
+                                {!isUser && onResend && (
+                                    <button
+                                        className="message__action-btn"
+                                        onClick={() => onResend(message.id)}
+                                        title="Regenerate response"
+                                        disabled={isLoading}
+                                    >
+                                        <HiOutlineArrowPath size={13} />
+                                    </button>
+                                )}
+
+                                {message._error && onResend && (
+                                    <button
+                                        className="message__action-btn message__action-btn--error"
+                                        onClick={() => onResend(message.id)}
+                                        title="Retry"
+                                        disabled={isLoading}
+                                    >
+                                        <HiOutlineArrowPath size={13} /> Retry
+                                    </button>
+                                )}
+                            </div>
                         )}
-
-                        {isUser && onResend && (
-                            <button
-                                className="message__action-btn"
-                                onClick={() => onResend(message.id)}
-                                title="Resend message"
-                                disabled={isLoading}
-                            >
-                                <HiOutlineArrowPath size={13} />
-                            </button>
-                        )}
-
-                        {message._error && onResend && (
-                            <button
-                                className="message__action-btn message__action-btn--error"
-                                onClick={() => onResend(message.id)}
-                                title="Retry"
-                                disabled={isLoading}
-                            >
-                                <HiOutlineArrowPath size={13} /> Retry
-                            </button>
-                        )}
-                    </div>
-                )}
-
-                {time && !isEditing && (
-                    <div className="message__meta">
-                        <span>{time}</span>
                     </div>
                 )}
             </div>
