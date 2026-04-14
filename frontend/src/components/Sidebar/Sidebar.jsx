@@ -1,7 +1,46 @@
-import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth } from 'react-icons/hi2'
+import { useState, useRef, useEffect } from 'react'
+import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
 import './Sidebar.css'
 
-function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, isOpen, onClose, user, onShowAuth, onLogout }) {
+function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, user, onShowAuth, onLogout }) {
+    const [editingId, setEditingId] = useState(null)
+    const [editTitle, setEditTitle] = useState('')
+    const editInputRef = useRef(null)
+
+    useEffect(() => {
+        if (editingId && editInputRef.current) {
+            editInputRef.current.focus()
+            editInputRef.current.select()
+        }
+    }, [editingId])
+
+    const handleRenameStart = (chat) => {
+        setEditingId(chat.id)
+        setEditTitle(chat.title)
+    }
+
+    const handleRenameSave = () => {
+        const trimmed = editTitle.trim()
+        if (trimmed && editingId && onRenameChat) {
+            onRenameChat(editingId, trimmed)
+        }
+        setEditingId(null)
+    }
+
+    const handleRenameCancel = () => {
+        setEditingId(null)
+        setEditTitle('')
+    }
+
+    const handleRenameKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleRenameSave()
+        }
+        if (e.key === 'Escape') {
+            handleRenameCancel()
+        }
+    }
 
     // Build avatar initials from profile first/last name
     const getInitials = () => {
@@ -46,20 +85,64 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                         <div
                             key={chat.id}
                             className={`sidebar__chat-item ${activeId === chat.id ? 'sidebar__chat-item--active' : ''}`}
-                            onClick={() => onSelectChat(chat.id)}
+                            onClick={() => editingId !== chat.id && onSelectChat(chat.id)}
                         >
                             <HiOutlineChatBubbleLeftRight className="sidebar__chat-item-icon" />
-                            <span className="sidebar__chat-item-text">{chat.title}</span>
-                            <button
-                                className="sidebar__chat-item-delete"
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    onDeleteChat(chat.id)
-                                }}
-                                aria-label="Delete conversation"
-                            >
-                                <HiOutlineTrash size={14} />
-                            </button>
+
+                            {editingId === chat.id ? (
+                                <input
+                                    ref={editInputRef}
+                                    className="sidebar__chat-item-input"
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    onKeyDown={handleRenameKeyDown}
+                                    onBlur={handleRenameSave}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                            ) : (
+                                <span className="sidebar__chat-item-text">{chat.title}</span>
+                            )}
+
+                            <div className="sidebar__chat-item-actions">
+                                {editingId === chat.id ? (
+                                    <>
+                                        <button
+                                            className="sidebar__chat-item-action"
+                                            onClick={(e) => { e.stopPropagation(); handleRenameSave() }}
+                                            aria-label="Save title"
+                                        >
+                                            <HiOutlineCheck size={14} />
+                                        </button>
+                                        <button
+                                            className="sidebar__chat-item-action"
+                                            onClick={(e) => { e.stopPropagation(); handleRenameCancel() }}
+                                            aria-label="Cancel rename"
+                                        >
+                                            <HiOutlineXMark size={14} />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            className="sidebar__chat-item-action"
+                                            onClick={(e) => { e.stopPropagation(); handleRenameStart(chat) }}
+                                            aria-label="Rename conversation"
+                                        >
+                                            <HiOutlinePencil size={14} />
+                                        </button>
+                                        <button
+                                            className="sidebar__chat-item-action sidebar__chat-item-action--delete"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onDeleteChat(chat.id)
+                                            }}
+                                            aria-label="Delete conversation"
+                                        >
+                                            <HiOutlineTrash size={14} />
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </nav>
