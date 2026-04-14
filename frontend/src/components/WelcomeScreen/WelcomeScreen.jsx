@@ -47,6 +47,9 @@ function WelcomeScreen({ onSuggestionClick }) {
                     </button>
                 ))}
             </div>
+            <div className="welcome__disclaimer">
+                <strong>⚠️ Disclaimer:</strong> RxChat provides general health information only. Always consult a qualified healthcare professional for medical advice.
+            </div>
         </div>
     )
 }
