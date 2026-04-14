@@ -6,7 +6,7 @@ import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
 import TypingIndicator from '../TypingIndicator/TypingIndicator'
 import './ChatWindow.css'
 
-function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onShowAuth, user, onLogout }) {
+function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onShowAuth, user, onLogout, onEditMessage, onResendMessage }) {
     const messagesEndRef = useRef(null)
 
     useEffect(() => {
@@ -51,7 +51,14 @@ function ChatWindow({ messages, onSendMessage, isLoading, onToggleSidebar, onSho
                     ) : (
                         <>
                             {messages.map((msg, i) => (
-                                <MessageBubble key={i} message={msg} index={i} />
+                                <MessageBubble
+                                    key={msg.id || i}
+                                    message={msg}
+                                    index={i}
+                                    onEdit={onEditMessage}
+                                    onResend={onResendMessage}
+                                    isLoading={isLoading}
+                                />
                             ))}
                             {isLoading && <TypingIndicator />}
                         </>
