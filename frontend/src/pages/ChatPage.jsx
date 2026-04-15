@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
 import AuthModal from '../components/AuthModal/AuthModal'
+import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
 import './ChatPage.css'
 
 function ChatPage() {
@@ -13,6 +14,7 @@ function ChatPage() {
     const [showAuthModal, setShowAuthModal] = useState(false)
     const [authMode, setAuthMode] = useState('login')
     const [user, setUser] = useState(null)
+    const [settingsOpen, setSettingsOpen] = useState(false)
 
     const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -432,6 +434,7 @@ function ChatPage() {
                 user={user}
                 onShowAuth={() => handleShowAuth('login')}
                 onLogout={handleLogout}
+                onOpenSettings={() => setSettingsOpen(true)}
             />
             <ChatWindow
                 messages={messages}
@@ -451,6 +454,13 @@ function ChatPage() {
                     initialMode={authMode}
                 />
             )}
+            <SettingsPanel
+                isOpen={settingsOpen}
+                onClose={() => setSettingsOpen(false)}
+                user={user}
+                onLogout={() => { setSettingsOpen(false); handleLogout() }}
+                onUserUpdate={(data) => setUser(data)}
+            />
         </div>
     )
 }
