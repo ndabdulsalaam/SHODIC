@@ -16,4 +16,9 @@ urlpatterns = [
     path('google/complete-setup/', views.google_complete_setup, name='google-complete-setup'),
     path('logout/', views.logout_view, name='logout'),
     path('me/', views.me, name='me'),
+    # Profile & Email management
+    path('profile/', views.update_profile, name='update-profile'),
+    path('email/add/', views.add_email, name='add-email'),
+    path('email/verify/', views.verify_email, name='verify-email'),
+    path('email/remove/', views.remove_email, name='remove-email'),
 ]
