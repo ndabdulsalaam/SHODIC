@@ -6,7 +6,10 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .models import PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP, UserProfile, ROLE_CHOICES
+from .models import (
+    PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP,
+    UserProfile, UserEmail, PendingEmailChange, ROLE_CHOICES,
+)
 from .otp import generate_otp, send_otp_email
 
 VALID_ROLES = [choice[0] for choice in ROLE_CHOICES]
@@ -562,6 +565,207 @@ def me(request):
     if request.user.is_authenticated:
         return Response(_user_response(request.user))
     return Response({'user': None})
+
+
+# ─── Profile Update ───
+
+@csrf_exempt
+@api_view(['PATCH'])
+def update_profile(request):
+    """
+    PATCH /api/auth/profile/
+    Body: any of { "first_name", "last_name", "preferred_name", "role" }
+    Updates profile fields for the authenticated user.
+    """
+    profile = request.user.profile
+
+    allowed_fields = ['first_name', 'last_name', 'preferred_name', 'role']
+    updated = []
+
+    for field in allowed_fields:
+        value = request.data.get(field)
+        if value is not None:
+            value = value.strip()
+            if field == 'role' and value not in VALID_ROLES:
+                return Response(
+                    {'error': 'Please select a valid role'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            setattr(profile, field, value)
+            updated.append(field)
+
+    if not updated:
+        return Response(
+            {'error': 'No fields to update'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    profile.save()
+    return Response({
+        **_user_response(request.user),
+        'message': 'Profile updated successfully',
+    })
+
+
+# ─── Email Management ───
+
+@csrf_exempt
+@api_view(['POST'])
+def add_email(request):
+    """
+    POST /api/auth/email/add/
+    Body: { "email": "new@example.com" }
+    Sends OTP to the new email for verification.
+    """
+    from django.contrib.auth.models import User as UserModel
+
+    new_email = request.data.get('email', '').strip().lower()
+
+    if not new_email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check if email is already in use by another user
+    if UserModel.objects.filter(email__iexact=new_email).exclude(pk=request.user.pk).exists():
+        return Response(
+            {'error': 'This email is already in use'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    if UserEmail.objects.filter(email__iexact=new_email).exists():
+        return Response(
+            {'error': 'This email is already associated with an account'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    # Generate OTP and store pending change
+    otp_code = generate_otp()
+    PendingEmailChange.objects.filter(user=request.user).delete()
+    PendingEmailChange.objects.create(
+        user=request.user,
+        new_email=new_email,
+        otp_code=otp_code,
+    )
+
+    send_otp_email(new_email, otp_code, purpose='email_change')
+
+    return Response({
+        'message': 'Verification code sent to your new email',
+        'email': new_email,
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+def verify_email(request):
+    """
+    POST /api/auth/email/verify/
+    Body: { "email": "new@example.com", "otp": "123456" }
+    Verifies the OTP, adds the email as verified, and sets it as primary.
+    """
+    new_email = request.data.get('email', '').strip().lower()
+    otp = request.data.get('otp', '').strip()
+
+    if not new_email or not otp:
+        return Response(
+            {'error': 'Email and OTP are required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        pending = PendingEmailChange.objects.get(user=request.user, new_email=new_email)
+    except PendingEmailChange.DoesNotExist:
+        return Response(
+            {'error': 'No pending email change found. Please add the email first.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if pending.is_expired():
+        pending.delete()
+        return Response(
+            {'error': 'Verification code has expired. Please try again.'},
+            status=status.HTTP_410_GONE,
+        )
+
+    if pending.otp_code != otp:
+        return Response(
+            {'error': 'Invalid verification code'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    from django.utils import timezone as tz
+
+    # Unset current primary
+    UserEmail.objects.filter(user=request.user, is_primary=True).update(is_primary=False)
+
+    # Create the verified email record and set as primary
+    user_email, _created = UserEmail.objects.get_or_create(
+        user=request.user,
+        email=new_email,
+        defaults={'is_verified': True, 'is_primary': True, 'verified_at': tz.now()},
+    )
+    if not _created:
+        user_email.is_verified = True
+        user_email.is_primary = True
+        user_email.verified_at = tz.now()
+        user_email.save()
+
+    # Update the Django User.email to the new primary
+    request.user.email = new_email
+    request.user.username = new_email
+    request.user.save()
+
+    pending.delete()
+
+    return Response({
+        **_user_response(request.user),
+        'message': 'Email verified and set as primary',
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+def remove_email(request):
+    """
+    POST /api/auth/email/remove/
+    Body: { "email": "old@example.com" }
+    Removes a verified email — blocked if it's the only verified email.
+    """
+    email_to_remove = request.data.get('email', '').strip().lower()
+
+    if not email_to_remove:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user_email = UserEmail.objects.get(user=request.user, email__iexact=email_to_remove)
+    except UserEmail.DoesNotExist:
+        return Response(
+            {'error': 'Email not found on your account'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if user_email.is_primary:
+        return Response(
+            {'error': 'Cannot remove your primary email. Set another email as primary first.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Ensure at least one verified email remains
+    verified_count = UserEmail.objects.filter(user=request.user, is_verified=True).count()
+    if verified_count <= 1 and user_email.is_verified:
+        return Response(
+            {'error': 'You must have at least one verified email. Add and verify a new email first.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user_email.delete()
+
+    return Response({'message': 'Email removed successfully'})
 
 
 
