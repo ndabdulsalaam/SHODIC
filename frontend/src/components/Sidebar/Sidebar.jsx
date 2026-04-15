@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import './Sidebar.css'
 
-function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onLogout }) {
+function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onLogout, onOpenSettings }) {
     const [editingId, setEditingId] = useState(null)
     const [editTitle, setEditTitle] = useState('')
     const editInputRef = useRef(null)
@@ -166,7 +166,7 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                                     </span>
                                 </div>
                             </div>
-                            <button className="sidebar__settings-btn" title="Settings (coming soon)">
+                            <button className="sidebar__settings-btn" onClick={onOpenSettings} title="Settings">
                                 <HiOutlineCog6Tooth size={18} />
                             </button>
                         </div>
