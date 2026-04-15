@@ -1,7 +1,11 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.contrib.auth.admin import UserAdmin
-from .models import PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP, UserProfile
+from .models import (
+    PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP,
+    UserProfile, UserEmail, PendingEmailChange,
+    SubscriptionPlan, Subscription, Organization, OrganizationMember,
+)
 
 
 # Unregister default, re-register with customizations
@@ -53,3 +57,45 @@ class UserProfileAdmin(admin.ModelAdmin):
     @admin.display(description='Email')
     def email(self, obj):
         return obj.user.email
+
+
+@admin.register(UserEmail)
+class UserEmailAdmin(admin.ModelAdmin):
+    list_display = ['email', 'user', 'is_verified', 'is_primary', 'verified_at']
+    search_fields = ['email', 'user__email']
+    list_filter = ['is_verified', 'is_primary']
+
+
+@admin.register(PendingEmailChange)
+class PendingEmailChangeAdmin(admin.ModelAdmin):
+    list_display = ['user', 'new_email', 'created_at', 'expires_at']
+    search_fields = ['user__email', 'new_email']
+
+
+# ─── Subscription & Organization ───
+
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'tier', 'price_monthly', 'max_messages_per_day', 'max_conversations', 'is_active']
+    list_filter = ['tier', 'is_active']
+
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'plan', 'status', 'started_at', 'expires_at']
+    search_fields = ['user__email']
+    list_filter = ['status', 'plan']
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'owner', 'plan', 'max_members', 'created_at']
+    search_fields = ['name', 'slug', 'owner__email']
+    list_filter = ['plan']
+
+
+@admin.register(OrganizationMember)
+class OrganizationMemberAdmin(admin.ModelAdmin):
+    list_display = ['user', 'organization', 'role', 'joined_at']
+    search_fields = ['user__email', 'organization__name']
+    list_filter = ['role']
