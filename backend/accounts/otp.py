@@ -26,6 +26,10 @@ def _build_html_email(otp_code, purpose):
         heading = 'Reset Your Password'
         intro = 'Your password reset code is:'
         footer_note = "If you didn't request a password reset, please ignore this email."
+    elif purpose == 'email_change':
+        heading = 'Verify Your New Email'
+        intro = 'You requested to add this email to your RxChat account. Your verification code is:'
+        footer_note = "If you didn't request this, please ignore this email."
     else:
         heading = 'Login Verification'
         intro = 'We noticed a login from a new device. Your verification code is:'
@@ -125,6 +129,9 @@ def send_otp_email(email, otp_code, purpose='registration'):
     elif purpose == 'password_reset':
         subject = 'Reset Your Password'
         plain = f"Your password reset code: {otp_code} (expires in 15 min)"
+    elif purpose == 'email_change':
+        subject = 'Verify Your New Email'
+        plain = f"Your email verification code: {otp_code} (expires in 15 min)"
     else:
         subject = 'Login Verification'
         plain = f"Login from new device. Your code: {otp_code} (expires in 15 min)"
