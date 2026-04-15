@@ -30,9 +30,36 @@ class UserProfile(models.Model):
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
-    """Auto-create a UserProfile when a new User is created."""
+    """Auto-create a UserProfile and primary UserEmail when a new User is created."""
     if created:
         UserProfile.objects.get_or_create(user=instance)
+        if instance.email:
+            UserEmail.objects.get_or_create(
+                user=instance,
+                email=instance.email,
+                defaults={'is_verified': True, 'is_primary': True, 'verified_at': timezone.now()},
+            )
+
+
+class UserEmail(models.Model):
+    """Track multiple emails per user with verification status."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='emails')
+    email = models.EmailField(unique=True)
+    is_verified = models.BooleanField(default=False)
+    is_primary = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['user', 'email']
+
+    def __str__(self):
+        flags = []
+        if self.is_primary:
+            flags.append('primary')
+        if self.is_verified:
+            flags.append('verified')
+        return f"{self.email} ({', '.join(flags) or 'unverified'})"
 
 
 class PendingRegistration(models.Model):
@@ -52,6 +79,26 @@ class PendingRegistration(models.Model):
 
     def __str__(self):
         return f"Pending: {self.email}"
+
+
+class PendingEmailChange(models.Model):
+    """Stores OTP for verifying a new email address added to an account."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    new_email = models.EmailField()
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(minutes=15)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Email change for {self.user.email} → {self.new_email}"
 
 
 class TrustedDevice(models.Model):
@@ -105,3 +152,80 @@ class PasswordResetOTP(models.Model):
 
     def __str__(self):
         return f"Password reset OTP for {self.user.email}"
+
+
+# ─── Subscription & Organization Models ───
+
+class SubscriptionPlan(models.Model):
+    """Available subscription tiers."""
+    TIER_CHOICES = [
+        ('free', 'Free'),
+        ('pro', 'Pro'),
+        ('plus', 'Plus'),
+        ('enterprise', 'Enterprise'),
+    ]
+    name = models.CharField(max_length=50, unique=True)
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, unique=True)
+    price_monthly = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_messages_per_day = models.IntegerField(default=50, help_text='0 = unlimited')
+    max_conversations = models.IntegerField(default=10, help_text='0 = unlimited')
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['price_monthly']
+
+    def __str__(self):
+        return f"{self.name} (₦{self.price_monthly}/mo)"
+
+
+class Subscription(models.Model):
+    """A user's active subscription."""
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('cancelled', 'Cancelled'),
+        ('expired', 'Expired'),
+        ('trialing', 'Trialing'),
+    ]
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='subscription')
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    started_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.email} — {self.plan.name} ({self.status})"
+
+
+class Organization(models.Model):
+    """A workspace for team/enterprise users."""
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
+    owner = models.ForeignKey(User, on_delete=models.PROTECT, related_name='owned_organizations')
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    max_members = models.IntegerField(default=10)
+
+    def __str__(self):
+        return f"{self.name} ({self.slug})"
+
+
+class OrganizationMember(models.Model):
+    """Membership linking users to organizations with roles."""
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('admin', 'Admin'),
+        ('member', 'Member'),
+    ]
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='members')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='org_memberships')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='member')
+    joined_at = models.DateTimeField(auto_now_add=True)
+    invited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='invitations_sent')
+
+    class Meta:
+        unique_together = ['organization', 'user']
+
+    def __str__(self):
+        return f"{self.user.email} — {self.get_role_display()} @ {self.organization.name}"
