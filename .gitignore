@@ -19,5 +19,7 @@ __pycache__/
 .env
 *.docx
 *.pdf
+
+# Planning docs (tracked locally only)
 TODO.md
 *PLAN*.md
