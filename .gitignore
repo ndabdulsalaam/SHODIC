@@ -17,3 +17,7 @@ frontend/.env
 *.pyo
 __pycache__/
 .env
+*.docx
+*.pdf
+TODO.md
+*PLAN*.md
