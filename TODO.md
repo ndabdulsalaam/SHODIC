@@ -4,7 +4,7 @@
 
 - [ ] **DeepSeek API Key** — Go to [platform.deepseek.com](https://platform.deepseek.com) → API Keys → Create → Copy key → Paste in `backend/.env` as `DEEPSEEK_API_KEY`
 - [ ] **OpenAI API Key** (for embeddings only) — Go to [platform.openai.com](https://platform.openai.com) → API Keys → Create → Copy key → Paste in `backend/.env` as `OPENAI_API_KEY`
-- [ ] **Supabase Postgres** — Sign up at [supabase.com](https://supabase.com) → New Project → Settings → Database → Copy connection string → Paste in `backend/.env` as `DATABASE_URL`
+- [ ] **Neon Postgres** — Sign up at [neon.tech](https://neon.tech) → Create Project → Copy connection string → Paste in `backend/.env` as `DATABASE_URL`
 - [ ] **Qdrant Cloud** — Sign up at [cloud.qdrant.io](https://cloud.qdrant.io) → Create Cluster (free tier: 1GB) → Copy API key + cluster URL → Paste in `backend/.env`:
   ```
   QDRANT_URL=https://your-cluster-id.us-east4-0.gcp.cloud.qdrant.io
@@ -200,7 +200,7 @@ Qdrant free tier gives you **1 GB of RAM** for vector storage.
 > - **Curate OpenFDA:** Only ingest labels for drugs registered in Nigeria
 > - **Upgrade Qdrant:** Paid plans start at ~$25/month for 4 GB
 
-### Supabase Postgres (Free Tier: 500 MB)
+### Neon Postgres (Free Tier: 512 MB)
 
 | Data | Est. Size | Notes |
 |:---|:---|:---|
@@ -211,7 +211,7 @@ Qdrant free tier gives you **1 GB of RAM** for vector storage.
 | Django-Q2 task queue | ~5 MB | Auto-pruned |
 | **Total estimated** | **~100–160 MB** | **20–32% of free tier** ✅ |
 
-> ✅ **Supabase free tier is sufficient** for MVP and early production. Upgrade to Pro ($25/month) becomes relevant at ~2000+ active users.
+> ✅ **Neon free tier is sufficient** for MVP and early production. Upgrade to a paid plan becomes relevant at ~2000+ active users.
 
 ---
 
