@@ -11,7 +11,7 @@
 |:---|:---|:---|
 | **Frontend** | React + Vite → Vercel | Chat UI, auth flows, pre-chat disclaimer |
 | **Backend** | Django + DRF → Render | API, RAG orchestrator, background jobs |
-| **Database** | Supabase Postgres | Users, conversations, messages, audit logs |
+| **Database** | Neon Postgres | Users, conversations, messages, audit logs |
 | **Vector DB** | Qdrant Cloud (unified collection) | Drug data embeddings + hybrid search |
 | **Embeddings** | OpenAI `text-embedding-3-small` | Query + document embedding (1536-dim) |
 | **LLM** | DeepSeek (prefix caching + SSE) | Role-aware answer generation |
@@ -44,7 +44,7 @@
 └──────────────┬────────┬────────┬────────────────────────────────┘
                │        │        │
     ┌──────────▼──┐  ┌──▼────┐  ┌▼──────────┐
-    │  Supabase   │  │Qdrant │  │ DeepSeek  │
+    │  Neon       │  │Qdrant │  │ DeepSeek  │
     │  Postgres   │  │Cloud  │  │ API       │
     │             │  │       │  │           │
     │ Users       │  │drug_  │  │ Prefix    │
@@ -78,7 +78,7 @@
 - P0 + P1 (curated): ~200–400 MB ⚠️ may need curation
 - All sources: ~255–515 MB ⚠️ curate DrugBank/OpenFDA to Nigerian drugs only
 
-**Supabase Postgres (free tier: 500 MB):**
+**Neon Postgres (free tier: 512 MB):**
 - Estimated total: ~100–160 MB ✅ comfortably fits
 
 ---
@@ -131,7 +131,7 @@ User message
 
 ### Phase 1: Infrastructure (Weeks 1–2)
 
-- [ ] Migrate SQLite → Supabase Postgres
+- [ ] Migrate SQLite → Neon Postgres
 - [ ] Create Qdrant Cloud cluster + unified collection `drug_knowledge`
 - [ ] Set up OpenAI API for embeddings
 - [ ] Remove `chromadb`, `langchain-*` from `requirements.txt`
@@ -209,7 +209,7 @@ backend/
 │   ├── models.py              # [MODIFY] Add IngestionRun, AuditLog
 │   ├── views.py               # [MODIFY] Wire RAG into send_message
 │   └── tasks.py               # [NEW] Django-Q2 task definitions
-├── config/settings.py         # [MODIFY] Supabase, Qdrant, OpenAI config
+├── config/settings.py         # [MODIFY] Neon, Qdrant, OpenAI config
 └── requirements.txt           # [MODIFY] Swap deps
 ```
 
