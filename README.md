@@ -1,68 +1,92 @@
-# 🏥 RxChat
+# RxChat
 
-**Your trusted AI pharmacy companion.**
+RxChat is an AI pharmacy chat application for medication questions, drug
+interaction support, OTC guidance, and healthcare decision support, with a
+Nigeria-first product direction.
 
-Get instant, reliable answers about medications, drug interactions, and health guidance — anytime, anywhere. Built for everyone, from patients to caregivers, with expert pharmacist support when you need it most.
+The app currently provides a ChatGPT-style pharmacy assistant with streaming
+responses, session-based anonymous conversations, account-based chat history,
+role-aware prompting, OTP authentication, and profile settings. The longer-term
+plan is to ground answers in curated Nigerian and international drug data using
+a retrieval pipeline.
 
----
+> Medical disclaimer: RxChat provides general health and medication information
+> for educational purposes only. It is not a substitute for professional medical
+> advice, diagnosis, treatment, or emergency care. Always consult a licensed
+> healthcare professional for clinical decisions.
 
-## ✨ Features
+## Current Features
 
-- 💊 **Medication Q&A** — Ask about dosages, side effects, precautions, and usage instructions
-- ⚠️ **Drug Interaction Checker** — Get alerts about potential drug-drug interactions
-- 🏪 **OTC Recommendations** — Find over-the-counter alternatives for common symptoms
-- 💬 **Smart Conversations** — AI-powered responses grounded in verified pharmaceutical data
-- 🔒 **Session-based Chat** — Start chatting instantly, register only to save your history
-- 🌍 **Global Coverage** — Powered by WHO, DrugBank, and international drug databases
+- Streaming AI chat over server-sent events
+- Anonymous session chats without registration
+- Registered-user chat history
+- Conversation list, rename, delete, edit, and resend flows
+- Role-aware responses for patients, pharmacists, physicians, nurses, and other
+  health professionals
+- Email OTP registration
+- Trusted-device OTP login
+- Password reset via OTP
+- Google OAuth setup path
+- User profile and email update flow
+- Subscription and organization data models for future paid/team features
 
-## 🎯 Coming Soon
+## Product Direction
 
-- ⏰ Medication reminders
-- 🩺 Symptom triage
-- 📷 Prescription image scanning
-- 👨‍⚕️ Live pharmacist escalation
-- 🌐 Multi-language support
+RxChat is being built toward a safer pharmacy assistant that can answer from
+curated sources such as:
 
----
+- Nigeria Essential Medicines List
+- NAFDAC Greenbook
+- NHIA Standard Treatment Guidelines
+- WHO Essential Medicines List
+- OpenFDA drug labels
+- DrugBank or other licensed data where permitted
 
-## 🛠 Tech Stack
+The current AI layer already has RAG prompt structure, source formatting helpers,
+and role-specific safety instructions. Retrieval and ingestion are still roadmap
+work.
+
+## Tech Stack
 
 | Layer | Technology |
-|:---|:---|
-| **Frontend** | React |
-| **Backend** | Django + Django REST Framework |
-| **AI/LLM** | Google Gemini via LangChain |
-| **RAG** | ChromaDB (vector database) |
-| **Database** | PostgreSQL |
-| **Deployment** | Vercel (frontend) · Render (backend) |
+| --- | --- |
+| Frontend | React 19, Vite, React Router, React Icons |
+| Backend | Django 6, Django REST Framework |
+| Auth | Django sessions, email OTP, trusted-device cookie, Google OAuth |
+| AI | DeepSeek via the OpenAI-compatible SDK |
+| Database | SQLite for local dev, PostgreSQL via `DATABASE_URL` for production |
+| Email | Brevo HTTP API, Django console fallback for local dev |
+| Planned RAG | Qdrant, OpenAI embeddings, curated drug-data ingestion |
+| Deployment target | Vercel frontend, Render backend |
 
----
+## Repository Structure
 
-## 🏗 Architecture
-
+```text
+rxchat/
+  backend/
+    accounts/          # auth, OTPs, profiles, subscriptions, organizations
+    chat/              # conversations, messages, streaming chat API, AI service
+    config/            # Django settings, URLs, auth config
+    templates/         # error templates
+    manage.py
+    requirements.txt
+  frontend/
+    public/            # static assets
+    src/
+      components/      # chat, auth, sidebar, settings UI
+      pages/           # ChatPage and AuthPage
+    package.json
+  TODO.md              # implementation roadmap and data-source plan
 ```
-React Frontend (Vercel)
-        │
-        │ REST API
-        ▼
-Django Backend (Render)
-  ├── DRF API Router
-  ├── RAG Pipeline (LangChain + ChromaDB)
-  ├── Google Gemini API (inference)
-  └── PostgreSQL (users & chat history)
-```
 
----
+## Backend Setup
 
-## 🚀 Getting Started
-
-### Prerequisites
+Prerequisites:
 
 - Python 3.11+
-- Node.js 18+
-- PostgreSQL
+- PostgreSQL if using `DATABASE_URL`; otherwise SQLite is used locally
 
-### Backend Setup
+Install and run:
 
 ```bash
 cd backend
@@ -73,7 +97,19 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-### Frontend Setup
+The backend runs at:
+
+```text
+http://localhost:8000
+```
+
+## Frontend Setup
+
+Prerequisites:
+
+- Node.js 18+
+
+Install and run:
 
 ```bash
 cd frontend
@@ -81,30 +117,163 @@ npm install
 npm run dev
 ```
 
-### Environment Variables
+The frontend runs at:
 
-Create a `.env` file in the backend directory:
-
-```env
-GEMINI_API_KEY=your_google_ai_api_key
-DATABASE_URL=your_postgresql_url
-SECRET_KEY=your_django_secret_key
+```text
+http://localhost:5173
 ```
 
----
+## Environment Variables
 
-## 📌 Disclaimer
+Create `backend/.env` for backend configuration.
 
-> RxChat provides general pharmaceutical information for educational purposes only. It is **not a substitute for professional medical advice, diagnosis, or treatment**. Always consult a qualified healthcare provider for medical guidance.
+Minimum local setup:
 
----
+```env
+SECRET_KEY=change-me
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+ALLOWED_ORIGINS=http://localhost:5173
+```
 
-## 📄 License
+AI:
+
+```env
+DEEPSEEK_API_KEY=your_deepseek_api_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+Database:
+
+```env
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+```
+
+If `DATABASE_URL` is omitted, Django uses local SQLite.
+
+Email OTP delivery:
+
+```env
+BREVO_API_KEY=your_brevo_api_key
+BREVO_SENDER_EMAIL=verified-sender@example.com
+BREVO_SENDER_NAME=RxChat
+```
+
+If Brevo is not configured, OTP emails are sent through Django's console email
+backend in local development.
+
+Google OAuth:
+
+```env
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback/
+```
+
+Frontend environment variables can be added in `frontend/.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
+```
+
+## API Overview
+
+Chat endpoints:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/chat/send/` | Send a message and stream the AI response |
+| `GET` | `/api/chat/conversations/` | List current user's or session's conversations |
+| `GET` | `/api/chat/conversations/<id>/` | Fetch a conversation with messages |
+| `DELETE` | `/api/chat/conversations/<id>/delete/` | Delete a conversation |
+| `PATCH` | `/api/chat/conversations/<id>/rename/` | Rename a conversation |
+| `PUT` | `/api/chat/messages/<id>/` | Edit a user message and regenerate |
+| `POST` | `/api/chat/messages/<id>/resend/` | Regenerate from a user message |
+
+Auth endpoints:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/auth/register/` | Start email OTP registration |
+| `POST` | `/api/auth/verify-otp/` | Verify registration OTP |
+| `POST` | `/api/auth/complete-setup/` | Create account after OTP verification |
+| `POST` | `/api/auth/login/` | Login or request device OTP |
+| `POST` | `/api/auth/verify-device/` | Verify new device OTP |
+| `POST` | `/api/auth/resend-otp/` | Resend OTP |
+| `POST` | `/api/auth/forgot-password/` | Start password reset |
+| `POST` | `/api/auth/verify-reset-otp/` | Verify password reset OTP |
+| `POST` | `/api/auth/reset-password/` | Set a new password |
+| `GET` | `/api/auth/google/login/` | Start Google OAuth |
+| `GET` | `/api/auth/google/callback/` | Google OAuth callback |
+| `POST` | `/api/auth/google/complete-setup/` | Complete Google account setup |
+| `GET` | `/api/auth/me/` | Get current session user |
+| `POST` | `/api/auth/logout/` | Logout |
+| `PATCH` | `/api/auth/profile/` | Update profile fields |
+| `POST` | `/api/auth/email/add/` | Start verified email change |
+| `POST` | `/api/auth/email/verify/` | Verify and set new email |
+| `POST` | `/api/auth/email/remove/` | Remove a non-primary email |
+
+## AI Behavior
+
+The backend builds a role-aware prompt and streams responses from DeepSeek. It
+selects between:
+
+- `deepseek-chat` for general questions
+- `deepseek-reasoner` for complex queries such as interactions, renal/hepatic
+  dose adjustments, pregnancy, overdose, guideline comparisons, or clinical
+  reasoning
+
+The prompt emphasizes:
+
+- No fabrication when evidence is missing
+- One clarifying question when key clinical details are needed
+- Escalation for emergencies and high-risk situations
+- Different response depth for patients and healthcare professionals
+- Nigeria-aware medication and guideline context
+
+## Roadmap
+
+Near-term engineering work:
+
+- Add backend tests for auth, chat ownership, edit/resend, and profile roles
+- Fix README/code drift as implementation evolves
+- Harden streaming and frontend SSE parsing
+- Add usage limits based on subscription plan
+- Implement real RAG retrieval instead of prompt-only scaffolding
+
+RAG and data work:
+
+- Create ingestion pipeline for Nigerian drug and guideline sources
+- Store chunk metadata with source, license, revision date, and removal flags
+- Add Qdrant retrieval and OpenAI embeddings
+- Add source-aware answer controls and audit logs
+- Keep non-commercial or licensed datasets removable before monetization
+
+Planned product features:
+
+- Medication reminders
+- Symptom triage
+- Prescription image scanning
+- Live pharmacist escalation
+- Multi-language support
+- Team and enterprise workspaces
+
+## Deployment Notes
+
+Frontend deployment target:
+
+- Vercel
+- Root directory: `frontend/`
+- Build command: `npm run build`
+
+Backend deployment target:
+
+- Render or another Django-compatible host
+- Root directory: `backend/`
+- Start command: typically `gunicorn config.wsgi:application`
+- Configure `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`,
+  `ALLOWED_ORIGINS`, AI keys, and email keys in the host environment
+
+## License
 
 MIT
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
