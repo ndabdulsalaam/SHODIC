@@ -2,7 +2,6 @@ services:
   - type: web
     name: rxchat-backend
     runtime: python
-    rootDir: backend
     buildCommand: "./build.sh"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
