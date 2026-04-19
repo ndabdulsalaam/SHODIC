@@ -102,7 +102,7 @@ STORAGES = {
 }
 
 # WhiteNoise configuration
-WHITENOISE_USE_FINDERS = True
+WHITENOISE_USE_FINDERS = False
 WHITENOISE_MANIFEST_STRICT = False
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -5,4 +5,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/chat/', include('chat.urls')),
     path('api/auth/', include('accounts.urls')),
+    # TEMPORARY – remove after debugging static files
+    path('debug-static/', include('config.debug_static_urls')),
 ]
