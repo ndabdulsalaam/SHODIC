@@ -153,7 +153,49 @@
 }
 
 @media (max-width: 768px) {
+    .chat-window {
+        height: 100dvh; /* dynamic viewport height — handles mobile browser chrome */
+    }
+
+    .chat-window__header {
+        /* always visible on mobile; ensure it's above the overlay */
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        /* safe area for notched phones */
+        padding-top: env(safe-area-inset-top, 0px);
+        height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+    }
+
     .chat-window__menu-btn {
-        display: flex;
+        display: flex; /* always show hamburger on mobile */
+    }
+
+    .chat-window__messages {
+        padding: var(--space-4) var(--space-3);
+    }
+
+    .chat-window__title {
+        font-size: var(--font-size-base);
+    }
+
+    .chat-window__subtitle {
+        font-size: 0.6875rem;
+    }
+
+    /* shrink sign-up badge to fit small screens */
+    .chat-window__header-badge {
+        font-size: 0.6875rem;
+        padding: var(--space-1) var(--space-2);
+    }
+
+    .chat-window__header-signin {
+        font-size: var(--font-size-xs);
+    }
+
+    .chat-window__input-area {
+        padding: var(--space-3) var(--space-3);
+        /* push above mobile keyboard / home bar */
+        padding-bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
     }
 }
