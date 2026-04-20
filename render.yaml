@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: "./build.sh"
-    startCommand: "gunicorn config.wsgi:application"
+    startCommand: "python manage.py collectstatic --noinput && python manage.py migrate && gunicorn config.wsgi:application"
     envVars:
       - key: SECRET_KEY
         generateValue: true
