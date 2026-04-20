@@ -19,3 +19,8 @@ requests>=2.33,<3.0
 # Production server
 gunicorn>=25.0,<26.0
 whitenoise>=6.9,<7.0
+h2==4.3.0
+hpack==4.1.0
+hyperframe==6.1.0
+portalocker==3.2.0
+qdrant-client==1.17.1
