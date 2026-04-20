@@ -19,3 +19,17 @@
 .chat-layout--collapsed .chat-window__menu-btn {
     display: flex;
 }
+
+@media (max-width: 768px) {
+    .chat-layout {
+        height: 100dvh;
+        /* shrinks when mobile browser chrome (address bar) is visible */
+    }
+
+    /* Never hide the sidebar via collapse on mobile — it uses overlay slide-in instead */
+    .chat-layout--collapsed .sidebar {
+        width: var(--sidebar-width);
+        overflow: unset;
+        border-right: 1px solid var(--color-border);
+    }
+}
