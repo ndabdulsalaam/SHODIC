@@ -1,9 +1,12 @@
 """
 RxChat AI Service — Prompt definitions and AI response pipeline.
 
+LLM: DeepSeek v3.2 served via NVIDIA NIM (build.nvidia.com).
+Embeddings: Qdrant Cloud Inference (no separate embedding API call needed).
+
 All static prompt blocks (system, behaviour rules, role instructions)
-are ordered BEFORE dynamic content so DeepSeek's prefix caching reuses
-them across requests, reducing token cost on repeated calls.
+are ordered BEFORE dynamic content so prefix caching reuses them
+across requests, reducing token cost on repeated calls.
 
 Prompt hierarchy (top → cached, bottom → dynamic per-request):
   1. SYSTEM_PROMPT          — identity & core rules        [always cached]
@@ -17,6 +20,7 @@ Prompt hierarchy (top → cached, bottom → dynamic per-request):
 import logging
 from openai import OpenAI
 from django.conf import settings
+from .qdrant_service import retrieve_context
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +267,7 @@ def build_user_message(
         query:   The user's question.
         chunks:  List of dicts returned by the RAG retrieval step
                  (each with ``text`` and ``source`` keys).
-                 Pass ``None`` or ``[]`` when ChromaDB returns nothing.
+                 Pass ``None`` or ``[]`` when Qdrant returns nothing.
         role:    The user's professional role (used as a reminder in the
                  context block alongside the system message role).
 
@@ -282,18 +286,32 @@ def build_user_message(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 6. DeepSeek CLIENT
+# 6. LLM CLIENT  (NVIDIA NIM → DeepSeek v3.2, fallback → direct DeepSeek)
 # ──────────────────────────────────────────────────────────────────────
 
 def _get_client():
-    """Return an OpenAI-compatible client pointed at DeepSeek."""
-    api_key = settings.DEEPSEEK_API_KEY
-    if not api_key:
-        return None
-    return OpenAI(
-        api_key=api_key,
-        base_url=settings.DEEPSEEK_BASE_URL,
-    )
+    """Return an OpenAI-compatible client.
+
+    Priority:
+      1. NVIDIA NIM (build.nvidia.com) — serves DeepSeek v3.2
+      2. Direct DeepSeek API — legacy fallback
+    """
+    # Prefer NVIDIA NIM
+    nvidia_key = settings.NVIDIA_API_KEY
+    if nvidia_key:
+        return OpenAI(
+            api_key=nvidia_key,
+            base_url=settings.NVIDIA_BASE_URL,
+        )
+    # Fallback to direct DeepSeek
+    deepseek_key = settings.DEEPSEEK_API_KEY
+    if deepseek_key:
+        logger.warning("NVIDIA_API_KEY not set — falling back to direct DeepSeek API")
+        return OpenAI(
+            api_key=deepseek_key,
+            base_url=settings.DEEPSEEK_BASE_URL,
+        )
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -347,14 +365,26 @@ def _is_complex_query(query: str, role: str) -> bool:
 # 8. STREAMING ENTRYPOINT
 # ──────────────────────────────────────────────────────────────────────
 
+def _get_model_name(use_reasoner: bool) -> str:
+    """Return the correct model identifier based on the active provider.
+
+    NVIDIA NIM uses namespaced identifiers; direct DeepSeek uses short names.
+    """
+    if settings.NVIDIA_API_KEY:
+        # NVIDIA NIM — single model handles both modes
+        return "deepseek-ai/deepseek-v3.2"
+    # Direct DeepSeek fallback
+    return "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+
+
 def stream_ai_response(user_message, conversation_history=None, role="patient"):
     """Stream an AI response for a pharmacy-related query.
 
-    Automatically routes between ``deepseek-chat`` (fast, general
-    questions) and ``deepseek-reasoner`` (complex clinical reasoning)
-    based on query complexity and user role.
+    Uses DeepSeek v3.2 via NVIDIA NIM (primary) or direct DeepSeek API
+    (fallback).  For complex clinical queries the reasoner path is
+    selected automatically.
 
-    Yields text chunks as they arrive from DeepSeek.
+    Yields text chunks as they arrive from the LLM.
 
     Args:
         user_message:  The user's question.
@@ -372,7 +402,7 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
 
     try:
         use_reasoner = _is_complex_query(user_message, role)
-        model = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+        model = _get_model_name(use_reasoner)
 
         logger.info(f"Model selected: {model} (role={role}, reasoner={use_reasoner})")
 
@@ -387,9 +417,17 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
                     "content": msg["content"],
                 })
 
+        # Retrieve relevant drug-knowledge chunks from Qdrant
+        # Qdrant Cloud Inference handles embedding server-side — no external API call
+        chunks = retrieve_context(user_message, top_k=5)
+        if chunks:
+            logger.info(f"RAG: {len(chunks)} chunks retrieved from Qdrant")
+        else:
+            logger.info("RAG: No chunks retrieved — LLM will answer from training data")
+
         messages.append({
             "role": "user",
-            "content": build_user_message(user_message, chunks=None, role=role),
+            "content": build_user_message(user_message, chunks=chunks, role=role),
         })
 
         # Reasoner model parameters differ slightly
@@ -412,7 +450,7 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
                 yield delta.content
 
     except Exception as e:
-        logger.error(f"DeepSeek API error: {e}")
+        logger.error(f"LLM API error: {e}")
         yield _get_fallback_response()
 
 
