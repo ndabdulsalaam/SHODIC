@@ -300,13 +300,34 @@
         left: 0;
         top: 0;
         transform: translateX(-100%);
+        /* must be above sticky header (z-index: 10) and overlay (z-index: 90) */
+        z-index: 200;
+        /* pad for notch / status bar */
+        padding-top: env(safe-area-inset-top, 0px);
+        height: 100dvh;
     }
 
     .sidebar--open {
         transform: translateX(0);
     }
 
+    .sidebar__overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        /* above header but below sidebar */
+        z-index: 150;
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+    }
+
     .sidebar__overlay--visible {
         display: block;
+    }
+
+    /* hide the collapse chevron on mobile — not needed, close via overlay */
+    .sidebar__collapse-btn {
+        display: none;
     }
 }
