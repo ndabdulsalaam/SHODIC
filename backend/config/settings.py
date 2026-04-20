@@ -123,9 +123,21 @@ REST_FRAMEWORK = {
     ],
 }
 
-# DeepSeek
+# DeepSeek (kept for reference / direct DeepSeek fallback)
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
 DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+
+# OpenAI (kept for reference — embeddings now handled by Qdrant Cloud Inference)
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+
+# NVIDIA NIM — primary LLM provider (DeepSeek v3.2 via build.nvidia.com)
+NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY', '')
+NVIDIA_BASE_URL = os.getenv('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')
+
+# Vector DB — Qdrant Cloud (for RAG retrieval)
+QDRANT_URL = os.getenv('QDRANT_URL', '')
+QDRANT_API_KEY = os.getenv('QDRANT_API_KEY', '')
+QDRANT_COLLECTION = os.getenv('QDRANT_COLLECTION', 'rxchat_drugs')
 
 # Email — Brevo HTTP API (primary), Django console (dev fallback)
 BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
