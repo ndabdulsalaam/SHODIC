@@ -47,7 +47,7 @@ else:
 # ─────────────────────────────────────────────────────────
 # 2. DeepSeek Direct (fallback)
 # ─────────────────────────────────────────────────────────
-section("2. DeepSeek Direct API  (fallback LLM)")
+section("2. DeepSeek Direct API")
 
 deepseek_key = os.getenv("DEEPSEEK_API_KEY", "")
 deepseek_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
@@ -71,20 +71,29 @@ else:
 
 
 # ─────────────────────────────────────────────────────────
-# 3. OpenAI (kept for reference)
+# 3. OpenRouter — free tier
 # ─────────────────────────────────────────────────────────
-section("3. OpenAI API  (reference key — not active in pipeline)")
+section("3. OpenRouter  →  openai/gpt-oss-120b:free")
 
-openai_key = os.getenv("OPENAI_API_KEY", "")
+openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
+openrouter_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
-if not openai_key:
-    print(f"  {SKIP}  OPENAI_API_KEY not set")
+if not openrouter_key:
+    print(f"  {SKIP}  OPENROUTER_API_KEY not set")
 else:
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=openai_key, timeout=30)
+        client = OpenAI(
+            api_key=openrouter_key,
+            base_url=openrouter_url,
+            timeout=30,
+            default_headers={
+                "HTTP-Referer": "https://rxchat.dev",
+                "X-Title": "RxChat",
+            },
+        )
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="openai/gpt-oss-120b:free",
             messages=[{"role": "user", "content": "Reply with exactly: OK"}],
             max_tokens=10,
             temperature=0,
