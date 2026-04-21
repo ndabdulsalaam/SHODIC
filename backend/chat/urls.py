@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('providers/', views.list_providers, name='list-providers'),
     path('send/', views.send_message, name='send-message'),
     path('conversations/', views.list_conversations, name='list-conversations'),
     path('conversations/<uuid:conversation_id>/', views.get_conversation, name='get-conversation'),
@@ -10,3 +11,4 @@ urlpatterns = [
     path('messages/<uuid:message_id>/', views.edit_message, name='edit-message'),
     path('messages/<uuid:message_id>/resend/', views.resend_message, name='resend-message'),
 ]
+
