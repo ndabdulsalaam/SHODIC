@@ -1,12 +1,17 @@
 """
 RxChat AI Service — Prompt definitions and AI response pipeline.
 
-LLM: DeepSeek v3.2 served via NVIDIA NIM (build.nvidia.com).
-Embeddings: Qdrant Cloud Inference (no separate embedding API call needed).
+Supports multiple LLM providers via PROVIDER_REGISTRY in settings:
+  - NVIDIA NIM  (build.nvidia.com → DeepSeek v3.2)
+  - DeepSeek    (platform.deepseek.com)
+  - OpenRouter  (openrouter.ai — aggregated access)
 
-All static prompt blocks (system, behaviour rules, role instructions)
-are ordered BEFORE dynamic content so prefix caching reuses them
-across requests, reducing token cost on repeated calls.
+The active provider is selected per-request (user preference stored
+client-side and sent with each API call).  If the chosen provider
+fails, the service falls back through the remaining available
+providers automatically.
+
+Embeddings: Qdrant Cloud Inference (no separate embedding API needed).
 
 Prompt hierarchy (top → cached, bottom → dynamic per-request):
   1. SYSTEM_PROMPT          — identity & core rules        [always cached]
@@ -286,32 +291,87 @@ def build_user_message(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 6. LLM CLIENT  (NVIDIA NIM → DeepSeek v3.2, fallback → direct DeepSeek)
+# 6. LLM CLIENT  (multi-provider — NVIDIA / DeepSeek / OpenRouter)
 # ──────────────────────────────────────────────────────────────────────
 
-def _get_client():
-    """Return an OpenAI-compatible client.
+def _get_provider_config(provider: str | None = None) -> dict | None:
+    """Resolve a provider slug to its registry config.
 
-    Priority:
-      1. NVIDIA NIM (build.nvidia.com) — serves DeepSeek v3.2
-      2. Direct DeepSeek API — legacy fallback
+    Falls back through available providers if the requested one is
+    unavailable or not specified.
     """
-    # Prefer NVIDIA NIM
-    nvidia_key = settings.NVIDIA_API_KEY
-    if nvidia_key:
-        return OpenAI(
-            api_key=nvidia_key,
-            base_url=settings.NVIDIA_BASE_URL,
+    registry = settings.PROVIDER_REGISTRY
+
+    # Try the explicitly requested provider first
+    if provider and provider in registry:
+        cfg = registry[provider]
+        if cfg['available']:
+            return cfg
+        logger.warning(
+            f"Requested provider '{provider}' has no API key — trying fallbacks"
         )
-    # Fallback to direct DeepSeek
-    deepseek_key = settings.DEEPSEEK_API_KEY
-    if deepseek_key:
-        logger.warning("NVIDIA_API_KEY not set — falling back to direct DeepSeek API")
-        return OpenAI(
-            api_key=deepseek_key,
-            base_url=settings.DEEPSEEK_BASE_URL,
-        )
+
+    # Fallback: try the default, then all others
+    fallback_order = [settings.DEFAULT_LLM_PROVIDER] + [
+        k for k in registry if k != settings.DEFAULT_LLM_PROVIDER
+    ]
+    for slug in fallback_order:
+        cfg = registry.get(slug)
+        if cfg and cfg['available']:
+            logger.info(f"Using fallback provider: {slug}")
+            return cfg
+
     return None
+
+
+def _get_client(provider: str | None = None):
+    """Return an OpenAI-compatible client for the given provider.
+
+    Args:
+        provider: One of 'nvidia', 'deepseek', 'openrouter', or None
+                  (uses default + fallback chain).
+
+    Returns:
+        Tuple of (OpenAI client, provider_config dict) or (None, None).
+    """
+    cfg = _get_provider_config(provider)
+    if not cfg:
+        logger.error("No LLM provider available — all API keys missing")
+        return None, None
+
+    extra_headers = {}
+    # OpenRouter requires HTTP-Referer and X-Title headers
+    if cfg.get('base_url', '').startswith('https://openrouter.ai'):
+        extra_headers = {
+            'HTTP-Referer': 'https://rxchat.dev',
+            'X-Title': 'RxChat',
+        }
+
+    client = OpenAI(
+        api_key=cfg['api_key'],
+        base_url=cfg['base_url'],
+        default_headers=extra_headers or None,
+    )
+    return client, cfg
+
+
+def get_available_providers() -> list[dict]:
+    """Return a list of available providers for the frontend.
+
+    Each item has: slug, name, model_display, is_default.
+    """
+    registry = settings.PROVIDER_REGISTRY
+    default = settings.DEFAULT_LLM_PROVIDER
+    providers = []
+    for slug, cfg in registry.items():
+        if cfg['available']:
+            providers.append({
+                'slug': slug,
+                'name': cfg['name'],
+                'model_display': cfg['model_display'],
+                'is_default': slug == default,
+            })
+    return providers
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -365,24 +425,28 @@ def _is_complex_query(query: str, role: str) -> bool:
 # 8. STREAMING ENTRYPOINT
 # ──────────────────────────────────────────────────────────────────────
 
-def _get_model_name(use_reasoner: bool) -> str:
-    """Return the correct model identifier based on the active provider.
+def _get_model_name(cfg: dict, use_reasoner: bool) -> str:
+    """Return the correct model identifier for the given provider config.
 
-    NVIDIA NIM uses namespaced identifiers; direct DeepSeek uses short names.
+    DeepSeek direct has separate reasoner/chat models; NVIDIA NIM and
+    OpenRouter use a single model identifier.
     """
-    if settings.NVIDIA_API_KEY:
-        # NVIDIA NIM — single model handles both modes
-        return "deepseek-ai/deepseek-v3.2"
-    # Direct DeepSeek fallback
-    return "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+    if use_reasoner and 'model_reasoner' in cfg:
+        return cfg['model_reasoner']
+    return cfg['model']
 
 
-def stream_ai_response(user_message, conversation_history=None, role="patient"):
+def stream_ai_response(
+    user_message,
+    conversation_history=None,
+    role="patient",
+    provider=None,
+):
     """Stream an AI response for a pharmacy-related query.
 
-    Uses DeepSeek v3.2 via NVIDIA NIM (primary) or direct DeepSeek API
-    (fallback).  For complex clinical queries the reasoner path is
-    selected automatically.
+    Supports NVIDIA NIM, DeepSeek, and OpenRouter.  Provider is selected
+    by the ``provider`` argument (sent from frontend); falls back through
+    available providers if the selected one fails.
 
     Yields text chunks as they arrive from the LLM.
 
@@ -391,20 +455,24 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
         conversation_history:  List of prior messages
             [{'role': 'user'|'assistant', 'content': '...'}]
         role:  One of 'patient', 'pharmacist', 'physician', 'nurse', 'other'.
+        provider:  One of 'nvidia', 'deepseek', 'openrouter', or None.
 
     Yields:
         str: Text chunks as they are generated.
     """
-    client = _get_client()
+    client, cfg = _get_client(provider)
     if not client:
         yield _get_fallback_response()
         return
 
     try:
         use_reasoner = _is_complex_query(user_message, role)
-        model = _get_model_name(use_reasoner)
+        model = _get_model_name(cfg, use_reasoner)
 
-        logger.info(f"Model selected: {model} (role={role}, reasoner={use_reasoner})")
+        logger.info(
+            f"Provider: {cfg['name']} | Model: {model} "
+            f"(role={role}, reasoner={use_reasoner})"
+        )
 
         system_message = build_system_message(role)
 
@@ -450,17 +518,17 @@ def stream_ai_response(user_message, conversation_history=None, role="patient"):
                 yield delta.content
 
     except Exception as e:
-        logger.error(f"LLM API error: {e}")
+        logger.error(f"LLM API error ({cfg['name']}): {e}")
         yield _get_fallback_response()
 
 
-def get_ai_response(user_message, conversation_history=None, role="patient"):
+def get_ai_response(user_message, conversation_history=None, role="patient", provider=None):
     """Non-streaming wrapper — collects the full response.
 
     Kept for backward compatibility and non-streaming endpoints.
     """
     parts = []
-    for chunk in stream_ai_response(user_message, conversation_history, role):
+    for chunk in stream_ai_response(user_message, conversation_history, role, provider):
         parts.append(chunk)
     return "".join(parts)
 
@@ -473,4 +541,3 @@ def _get_fallback_response():
         "⚠️ For emergencies, please call emergency services or visit "
         "the nearest hospital immediately."
     )
-
