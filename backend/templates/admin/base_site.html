@@ -1,0 +1,531 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ title }} | RxChat Admin{% endblock %}
+
+{% block branding %}
+<div id="rxchat-branding">
+    <span class="rx-logo">
+        <span class="rx-r">R</span><span class="rx-x">x</span><span class="rx-chat">Chat</span>
+    </span>
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+    /* ================================================
+       RxChat Admin — Clean, light theme
+       Mirrors the frontend: white surfaces, subtle
+       grey borders, Inter font, teal accent sparingly.
+       ================================================ */
+
+    /* Light mode (default) */
+    :root {
+        --rxc-bg: #F8FAFB;
+        --rxc-surface: #FFFFFF;
+        --rxc-border: #E2E8F0;
+        --rxc-border-light: #F0F4F8;
+        --rxc-text: #1A1A2E;
+        --rxc-text-secondary: #5A6578;
+        --rxc-text-muted: #8E99A8;
+        --rxc-accent: #2EC4B6;
+        --rxc-accent-dark: #1f9a8e;
+        --rxc-error: #E63946;
+        --rxc-success: #2ECC71;
+    }
+
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --rxc-bg: #121212;
+            --rxc-surface: #1E1E1E;
+            --rxc-border: #2E2E2E;
+            --rxc-border-light: #252525;
+            --rxc-text: #E0E0E0;
+            --rxc-text-secondary: #A0A0A0;
+            --rxc-text-muted: #707070;
+            --rxc-accent: #2EC4B6;
+            --rxc-accent-dark: #1f9a8e;
+            --rxc-error: #E63946;
+            --rxc-success: #2ECC71;
+        }
+    }
+
+    /* Django admin dark theme toggle support */
+    [data-theme="dark"] {
+        --rxc-bg: #121212;
+        --rxc-surface: #1E1E1E;
+        --rxc-border: #2E2E2E;
+        --rxc-border-light: #252525;
+        --rxc-text: #E0E0E0;
+        --rxc-text-secondary: #A0A0A0;
+        --rxc-text-muted: #707070;
+        --rxc-accent: #2EC4B6;
+        --rxc-accent-dark: #1f9a8e;
+        --rxc-error: #E63946;
+        --rxc-success: #2ECC71;
+    }
+
+    /* ── Font ────────────────────────────────────── */
+    body,
+    #container,
+    #header,
+    #content,
+    .module,
+    table,
+    th,
+    td,
+    input,
+    select,
+    textarea,
+    a,
+    p,
+    label,
+    h1,
+    h2,
+    h3,
+    h4,
+    .help,
+    .btn,
+    .breadcrumbs,
+    #user-tools {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont,
+            'Segoe UI', Roboto, sans-serif !important;
+    }
+
+    /* ── Body ────────────────────────────────────── */
+    body {
+        background: var(--rxc-bg) !important;
+    }
+
+    /* ── Header — clean white bar ────────────────── */
+    #header {
+        background: var(--rxc-surface) !important;
+        color: var(--rxc-text) !important;
+        padding: 14px 24px !important;
+        box-shadow: 0 1px 0 var(--rxc-border);
+        border-bottom: none;
+    }
+
+    #rxchat-branding {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .rx-logo {
+        font-size: 1.4rem;
+        font-weight: 800;
+        letter-spacing: -0.3px;
+    }
+
+    .rx-r {
+        color: var(--rxc-success);
+    }
+
+    .rx-x {
+        color: #3498DB;
+    }
+
+    .rx-chat {
+        color: var(--rxc-text);
+    }
+
+    /* Header links */
+    #header a:link,
+    #header a:visited {
+        color: var(--rxc-text-secondary) !important;
+    }
+
+    #header a:hover {
+        color: var(--rxc-accent) !important;
+    }
+
+    #user-tools {
+        font-size: 0.8rem;
+        color: var(--rxc-text-muted);
+    }
+
+    /* Logout is a <button> in Django 4.1+ — reset to look like a link */
+    #user-tools button,
+    #user-tools #logout-form button {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        color: var(--rxc-text-secondary) !important;
+        font-size: 0.8rem !important;
+        font-weight: 400 !important;
+        cursor: pointer;
+        text-transform: uppercase;
+    }
+
+    #user-tools button:hover {
+        color: var(--rxc-accent) !important;
+    }
+
+    /* ── Breadcrumbs ─────────────────────────────── */
+    div.breadcrumbs {
+        background: var(--rxc-surface) !important;
+        color: var(--rxc-text-muted) !important;
+        padding: 8px 24px !important;
+        font-size: 0.78rem;
+        border-bottom: 1px solid var(--rxc-border) !important;
+    }
+
+    div.breadcrumbs a {
+        color: var(--rxc-accent) !important;
+    }
+
+    /* ── Content ─────────────────────────────────── */
+    #content {
+        padding: 24px !important;
+    }
+
+    #content h1 {
+        font-weight: 600 !important;
+        font-size: 1.35rem !important;
+        color: var(--rxc-text) !important;
+    }
+
+    /* ── Modules (cards) ─────────────────────────── */
+    .module {
+        background: var(--rxc-surface) !important;
+        border: 1px solid var(--rxc-border) !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        margin-bottom: 16px !important;
+    }
+
+    .module h2,
+    .module caption {
+        background: var(--rxc-bg) !important;
+        color: var(--rxc-text) !important;
+        font-weight: 600 !important;
+        font-size: 0.82rem !important;
+        padding: 10px 16px !important;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        border-bottom: 1px solid var(--rxc-border) !important;
+    }
+
+    /* ── Tables ───────────────────────────────────── */
+    #result_list table thead th,
+    #changelist table thead th {
+        background: var(--rxc-bg) !important;
+        color: var(--rxc-text-secondary) !important;
+        font-weight: 600 !important;
+        font-size: 0.75rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding: 10px 14px !important;
+        border-bottom: 1px solid var(--rxc-border) !important;
+    }
+
+    #result_list table thead th a,
+    #changelist table thead th a {
+        color: var(--rxc-text-secondary) !important;
+    }
+
+    #result_list table tbody td,
+    #changelist table tbody td {
+        padding: 10px 14px !important;
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--rxc-border-light);
+        color: var(--rxc-text);
+    }
+
+    #result_list table tbody td a,
+    #changelist table tbody td a {
+        color: var(--rxc-text) !important;
+        font-weight: 500;
+    }
+
+    #result_list table tbody td a:hover,
+    #changelist table tbody td a:hover {
+        color: var(--rxc-accent) !important;
+    }
+
+    #result_list table tbody tr:hover,
+    #changelist table tbody tr:hover {
+        background: var(--rxc-border-light) !important;
+    }
+
+    /* Alternating rows */
+    #result_list table tbody tr.row1 {
+        background: var(--rxc-surface);
+    }
+
+    #result_list table tbody tr.row2 {
+        background: var(--rxc-bg);
+    }
+
+    /* ── Buttons — simple, flat ──────────────────── */
+    input[type="submit"],
+    .submit-row input,
+    a.button,
+    .button {
+        background: var(--rxc-accent) !important;
+        color: #fff !important;
+        border: none !important;
+        border-radius: 6px !important;
+        padding: 8px 18px !important;
+        font-weight: 600 !important;
+        font-size: 0.82rem !important;
+        cursor: pointer;
+        transition: background 150ms ease;
+    }
+
+    input[type="submit"]:hover,
+    .submit-row input:hover,
+    a.button:hover,
+    .button:hover {
+        background: var(--rxc-accent-dark) !important;
+    }
+
+    .submit-row .deletelink,
+    a.deletelink {
+        background: var(--rxc-error) !important;
+        color: #fff !important;
+        border-radius: 6px !important;
+        padding: 8px 18px !important;
+    }
+
+    /* ── Submit row ──────────────────────────────── */
+    .submit-row {
+        background: var(--rxc-bg) !important;
+        border-top: 1px solid var(--rxc-border) !important;
+        padding: 12px 16px !important;
+    }
+
+    /* ── Search bar ──────────────────────────────── */
+    #toolbar {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 0 14px 0 !important;
+    }
+
+    #searchbar {
+        border: 1px solid var(--rxc-border) !important;
+        border-radius: 6px !important;
+        padding: 8px 12px !important;
+        font-size: 0.85rem !important;
+        background: var(--rxc-surface) !important;
+        transition: border-color 150ms ease;
+    }
+
+    #searchbar:focus {
+        border-color: var(--rxc-accent) !important;
+        outline: none !important;
+        box-shadow: 0 0 0 2px rgba(46, 196, 182, 0.12) !important;
+    }
+
+    /* ── Form fields ─────────────────────────────── */
+    .form-row input[type="text"],
+    .form-row input[type="email"],
+    .form-row input[type="url"],
+    .form-row input[type="password"],
+    .form-row input[type="number"],
+    .form-row select,
+    .form-row textarea {
+        border: 1px solid var(--rxc-border) !important;
+        border-radius: 6px !important;
+        padding: 8px 12px !important;
+        font-size: 0.85rem;
+    }
+
+    .form-row input:focus,
+    .form-row select:focus,
+    .form-row textarea:focus {
+        border-color: var(--rxc-accent) !important;
+        outline: none !important;
+        box-shadow: 0 0 0 2px rgba(46, 196, 182, 0.12) !important;
+    }
+
+    /* ── Sidebar filter ──────────────────────────── */
+    #changelist-filter {
+        background: var(--rxc-surface) !important;
+        border: 1px solid var(--rxc-border);
+        border-radius: 8px;
+    }
+
+    #changelist-filter h2 {
+        background: none !important;
+        color: var(--rxc-text) !important;
+        font-size: 0.8rem !important;
+        padding: 12px 16px 4px !important;
+        border-bottom: none !important;
+    }
+
+    #changelist-filter h3 {
+        color: var(--rxc-text-secondary) !important;
+        font-weight: 600 !important;
+        font-size: 0.78rem !important;
+    }
+
+    #changelist-filter li.selected a {
+        color: var(--rxc-accent) !important;
+        font-weight: 600;
+    }
+
+    /* ── Object tools ────────────────────────────── */
+    .object-tools a {
+        background: var(--rxc-text) !important;
+        color: #fff !important;
+        border-radius: 6px !important;
+        padding: 6px 12px !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+    }
+
+    .object-tools a:hover {
+        background: var(--rxc-text-secondary) !important;
+    }
+
+    /* ── Links ────────────────────────────────────── */
+    a:link,
+    a:visited {
+        color: var(--rxc-text);
+    }
+
+    a:hover {
+        color: var(--rxc-accent);
+    }
+
+    #content a:link,
+    #content a:visited {
+        color: var(--rxc-text);
+    }
+
+    #content a:hover {
+        color: var(--rxc-accent);
+    }
+
+    /* ── Messages ────────────────────────────────── */
+    .messagelist li {
+        border-radius: 6px;
+        padding: 10px 16px !important;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .messagelist li.success {
+        background: rgba(46, 204, 113, 0.1) !important;
+        color: var(--rxc-success) !important;
+        border-left: 3px solid var(--rxc-success) !important;
+    }
+
+    .messagelist li.error {
+        background: rgba(230, 57, 70, 0.1) !important;
+        color: var(--rxc-error) !important;
+        border-left: 3px solid var(--rxc-error) !important;
+    }
+
+    /* ── Login page ──────────────────────────────── */
+    body.login {
+        background: var(--rxc-bg) !important;
+    }
+
+    body.login #content {
+        background: var(--rxc-surface);
+        border: 1px solid var(--rxc-border);
+        border-radius: 10px;
+        padding: 28px !important;
+        max-width: 400px;
+        margin: 40px auto;
+    }
+
+    body.login .submit-row input[type="submit"] {
+        width: 100%;
+        padding: 10px !important;
+    }
+
+    /* ── Help text ───────────────────────────────── */
+    .help {
+        color: var(--rxc-text-muted) !important;
+        font-size: 0.78rem !important;
+    }
+
+    /* ── Pagination ──────────────────────────────── */
+    .paginator a:link,
+    .paginator a:visited {
+        color: var(--rxc-accent) !important;
+    }
+
+    /* ── Dark mode: override Django built-in colors ── */
+    @media (prefers-color-scheme: dark) {
+        #header {
+            box-shadow: 0 1px 0 var(--rxc-border);
+        }
+
+        #searchbar {
+            color: var(--rxc-text) !important;
+        }
+
+        .form-row input,
+        .form-row select,
+        .form-row textarea {
+            color: var(--rxc-text) !important;
+            background: var(--rxc-surface) !important;
+        }
+
+        .rx-chat {
+            color: var(--rxc-text) !important;
+        }
+    }
+
+    [data-theme="dark"] #header {
+        box-shadow: 0 1px 0 var(--rxc-border);
+    }
+
+    [data-theme="dark"] #searchbar {
+        color: var(--rxc-text) !important;
+    }
+
+    [data-theme="dark"] .form-row input,
+    [data-theme="dark"] .form-row select,
+    [data-theme="dark"] .form-row textarea {
+        color: var(--rxc-text) !important;
+        background: var(--rxc-surface) !important;
+    }
+
+    [data-theme="dark"] .rx-chat {
+        color: var(--rxc-text) !important;
+    }
+
+    /* ── Theme toggle button — no background ─────── */
+    .theme-toggle {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 4px !important;
+    }
+
+    /* ── Header links readable in dark mode ──────── */
+    @media (prefers-color-scheme: dark) {
+
+        #user-tools,
+        #user-tools a:link,
+        #user-tools a:visited {
+            color: var(--rxc-text-secondary) !important;
+        }
+
+        #user-tools a:hover {
+            color: var(--rxc-accent) !important;
+        }
+    }
+
+    [data-theme="dark"] #user-tools,
+    [data-theme="dark"] #user-tools a:link,
+    [data-theme="dark"] #user-tools a:visited {
+        color: var(--rxc-text-secondary) !important;
+    }
+
+    [data-theme="dark"] #user-tools a:hover {
+        color: var(--rxc-accent) !important;
+    }
+</style>
+{% endblock %}
