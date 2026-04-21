@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { HiOutlinePencil, HiOutlineClipboard, HiOutlineArrowPath, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
 import './MessageBubble.css'
 
@@ -73,8 +75,21 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                                 </button>
                             </div>
                         </div>
+                    ) : isUser ? (
+                        <p>{message.content}</p>
                     ) : (
-                        formatMessage(message.content)
+                        <div className="message__markdown">
+                            <Markdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                    a: ({ node, ...props }) => (
+                                        <a {...props} target="_blank" rel="noopener noreferrer" />
+                                    ),
+                                }}
+                            >
+                                {message.content}
+                            </Markdown>
+                        </div>
                     )}
                 </div>
 
@@ -104,7 +119,6 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                                     </button>
                                 )}
 
-                                {/* Regenerate on AI messages only */}
                                 {!isUser && onResend && (
                                     <button
                                         className="message__action-btn"
@@ -132,60 +146,6 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                 )}
             </div>
         </div>
-    )
-}
-
-function formatMessage(text) {
-    // Simple markdown-like formatting
-    const lines = text.split('\n')
-    const elements = []
-    let listItems = []
-
-    lines.forEach((line, i) => {
-        const trimmed = line.trim()
-
-        if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
-            listItems.push(trimmed.slice(2))
-        } else {
-            if (listItems.length > 0) {
-                elements.push(
-                    <ul key={`list-${i}`}>
-                        {listItems.map((item, j) => (
-                            <li key={j}>{processInline(item)}</li>
-                        ))}
-                    </ul>
-                )
-                listItems = []
-            }
-
-            if (trimmed.startsWith('⚠️') || trimmed.startsWith('Warning:') || trimmed.startsWith('CAUTION:')) {
-                elements.push(
-                    <div key={i} className="warning">{processInline(trimmed)}</div>
-                )
-            } else if (trimmed) {
-                elements.push(<p key={i}>{processInline(trimmed)}</p>)
-            }
-        }
-    })
-
-    if (listItems.length > 0) {
-        elements.push(
-            <ul key="list-end">
-                {listItems.map((item, j) => (
-                    <li key={j}>{processInline(item)}</li>
-                ))}
-            </ul>
-        )
-    }
-
-    return elements
-}
-
-function processInline(text) {
-    // Bold text: **text**
-    const parts = text.split(/\*\*(.*?)\*\*/g)
-    return parts.map((part, i) =>
-        i % 2 === 1 ? <strong key={i}>{part}</strong> : part
     )
 }
 
