@@ -8,7 +8,7 @@ from .serializers import (
     ConversationListSerializer,
     ChatInputSerializer,
 )
-from .ai_service import stream_ai_response
+from .ai_service import stream_ai_response, get_available_providers
 
 
 def _get_owner_filter(request):
@@ -31,18 +31,28 @@ def _get_user_role(request):
     return 'patient'
 
 
+@api_view(['GET'])
+def list_providers(request):
+    """
+    GET /api/chat/providers/
+    Return a list of available LLM providers the user can choose from.
+    """
+    return Response(get_available_providers())
+
+
 @api_view(['POST'])
 def send_message(request):
     """
     POST /api/chat/send/
     Send a message and get a streamed AI response via SSE.
-    Body: { "message": "...", "conversation_id": "..." (optional) }
+    Body: { "message": "...", "conversation_id": "...", "provider": "..." }
     """
     serializer = ChatInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
     user_text = serializer.validated_data['message']
     conv_id = serializer.validated_data.get('conversation_id')
+    provider = serializer.validated_data.get('provider')
 
     # Role comes from the user's profile, not the request body
     role = _get_user_role(request)
@@ -85,7 +95,7 @@ def send_message(request):
         # Send conversation metadata as the first event
         yield f"event: meta\ndata: {{\"conversation_id\": \"{conversation.id}\", \"conversation_title\": \"{conversation.title}\"}}\n\n"
 
-        for chunk in stream_ai_response(user_text, conversation_history=history, role=effective_role):
+        for chunk in stream_ai_response(user_text, conversation_history=history, role=effective_role, provider=provider):
             full_response.append(chunk)
             # Escape newlines for SSE data field
             escaped = chunk.replace('\n', '\\n')
@@ -238,13 +248,14 @@ def edit_message(request, message_id):
 
     role = _get_user_role(request)
     effective_role = getattr(conversation, 'role_override', None) or role
+    provider = request.query_params.get('provider') or request.data.get('provider')
 
     def event_stream():
         full_response = []
 
         yield f"event: meta\ndata: {{\"conversation_id\": \"{conversation.id}\", \"edited_message_id\": \"{message.id}\"}}\n\n"
 
-        for chunk in stream_ai_response(content, conversation_history=history, role=effective_role):
+        for chunk in stream_ai_response(content, conversation_history=history, role=effective_role, provider=provider):
             full_response.append(chunk)
             escaped = chunk.replace('\n', '\\n')
             yield f"data: {escaped}\n\n"
@@ -306,13 +317,14 @@ def resend_message(request, message_id):
 
     role = _get_user_role(request)
     effective_role = getattr(conversation, 'role_override', None) or role
+    provider = request.query_params.get('provider') or request.data.get('provider')
 
     def event_stream():
         full_response = []
 
         yield f"event: meta\ndata: {{\"conversation_id\": \"{conversation.id}\"}}\n\n"
 
-        for chunk in stream_ai_response(message.content, conversation_history=history, role=effective_role):
+        for chunk in stream_ai_response(message.content, conversation_history=history, role=effective_role, provider=provider):
             full_response.append(chunk)
             escaped = chunk.replace('\n', '\\n')
             yield f"data: {escaped}\n\n"
