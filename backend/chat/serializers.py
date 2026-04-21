@@ -38,3 +38,8 @@ class ChatInputSerializer(serializers.Serializer):
     """Validates incoming chat messages."""
     message = serializers.CharField(max_length=4000)
     conversation_id = serializers.UUIDField(required=False)
+    provider = serializers.ChoiceField(
+        choices=['nvidia', 'deepseek', 'openrouter'],
+        required=False,
+        default=None,
+    )
