@@ -99,6 +99,68 @@
     gap: var(--space-2);
 }
 
+/* Provider Cards */
+.settings-panel__provider-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.settings-panel__provider-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg);
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: left;
+}
+
+.settings-panel__provider-card:hover {
+    border-color: var(--color-secondary);
+    background: var(--color-surface);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(46, 196, 182, 0.1);
+}
+
+.settings-panel__provider-card--active {
+    border-color: var(--color-secondary);
+    background: linear-gradient(135deg, rgba(46, 196, 182, 0.06), rgba(72, 209, 160, 0.06));
+    box-shadow: 0 0 0 1px var(--color-secondary), 0 2px 8px rgba(46, 196, 182, 0.12);
+}
+
+.settings-panel__provider-name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.settings-panel__provider-model {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.settings-panel__provider-check {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+    font-size: var(--font-size-sm);
+    color: var(--color-secondary);
+    font-weight: 700;
+}
+
+.settings-panel__provider-empty {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    padding: var(--space-3);
+    text-align: center;
+}
+
+
 /* Form Fields */
 .settings-panel__field {
     margin-bottom: var(--space-4);
