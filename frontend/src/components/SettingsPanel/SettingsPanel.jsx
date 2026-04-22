@@ -50,7 +50,15 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate, provider
         }
     }, [isOpen])
 
+    const hasChanges = user && (
+        firstName !== (user.first_name || '') ||
+        lastName !== (user.last_name || '') ||
+        preferredName !== (user.preferred_name || '') ||
+        role !== (user.role || 'patient')
+    )
+
     const handleSaveProfile = async () => {
+        if (!hasChanges) return
         setSaving(true)
         setSaveMsg('')
         try {
@@ -62,7 +70,7 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate, provider
             })
             const data = await resp.json()
             if (resp.ok) {
-                setSaveMsg('Profile updated!')
+                setSaveMsg('Changes saved')
                 if (onUserUpdate) onUserUpdate(data)
                 setTimeout(() => setSaveMsg(''), 3000)
             } else {
@@ -230,13 +238,13 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate, provider
                         <button
                             className="settings-panel__save-btn"
                             onClick={handleSaveProfile}
-                            disabled={saving}
+                            disabled={saving || !hasChanges}
                         >
                             {saving ? 'Saving...' : 'Save Changes'}
                         </button>
 
                         {saveMsg && (
-                            <p className={`settings-panel__msg ${saveMsg.includes('updated') ? 'settings-panel__msg--success' : 'settings-panel__msg--error'}`}>
+                            <p className={`settings-panel__msg ${saveMsg.toLowerCase().includes('saved') ? 'settings-panel__msg--success' : 'settings-panel__msg--error'}`}>
                                 {saveMsg}
                             </p>
                         )}
