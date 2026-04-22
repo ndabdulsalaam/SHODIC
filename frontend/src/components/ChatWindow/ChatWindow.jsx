@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { HiOutlineBars3, HiOutlineArrowRightOnRectangle, HiOutlineChevronDown } from 'react-icons/hi2'
+import { useRef, useEffect, useCallback } from 'react'
+import { HiOutlineBars3, HiOutlineArrowRightOnRectangle } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
@@ -16,31 +16,54 @@ function ChatWindow({
     onLogout,
     onEditMessage,
     onResendMessage,
-    providerDisplay,
-    providers,
-    activeProvider,
-    onProviderChange,
 }) {
     const messagesEndRef = useRef(null)
-    const [showProviderMenu, setShowProviderMenu] = useState(false)
-    const providerMenuRef = useRef(null)
+    const messagesContainerRef = useRef(null)
+    const isNearBottomRef = useRef(true)
+    const prevMessagesLenRef = useRef(0)
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages, isLoading])
+    // Determine if the user is near the bottom of the scroll area
+    const checkIfNearBottom = useCallback(() => {
+        const el = messagesContainerRef.current
+        if (!el) return true
+        // "Near bottom" = within 150px of the bottom edge
+        const threshold = 150
+        return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    }, [])
 
-    // Close provider menu when clicking outside
+    // Track scroll position to know if user has scrolled up
+    const handleScroll = useCallback(() => {
+        isNearBottomRef.current = checkIfNearBottom()
+    }, [checkIfNearBottom])
+
+    // Auto-scroll only when:
+    // 1. A new user message was just sent (messages length increased and last msg is user)
+    // 2. User is already near the bottom while AI is streaming
     useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (providerMenuRef.current && !providerMenuRef.current.contains(e.target)) {
-                setShowProviderMenu(false)
-            }
+        const newLen = messages.length
+        const prevLen = prevMessagesLenRef.current
+        const lastMsg = messages[newLen - 1]
+
+        // New user message just added → always scroll to bottom
+        if (newLen > prevLen && lastMsg?.role === 'user') {
+            isNearBottomRef.current = true
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }
-        if (showProviderMenu) {
-            document.addEventListener('mousedown', handleClickOutside)
+        // Streaming AI content or new AI message → scroll only if near bottom
+        else if (isNearBottomRef.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [showProviderMenu])
+
+        prevMessagesLenRef.current = newLen
+    }, [messages])
+
+    // Also scroll when loading state starts (typing indicator appears)
+    // but only if near bottom
+    useEffect(() => {
+        if (isLoading && isNearBottomRef.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+    }, [isLoading])
 
     return (
         <div className="chat-window">
@@ -73,7 +96,11 @@ function ChatWindow({
             </header>
 
             {/* Messages */}
-            <div className="chat-window__messages">
+            <div
+                className="chat-window__messages"
+                ref={messagesContainerRef}
+                onScroll={handleScroll}
+            >
                 <div className="chat-window__messages-inner">
                     {messages.length === 0 ? (
                         <WelcomeScreen onSuggestionClick={onSendMessage} />
@@ -100,43 +127,6 @@ function ChatWindow({
             <div className="chat-window__input-area">
                 <div className="chat-window__input-wrapper">
                     <ChatInput onSend={onSendMessage} isLoading={isLoading} />
-                    {/* Model selector badge */}
-                    {providers && providers.length > 0 && (
-                        <div className="chat-window__model-bar" ref={providerMenuRef}>
-                            <button
-                                className="chat-window__model-badge"
-                                onClick={() => setShowProviderMenu((p) => !p)}
-                                aria-label="Select AI model"
-                                id="model-selector-badge"
-                            >
-                                <span className="chat-window__model-dot" />
-                                <span className="chat-window__model-label">
-                                    {providerDisplay || 'Select Model'}
-                                </span>
-                                <HiOutlineChevronDown size={12} className={`chat-window__model-chevron ${showProviderMenu ? 'chat-window__model-chevron--open' : ''}`} />
-                            </button>
-
-                            {showProviderMenu && (
-                                <div className="chat-window__model-menu">
-                                    {providers.map((p) => (
-                                        <button
-                                            key={p.slug}
-                                            className={`chat-window__model-option ${activeProvider === p.slug ? 'chat-window__model-option--active' : ''}`}
-                                            onClick={() => {
-                                                onProviderChange(p.slug)
-                                                setShowProviderMenu(false)
-                                            }}
-                                            id={`model-option-${p.slug}`}
-                                        >
-                                            <span className="chat-window__model-option-name">{p.name}</span>
-                                            <span className="chat-window__model-option-desc">{p.model_display}</span>
-                                            {activeProvider === p.slug && <span className="chat-window__model-option-check">✓</span>}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
