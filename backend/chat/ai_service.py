@@ -1,15 +1,7 @@
 """
 RxChat AI Service — Prompt definitions and AI response pipeline.
 
-Supports multiple LLM providers via PROVIDER_REGISTRY in settings:
-  - NVIDIA NIM  (build.nvidia.com → DeepSeek v3.2)
-  - DeepSeek    (platform.deepseek.com)
-  - OpenRouter  (openrouter.ai — aggregated access)
-
-The active provider is selected per-request (user preference stored
-client-side and sent with each API call).  If the chosen provider
-fails, the service falls back through the remaining available
-providers automatically.
+Uses OpenRouter (openrouter.ai) as the sole LLM provider.
 
 Embeddings: Qdrant Cloud Inference (no separate embedding API needed).
 
@@ -53,7 +45,7 @@ Core rules you must always follow:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 2. BEHAVIOUR RULES  (static — cached by DeepSeek)
+# 2. BEHAVIOUR RULES  (static — cached)
 # ──────────────────────────────────────────────────────────────────────
 
 CLARIFYING_QUESTIONS = """\
@@ -245,12 +237,7 @@ def format_retrieved_chunks(chunks: list) -> str:
 
 
 def build_system_message(role: str = "patient") -> str:
-    """Assemble the full system message from static prompt blocks.
-
-    Static content is ordered first so DeepSeek's prefix cache reuses it
-    across requests. Only the role section varies (5 possible variants,
-    each cached independently).
-    """
+    """Assemble the full system message from static prompt blocks."""
     role_prompt = ROLE_PROMPTS.get(role, ROLE_PATIENT)
     return "\n\n".join([
         SYSTEM_PROMPT,
@@ -291,87 +278,28 @@ def build_user_message(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 6. LLM CLIENT  (multi-provider — NVIDIA / DeepSeek / OpenRouter)
+# 6. LLM CLIENT  (OpenRouter only)
 # ──────────────────────────────────────────────────────────────────────
 
-def _get_provider_config(provider: str | None = None) -> dict | None:
-    """Resolve a provider slug to its registry config.
-
-    Falls back through available providers if the requested one is
-    unavailable or not specified.
-    """
-    registry = settings.PROVIDER_REGISTRY
-
-    # Try the explicitly requested provider first
-    if provider and provider in registry:
-        cfg = registry[provider]
-        if cfg['available']:
-            return cfg
-        logger.warning(
-            f"Requested provider '{provider}' has no API key — trying fallbacks"
-        )
-
-    # Fallback: try the default, then all others
-    fallback_order = [settings.DEFAULT_LLM_PROVIDER] + [
-        k for k in registry if k != settings.DEFAULT_LLM_PROVIDER
-    ]
-    for slug in fallback_order:
-        cfg = registry.get(slug)
-        if cfg and cfg['available']:
-            logger.info(f"Using fallback provider: {slug}")
-            return cfg
-
-    return None
-
-
-def _get_client(provider: str | None = None):
-    """Return an OpenAI-compatible client for the given provider.
-
-    Args:
-        provider: One of 'nvidia', 'deepseek', 'openrouter', or None
-                  (uses default + fallback chain).
+def _get_client():
+    """Return an OpenAI-compatible client configured for OpenRouter.
 
     Returns:
-        Tuple of (OpenAI client, provider_config dict) or (None, None).
+        OpenAI client instance, or None if the API key is missing.
     """
-    cfg = _get_provider_config(provider)
-    if not cfg:
-        logger.error("No LLM provider available — all API keys missing")
-        return None, None
+    api_key = settings.OPENROUTER_API_KEY
+    if not api_key:
+        logger.error("OPENROUTER_API_KEY is not set — cannot create LLM client")
+        return None
 
-    extra_headers = {}
-    # OpenRouter requires HTTP-Referer and X-Title headers
-    if cfg.get('base_url', '').startswith('https://openrouter.ai'):
-        extra_headers = {
+    return OpenAI(
+        api_key=api_key,
+        base_url=settings.OPENROUTER_BASE_URL,
+        default_headers={
             'HTTP-Referer': 'https://rxchat.dev',
             'X-Title': 'RxChat',
-        }
-
-    client = OpenAI(
-        api_key=cfg['api_key'],
-        base_url=cfg['base_url'],
-        default_headers=extra_headers or None,
+        },
     )
-    return client, cfg
-
-
-def get_available_providers() -> list[dict]:
-    """Return a list of available providers for the frontend.
-
-    Each item has: slug, name, model_display, is_default.
-    """
-    registry = settings.PROVIDER_REGISTRY
-    default = settings.DEFAULT_LLM_PROVIDER
-    providers = []
-    for slug, cfg in registry.items():
-        if cfg['available']:
-            providers.append({
-                'slug': slug,
-                'name': cfg['name'],
-                'model_display': cfg['model_display'],
-                'is_default': slug == default,
-            })
-    return providers
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -400,7 +328,7 @@ _COMPLEX_INDICATORS = [
 
 
 def _is_complex_query(query: str, role: str) -> bool:
-    """Determine if a query warrants the reasoning model.
+    """Determine if a query warrants deeper reasoning.
 
     Returns True when the question involves drug interactions, dosing
     adjustments, or multi-step clinical reasoning — regardless of role.
@@ -425,28 +353,14 @@ def _is_complex_query(query: str, role: str) -> bool:
 # 8. STREAMING ENTRYPOINT
 # ──────────────────────────────────────────────────────────────────────
 
-def _get_model_name(cfg: dict, use_reasoner: bool) -> str:
-    """Return the correct model identifier for the given provider config.
-
-    DeepSeek direct has separate reasoner/chat models; NVIDIA NIM and
-    OpenRouter use a single model identifier.
-    """
-    if use_reasoner and 'model_reasoner' in cfg:
-        return cfg['model_reasoner']
-    return cfg['model']
-
-
 def stream_ai_response(
     user_message,
     conversation_history=None,
     role="patient",
-    provider=None,
 ):
     """Stream an AI response for a pharmacy-related query.
 
-    Supports NVIDIA NIM, DeepSeek, and OpenRouter.  Provider is selected
-    by the ``provider`` argument (sent from frontend); falls back through
-    available providers if the selected one fails.
+    Uses OpenRouter as the LLM provider.
 
     Yields text chunks as they arrive from the LLM.
 
@@ -455,23 +369,23 @@ def stream_ai_response(
         conversation_history:  List of prior messages
             [{'role': 'user'|'assistant', 'content': '...'}]
         role:  One of 'patient', 'pharmacist', 'physician', 'nurse', 'other'.
-        provider:  One of 'nvidia', 'deepseek', 'openrouter', or None.
 
     Yields:
         str: Text chunks as they are generated.
     """
-    client, cfg = _get_client(provider)
+    client = _get_client()
     if not client:
         yield _get_fallback_response()
         return
 
+    model = settings.OPENROUTER_MODEL
+
     try:
         use_reasoner = _is_complex_query(user_message, role)
-        model = _get_model_name(cfg, use_reasoner)
 
         logger.info(
-            f"Provider: {cfg['name']} | Model: {model} "
-            f"(role={role}, reasoner={use_reasoner})"
+            f"Provider: OpenRouter | Model: {model} "
+            f"(role={role}, complex={use_reasoner})"
         )
 
         system_message = build_system_message(role)
@@ -498,7 +412,7 @@ def stream_ai_response(
             "content": build_user_message(user_message, chunks=chunks, role=role),
         })
 
-        # Reasoner model parameters differ slightly
+        # Complex queries get more tokens
         create_kwargs = dict(
             model=model,
             messages=messages,
@@ -518,17 +432,17 @@ def stream_ai_response(
                 yield delta.content
 
     except Exception as e:
-        logger.error(f"LLM API error ({cfg['name']}): {e}")
+        logger.error(f"LLM API error (OpenRouter): {e}")
         yield _get_fallback_response()
 
 
-def get_ai_response(user_message, conversation_history=None, role="patient", provider=None):
+def get_ai_response(user_message, conversation_history=None, role="patient"):
     """Non-streaming wrapper — collects the full response.
 
     Kept for backward compatibility and non-streaming endpoints.
     """
     parts = []
-    for chunk in stream_ai_response(user_message, conversation_history, role, provider):
+    for chunk in stream_ai_response(user_message, conversation_history, role):
         parts.append(chunk)
     return "".join(parts)
 
