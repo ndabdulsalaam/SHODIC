@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { HiOutlineXMark, HiOutlineArrowRightOnRectangle, HiOutlineEnvelope, HiOutlineShieldCheck, HiOutlineCpuChip } from 'react-icons/hi2'
+import { HiOutlineXMark, HiOutlineArrowRightOnRectangle, HiOutlineEnvelope, HiOutlineShieldCheck } from 'react-icons/hi2'
 import './SettingsPanel.css'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -12,7 +12,7 @@ const ROLES = [
     { value: 'other_health_professional', label: 'Other Health Professional' },
 ]
 
-function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate, providers, activeProvider, onProviderChange }) {
+function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
     const [firstName, setFirstName] = useState('')
     const [lastName, setLastName] = useState('')
     const [preferredName, setPreferredName] = useState('')
@@ -149,35 +149,6 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate, provider
                 </div>
 
                 <div className="settings-panel__content">
-                    {/* AI Model Section */}
-                    <section className="settings-panel__section">
-                        <h3 className="settings-panel__section-title">
-                            <HiOutlineCpuChip size={16} />
-                            AI Model
-                        </h3>
-
-                        {providers && providers.length > 0 ? (
-                            <div className="settings-panel__provider-grid">
-                                {providers.map((p) => (
-                                    <button
-                                        key={p.slug}
-                                        className={`settings-panel__provider-card ${activeProvider === p.slug ? 'settings-panel__provider-card--active' : ''}`}
-                                        onClick={() => onProviderChange(p.slug)}
-                                        id={`provider-${p.slug}`}
-                                    >
-                                        <span className="settings-panel__provider-name">{p.name}</span>
-                                        <span className="settings-panel__provider-model">{p.model_display}</span>
-                                        {activeProvider === p.slug && (
-                                            <span className="settings-panel__provider-check">✓</span>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="settings-panel__provider-empty">No providers available</p>
-                        )}
-                    </section>
-
                     {/* Profile Section */}
                     <section className="settings-panel__section">
                         <h3 className="settings-panel__section-title">Profile</h3>
