@@ -52,6 +52,23 @@
     color: var(--color-text);
 }
 
+.sidebar__close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    transition: all var(--transition-fast);
+    cursor: pointer;
+}
+
+.sidebar__close-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
 .sidebar__logo-text {
     font-size: var(--font-size-2xl);
     font-weight: 800;
@@ -329,5 +346,9 @@
     /* hide the collapse chevron on mobile — not needed, close via overlay */
     .sidebar__collapse-btn {
         display: none;
+    }
+
+    .sidebar__close-btn {
+        display: flex;
     }
 }
