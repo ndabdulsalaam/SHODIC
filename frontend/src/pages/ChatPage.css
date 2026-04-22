@@ -23,7 +23,9 @@
 @media (max-width: 768px) {
     .chat-layout {
         height: 100dvh;
-        /* shrinks when mobile browser chrome (address bar) is visible */
+        width: 100%;
+        overflow-x: hidden;
+        position: relative;
     }
 
     /* Never hide the sidebar via collapse on mobile — it uses overlay slide-in instead */
