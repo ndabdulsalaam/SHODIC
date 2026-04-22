@@ -152,6 +152,58 @@
     gap: var(--space-4);
 }
 
+/* Loading skeleton when switching chats */
+.chat-window__loading-messages {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8) 0;
+}
+
+.chat-window__loading-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: 100%;
+    max-width: 600px;
+}
+
+.chat-window__skeleton-row {
+    height: 44px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(90deg,
+            var(--color-surface-hover) 25%,
+            var(--color-border) 50%,
+            var(--color-surface-hover) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.chat-window__skeleton-row--right {
+    width: 55%;
+    align-self: flex-end;
+}
+
+.chat-window__skeleton-row--left {
+    width: 45%;
+    align-self: flex-start;
+}
+
+.chat-window__skeleton-row--wide {
+    width: 70%;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
 /* Input Area */
 .chat-window__input-area {
     padding: var(--space-4) var(--space-4) var(--space-5);
