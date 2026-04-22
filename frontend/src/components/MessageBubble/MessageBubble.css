@@ -32,7 +32,9 @@
     border-radius: var(--radius-lg);
     font-size: var(--font-size-base);
     line-height: 1.65;
+    overflow-wrap: break-word;
     word-wrap: break-word;
+    word-break: break-word;
 }
 
 .message--user .message__bubble {
@@ -88,6 +90,8 @@
 .message__markdown {
     font-size: var(--font-size-base);
     line-height: 1.7;
+    hyphens: auto;
+    -webkit-hyphens: auto;
 }
 
 /* Headings */
@@ -216,6 +220,7 @@
     padding: var(--space-3) var(--space-4);
     margin: var(--space-3) 0;
     overflow-x: auto;
+    max-width: 100%;
 }
 
 .message__markdown pre code {
@@ -275,7 +280,12 @@
 
 @media (max-width: 768px) {
     .message__content {
-        max-width: 85%;
+        max-width: 90%;
+    }
+
+    .message--ai .message__bubble {
+        padding-left: 0;
+        padding-right: 0;
     }
 }
 
