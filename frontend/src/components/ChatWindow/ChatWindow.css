@@ -9,6 +9,8 @@
     height: 100vh;
     background: var(--color-bg);
     position: relative;
+    min-width: 0;
+    /* Allow flex item to shrink below content size */
 }
 
 /* Header */
@@ -49,12 +51,20 @@
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
 }
 
 .chat-window__subtitle {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
 }
 
 .chat-window__header-badge {
@@ -125,6 +135,8 @@
 .chat-window__messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* Prevent horizontal scroll */
     padding: var(--space-6) var(--space-4);
     display: flex;
     flex-direction: column;
