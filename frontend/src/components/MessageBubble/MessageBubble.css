@@ -32,9 +32,8 @@
     border-radius: var(--radius-lg);
     font-size: var(--font-size-base);
     line-height: 1.65;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
     word-wrap: break-word;
-    word-break: break-word;
 }
 
 .message--user .message__bubble {
@@ -90,8 +89,7 @@
 .message__markdown {
     font-size: var(--font-size-base);
     line-height: 1.7;
-    hyphens: auto;
-    -webkit-hyphens: auto;
+    overflow-wrap: anywhere;
 }
 
 /* Headings */
@@ -156,27 +154,40 @@
     list-style: decimal;
 }
 
-/* Tables */
+/* Tables — use a wrapper approach for horizontal scroll */
 .message__markdown table {
-    width: 100%;
     border-collapse: collapse;
     margin: var(--space-3) 0;
     font-size: var(--font-size-sm);
+    width: 100%;
+    display: table;
+    table-layout: auto;
+}
+
+/* Scrollable wrapper injected by the Markdown component */
+.message__table-wrapper {
+    width: 100%;
     overflow-x: auto;
-    display: block;
+    margin: var(--space-3) 0;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) transparent;
 }
 
-.message__markdown table::-webkit-scrollbar {
+.message__table-wrapper table {
+    margin: 0;
+}
+
+.message__table-wrapper::-webkit-scrollbar {
     height: 6px;
 }
 
-.message__markdown table::-webkit-scrollbar-track {
+.message__table-wrapper::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.message__markdown table::-webkit-scrollbar-thumb {
+.message__table-wrapper::-webkit-scrollbar-thumb {
     background: var(--color-border);
     border-radius: 3px;
 }
@@ -191,13 +202,14 @@
     text-align: left;
     padding: var(--space-2) var(--space-3);
     border-bottom: 2px solid var(--color-border);
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .message__markdown td {
     padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--color-border-light);
     vertical-align: top;
+    white-space: normal;
 }
 
 .message__markdown tr:last-child td {
