@@ -85,6 +85,11 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                                     a: ({ node, ...props }) => (
                                         <a {...props} target="_blank" rel="noopener noreferrer" />
                                     ),
+                                    table: ({ node, ...props }) => (
+                                        <div className="message__table-wrapper">
+                                            <table {...props} />
+                                        </div>
+                                    ),
                                 }}
                             >
                                 {message.content}
