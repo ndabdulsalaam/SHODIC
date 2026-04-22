@@ -157,6 +157,9 @@ GOOGLE_REDIRECT_URI = os.getenv(
     'http://localhost:8000/api/auth/google/callback/'
 )
 
+# Session — 15-day session to match trusted device window
+SESSION_COOKIE_AGE = 15 * 24 * 60 * 60  # 15 days in seconds
+
 # --- Production deployment (Render) ---
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

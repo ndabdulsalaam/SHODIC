@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
@@ -24,27 +25,35 @@ def _get_device_token(request):
 
 
 def _is_trusted_device(user, request):
-    """Check if the current device is trusted for this user."""
+    """Check if the current device is trusted and active (used within 15 days)."""
     device_token = _get_device_token(request)
     if not device_token:
         return False
-    return TrustedDevice.objects.filter(
-        user=user,
-        device_token=device_token,
-    ).exists()
+    try:
+        device = TrustedDevice.objects.get(user=user, device_token=device_token)
+    except TrustedDevice.DoesNotExist:
+        return False
+    if not device.is_active():
+        device.delete()  # Clean up stale device
+        return False
+    return device
 
 
 def _trust_device(user, request, response):
     """Create a trusted device entry and set the cookie."""
+    from django.utils import timezone
     user_agent = _get_user_agent(request)
     device, _created = TrustedDevice.objects.get_or_create(
         user=user,
         user_agent=user_agent,
     )
+    # Always refresh last_used on trust
+    device.last_used = timezone.now()
+    device.save(update_fields=['last_used'])
     response.set_cookie(
         'device_token',
         str(device.device_token),
-        max_age=365 * 24 * 60 * 60,  # 1 year
+        max_age=TrustedDevice.TRUST_DAYS * 24 * 60 * 60,
         httponly=True,
         samesite='Lax',
     )
@@ -281,8 +290,10 @@ def login_view(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    # Check if device is trusted
-    if _is_trusted_device(user, request):
+    # Check if device is trusted (returns device object or False)
+    device = _is_trusted_device(user, request)
+    if device:
+        device.touch()  # Refresh the 15-day window
         login(request, user)
         return Response(_user_response(user))
 
@@ -378,8 +389,7 @@ def resend_otp(request):
             pending = PendingRegistration.objects.get(email=email)
             pending.otp_code = otp_code
             from django.utils import timezone
-            from datetime import timedelta
-            pending.expires_at = timezone.now() + timedelta(minutes=15)
+            pending.expires_at = timezone.now() + timedelta(minutes=5)
             pending.save()
         except PendingRegistration.DoesNotExist:
             return Response(
