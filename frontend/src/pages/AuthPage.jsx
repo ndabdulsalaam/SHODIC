@@ -26,7 +26,7 @@ function AuthPage() {
     const [success, setSuccess] = useState('')
     const [loading, setLoading] = useState(false)
     const [resendCooldown, setResendCooldown] = useState(0)
-    const [expiryCountdown, setExpiryCountdown] = useState(15 * 60) // 15 minutes
+    const [expiryCountdown, setExpiryCountdown] = useState(5 * 60) // 5 minutes
     const inputRefs = useRef([])
 
     // Password reset flow — after OTP is verified
@@ -73,7 +73,7 @@ function AuthPage() {
         return () => clearTimeout(timer)
     }, [resendCooldown])
 
-    // OTP expiry countdown (15 min)
+    // OTP expiry countdown (5 min)
     useEffect(() => {
         if (expiryCountdown <= 0) return
         const timer = setInterval(() => setExpiryCountdown((prev) => prev - 1), 1000)
@@ -216,7 +216,7 @@ function AuthPage() {
 
     const handleResend = async () => {
         setResendCooldown(60)
-        setExpiryCountdown(15 * 60) // Reset to 15 minutes
+        setExpiryCountdown(5 * 60) // Reset to 5 minutes
         setError('')
 
         try {
@@ -234,8 +234,8 @@ function AuthPage() {
                 return
             }
 
-            setSuccess('New code sent! Check your email.')
-            setTimeout(() => setSuccess(''), 3000)
+            setSuccess(data.message || 'New code sent! Check your email.')
+            setTimeout(() => setSuccess(''), 6000)
         } catch {
             setError('Network error. Please try again.')
         }
