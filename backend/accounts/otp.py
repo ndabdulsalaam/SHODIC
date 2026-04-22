@@ -60,7 +60,7 @@ def _build_html_email(otp_code, purpose):
             <div style="background:#f0f9f8; border:2px solid #2ec4b6; border-radius:12px; padding:20px; text-align:center; margin-bottom:24px;">
               <span style="font-size:36px; font-weight:700; letter-spacing:8px; color:#0d1b3e;">{otp_code}</span>
             </div>
-            <p style="margin:0 0 8px; font-size:13px; color:#718096;">This code expires in <strong>15 minutes</strong>.</p>
+            <p style="margin:0 0 8px; font-size:13px; color:#718096;">This code expires in <strong>5 minutes</strong>.</p>
             <p style="margin:0; font-size:13px; color:#a0aec0;">{footer_note}</p>
           </td>
         </tr>
@@ -125,16 +125,16 @@ def send_otp_email(email, otp_code, purpose='registration'):
     """
     if purpose == 'registration':
         subject = 'Verify Your Email'
-        plain = f"Welcome to RxChat! Your code: {otp_code} (expires in 15 min)"
+        plain = f"Welcome to RxChat! Your code: {otp_code} (expires in 5 min)"
     elif purpose == 'password_reset':
         subject = 'Reset Your Password'
-        plain = f"Your password reset code: {otp_code} (expires in 15 min)"
+        plain = f"Your password reset code: {otp_code} (expires in 5 min)"
     elif purpose == 'email_change':
         subject = 'Verify Your New Email'
-        plain = f"Your email verification code: {otp_code} (expires in 15 min)"
+        plain = f"Your email verification code: {otp_code} (expires in 5 min)"
     else:
         subject = 'Login Verification'
-        plain = f"Login from new device. Your code: {otp_code} (expires in 15 min)"
+        plain = f"Login from new device. Your code: {otp_code} (expires in 5 min)"
 
     html_content = _build_html_email(otp_code, purpose)
 

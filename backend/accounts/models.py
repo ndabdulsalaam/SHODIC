@@ -74,7 +74,7 @@ class PendingRegistration(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=15)
+            self.expires_at = timezone.now() + timedelta(minutes=5)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -94,7 +94,7 @@ class PendingEmailChange(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=15)
+            self.expires_at = timezone.now() + timedelta(minutes=5)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -103,13 +103,25 @@ class PendingEmailChange(models.Model):
 
 class TrustedDevice(models.Model):
     """Tracks devices that have been verified via OTP — no repeat OTP on login."""
+    TRUST_DAYS = 15  # Re-require OTP after 15 days of inactivity
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trusted_devices')
     device_token = models.UUIDField(default=uuid.uuid4, unique=True)
     user_agent = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ['user', 'user_agent']
+
+    def is_active(self):
+        """Device is trusted only if used within the last TRUST_DAYS days."""
+        return (timezone.now() - self.last_used) < timedelta(days=self.TRUST_DAYS)
+
+    def touch(self):
+        """Update last_used timestamp."""
+        self.last_used = timezone.now()
+        self.save(update_fields=['last_used'])
 
     def __str__(self):
         return f"Device for {self.user.email} ({self.device_token})"
@@ -127,7 +139,7 @@ class PendingLoginOTP(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=15)
+            self.expires_at = timezone.now() + timedelta(minutes=5)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -147,7 +159,7 @@ class PasswordResetOTP(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=15)
+            self.expires_at = timezone.now() + timedelta(minutes=5)
         super().save(*args, **kwargs)
 
     def __str__(self):
