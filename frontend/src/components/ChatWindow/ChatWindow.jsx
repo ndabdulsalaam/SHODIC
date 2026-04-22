@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { HiOutlineBars3, HiOutlineArrowRightOnRectangle } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
@@ -10,17 +10,27 @@ function ChatWindow({
     messages,
     onSendMessage,
     isLoading,
+    isLoadingMessages,
     onToggleSidebar,
     onShowAuth,
     user,
     onLogout,
     onEditMessage,
     onResendMessage,
+    onStopGeneration,
 }) {
     const messagesEndRef = useRef(null)
     const messagesContainerRef = useRef(null)
     const isNearBottomRef = useRef(true)
     const prevMessagesLenRef = useRef(0)
+    const [prefillText, setPrefillText] = useState('')
+    const prefillKeyRef = useRef(0)
+
+    // Suggestion chip click → pre-fill input for editing
+    const handleSuggestionClick = useCallback((text) => {
+        prefillKeyRef.current += 1
+        setPrefillText(text)
+    }, [])
 
     // Determine if the user is near the bottom of the scroll area
     const checkIfNearBottom = useCallback(() => {
@@ -65,6 +75,57 @@ function ChatWindow({
         }
     }, [isLoading])
 
+    const isWelcome = !isLoadingMessages && messages.length === 0
+
+    // Determine what to render in the messages area
+    const renderContent = () => {
+        if (isLoadingMessages) {
+            return (
+                <div className="chat-window__loading-messages">
+                    <div className="chat-window__loading-skeleton">
+                        <div className="chat-window__skeleton-row chat-window__skeleton-row--right" />
+                        <div className="chat-window__skeleton-row chat-window__skeleton-row--left chat-window__skeleton-row--wide" />
+                        <div className="chat-window__skeleton-row chat-window__skeleton-row--left" />
+                    </div>
+                </div>
+            )
+        }
+
+        if (isWelcome) {
+            return (
+                <WelcomeScreen
+                    onSuggestionClick={handleSuggestionClick}
+                    user={user}
+                    inputSlot={
+                        <ChatInput
+                            key={prefillKeyRef.current}
+                            onSend={onSendMessage}
+                            isLoading={isLoading}
+                            onStop={onStopGeneration}
+                            prefillText={prefillText}
+                        />
+                    }
+                />
+            )
+        }
+
+        return (
+            <>
+                {messages.map((msg, i) => (
+                    <MessageBubble
+                        key={msg.id || i}
+                        message={msg}
+                        index={i}
+                        onEdit={onEditMessage}
+                        onResend={onResendMessage}
+                        isLoading={isLoading}
+                    />
+                ))}
+                {isLoading && <TypingIndicator />}
+            </>
+        )
+    }
+
     return (
         <div className="chat-window">
             {/* Header */}
@@ -102,33 +163,23 @@ function ChatWindow({
                 onScroll={handleScroll}
             >
                 <div className="chat-window__messages-inner">
-                    {messages.length === 0 ? (
-                        <WelcomeScreen onSuggestionClick={onSendMessage} />
-                    ) : (
-                        <>
-                            {messages.map((msg, i) => (
-                                <MessageBubble
-                                    key={msg.id || i}
-                                    message={msg}
-                                    index={i}
-                                    onEdit={onEditMessage}
-                                    onResend={onResendMessage}
-                                    isLoading={isLoading}
-                                />
-                            ))}
-                            {isLoading && <TypingIndicator />}
-                        </>
-                    )}
+                    {renderContent()}
                     <div ref={messagesEndRef} />
                 </div>
             </div>
 
-            {/* Input */}
-            <div className="chat-window__input-area">
-                <div className="chat-window__input-wrapper">
-                    <ChatInput onSend={onSendMessage} isLoading={isLoading} />
+            {/* Input – hidden on welcome screen since it's rendered inline */}
+            {!isWelcome && (
+                <div className="chat-window__input-area">
+                    <div className="chat-window__input-wrapper">
+                        <ChatInput
+                            onSend={onSendMessage}
+                            isLoading={isLoading}
+                            onStop={onStopGeneration}
+                        />
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }
