@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
 import AuthModal from '../components/AuthModal/AuthModal'
@@ -15,6 +15,8 @@ function ChatPage() {
     const [authMode, setAuthMode] = useState('login')
     const [user, setUser] = useState(null)
     const [settingsOpen, setSettingsOpen] = useState(false)
+    const [loadingConversationId, setLoadingConversationId] = useState(null)
+    const abortControllerRef = useRef(null)
 
     const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -72,8 +74,12 @@ function ChatPage() {
     // Load messages when selecting a conversation that hasn't been loaded
     const loadConversationMessages = useCallback(async (convId) => {
         const conv = conversations.find(c => c.id === convId)
-        if (conv && conv._loaded) return
+        if (conv && conv._loaded) {
+            setLoadingConversationId(null)
+            return
+        }
 
+        setLoadingConversationId(convId)
         try {
             const res = await fetch(`${API}/chat/conversations/${convId}/`, { credentials: 'include' })
             if (res.ok) {
@@ -85,6 +91,7 @@ function ChatPage() {
                 ))
             }
         } catch { /* error */ }
+        setLoadingConversationId(null)
     }, [API, conversations])
 
     const handleSendMessage = useCallback(async (text) => {
@@ -106,6 +113,8 @@ function ChatPage() {
         }
 
         setIsLoading(true)
+        const controller = new AbortController()
+        abortControllerRef.current = controller
 
         try {
             const res = await fetch(`${API}/chat/send/`, {
@@ -116,6 +125,7 @@ function ChatPage() {
                     message: text,
                     ...(convId ? { conversation_id: convId } : {}),
                 }),
+                signal: controller.signal,
             })
 
             if (!res.ok) {
@@ -235,6 +245,7 @@ function ChatPage() {
                 )
             )
         } finally {
+            abortControllerRef.current = null
             setIsLoading(false)
         }
     }, [activeConversationId, API])
@@ -280,6 +291,8 @@ function ChatPage() {
     const handleEditMessage = useCallback(async (messageId, newContent) => {
         if (!activeConversationId) return
         setIsLoading(true)
+        const controller = new AbortController()
+        abortControllerRef.current = controller
 
         // Optimistically trim messages after the edited one
         setConversations((prev) =>
@@ -299,6 +312,7 @@ function ChatPage() {
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content: newContent }),
+                signal: controller.signal,
             })
 
             if (!res.ok) throw new Error(`API error: ${res.status}`)
@@ -346,6 +360,7 @@ function ChatPage() {
         } catch (err) {
             console.error('Edit message error:', err)
         } finally {
+            abortControllerRef.current = null
             setIsLoading(false)
         }
     }, [activeConversationId, API])
@@ -353,6 +368,8 @@ function ChatPage() {
     const handleResendMessage = useCallback(async (messageId) => {
         if (!activeConversationId) return
         setIsLoading(true)
+        const controller = new AbortController()
+        abortControllerRef.current = controller
 
         // Remove messages after the target message
         setConversations((prev) =>
@@ -368,6 +385,7 @@ function ChatPage() {
             const res = await fetch(`${API}/chat/messages/${messageId}/resend/`, {
                 method: 'POST',
                 credentials: 'include',
+                signal: controller.signal,
             })
 
             if (!res.ok) throw new Error(`API error: ${res.status}`)
@@ -414,9 +432,17 @@ function ChatPage() {
         } catch (err) {
             console.error('Resend message error:', err)
         } finally {
+            abortControllerRef.current = null
             setIsLoading(false)
         }
     }, [activeConversationId, API])
+
+    const handleStopGeneration = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+            abortControllerRef.current = null
+        }
+    }, [])
 
     return (
         <div className={`chat-layout ${sidebarCollapsed ? 'chat-layout--collapsed' : ''}`}>
@@ -440,12 +466,14 @@ function ChatPage() {
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
+                isLoadingMessages={loadingConversationId === activeConversationId && loadingConversationId !== null}
                 onToggleSidebar={() => sidebarCollapsed ? setSidebarCollapsed(false) : setSidebarOpen((prev) => !prev)}
                 onShowAuth={handleShowAuth}
                 user={user}
                 onLogout={handleLogout}
                 onEditMessage={handleEditMessage}
                 onResendMessage={handleResendMessage}
+                onStopGeneration={handleStopGeneration}
             />
             {showAuthModal && (
                 <AuthModal
