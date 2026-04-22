@@ -74,6 +74,9 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                         <button className="sidebar__collapse-btn" onClick={onCollapse} title="Hide sidebar">
                             <HiOutlineChevronDoubleLeft size={16} />
                         </button>
+                        <button className="sidebar__close-btn" onClick={onClose} aria-label="Close sidebar">
+                            <HiOutlineXMark size={20} />
+                        </button>
                     </div>
                     <button className="sidebar__new-chat" onClick={onNewChat}>
                         <HiOutlinePlus size={16} />
