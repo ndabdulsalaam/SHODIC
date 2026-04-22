@@ -16,12 +16,6 @@ function ChatPage() {
     const [user, setUser] = useState(null)
     const [settingsOpen, setSettingsOpen] = useState(false)
 
-    // LLM provider state
-    const [providers, setProviders] = useState([])
-    const [activeProvider, setActiveProvider] = useState(() => {
-        return localStorage.getItem('rxchat_provider') || null
-    })
-
     const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
     // Check if user is already logged in on mount
@@ -35,31 +29,6 @@ function ChatPage() {
         }
         checkAuth()
     }, [API])
-
-    // Fetch available providers on mount
-    useEffect(() => {
-        const loadProviders = async () => {
-            try {
-                const res = await fetch(`${API}/chat/providers/`, { credentials: 'include' })
-                if (res.ok) {
-                    const data = await res.json()
-                    setProviders(data)
-                    // If no saved preference, use the default provider
-                    if (!activeProvider && data.length > 0) {
-                        const def = data.find(p => p.is_default) || data[0]
-                        setActiveProvider(def.slug)
-                        localStorage.setItem('rxchat_provider', def.slug)
-                    }
-                }
-            } catch { /* offline */ }
-        }
-        loadProviders()
-    }, [API]) // eslint-disable-line react-hooks/exhaustive-deps
-
-    const handleProviderChange = useCallback((slug) => {
-        setActiveProvider(slug)
-        localStorage.setItem('rxchat_provider', slug)
-    }, [])
 
     // Load conversations from backend on mount and when user changes
     useEffect(() => {
@@ -146,7 +115,6 @@ function ChatPage() {
                 body: JSON.stringify({
                     message: text,
                     ...(convId ? { conversation_id: convId } : {}),
-                    ...(activeProvider ? { provider: activeProvider } : {}),
                 }),
             })
 
@@ -269,7 +237,7 @@ function ChatPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [activeConversationId, API, activeProvider])
+    }, [activeConversationId, API])
 
     const handleNewChat = useCallback(() => {
         setActiveConversationId(null)
@@ -326,8 +294,7 @@ function ChatPage() {
         )
 
         try {
-            const providerParam = activeProvider ? `?provider=${activeProvider}` : ''
-            const res = await fetch(`${API}/chat/messages/${messageId}/${providerParam}`, {
+            const res = await fetch(`${API}/chat/messages/${messageId}/`, {
                 method: 'PUT',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
@@ -381,7 +348,7 @@ function ChatPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [activeConversationId, API, activeProvider])
+    }, [activeConversationId, API])
 
     const handleResendMessage = useCallback(async (messageId) => {
         if (!activeConversationId) return
@@ -398,8 +365,7 @@ function ChatPage() {
         )
 
         try {
-            const providerParam = activeProvider ? `?provider=${activeProvider}` : ''
-            const res = await fetch(`${API}/chat/messages/${messageId}/resend/${providerParam}`, {
+            const res = await fetch(`${API}/chat/messages/${messageId}/resend/`, {
                 method: 'POST',
                 credentials: 'include',
             })
@@ -450,10 +416,7 @@ function ChatPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [activeConversationId, API, activeProvider])
-
-    // Derive current provider display for the ChatWindow badge
-    const currentProviderDisplay = providers.find(p => p.slug === activeProvider)?.model_display || null
+    }, [activeConversationId, API])
 
     return (
         <div className={`chat-layout ${sidebarCollapsed ? 'chat-layout--collapsed' : ''}`}>
@@ -483,10 +446,6 @@ function ChatPage() {
                 onLogout={handleLogout}
                 onEditMessage={handleEditMessage}
                 onResendMessage={handleResendMessage}
-                providerDisplay={currentProviderDisplay}
-                providers={providers}
-                activeProvider={activeProvider}
-                onProviderChange={handleProviderChange}
             />
             {showAuthModal && (
                 <AuthModal
@@ -501,9 +460,6 @@ function ChatPage() {
                 user={user}
                 onLogout={() => { setSettingsOpen(false); handleLogout() }}
                 onUserUpdate={(data) => setUser(data)}
-                providers={providers}
-                activeProvider={activeProvider}
-                onProviderChange={handleProviderChange}
             />
         </div>
     )
