@@ -129,52 +129,10 @@ REST_FRAMEWORK = {
     ],
 }
 
-# ── LLM Provider Configuration ──────────────────────────────────────
-DEFAULT_LLM_PROVIDER = os.getenv('DEFAULT_LLM_PROVIDER', 'nvidia')
-
-# NVIDIA NIM (DeepSeek v3.2 via build.nvidia.com)
-NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY', '')
-NVIDIA_BASE_URL = os.getenv('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')
-
-# DeepSeek Direct (platform.deepseek.com)
-DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
-DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
-
-# OpenRouter (openrouter.ai — aggregated LLM access)
+# ── LLM Configuration (OpenRouter) ──────────────────────────────────
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
 OPENROUTER_BASE_URL = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
-
-
-# Provider registry — the single source of truth for provider metadata.
-# Each entry maps a provider slug to its config. The `available` flag is
-# derived at startup from whether the API key is set.
-PROVIDER_REGISTRY = {
-    'nvidia': {
-        'name': 'NVIDIA NIM',
-        'model': 'deepseek-ai/deepseek-v3.2',
-        'model_display': 'DeepSeek v3.2 (NVIDIA)',
-        'api_key': NVIDIA_API_KEY,
-        'base_url': NVIDIA_BASE_URL,
-        'available': bool(NVIDIA_API_KEY),
-    },
-    'deepseek': {
-        'name': 'DeepSeek',
-        'model': 'deepseek-chat',
-        'model_reasoner': 'deepseek-reasoner',
-        'model_display': 'DeepSeek Chat',
-        'api_key': DEEPSEEK_API_KEY,
-        'base_url': DEEPSEEK_BASE_URL,
-        'available': bool(DEEPSEEK_API_KEY),
-    },
-    'openrouter': {
-        'name': 'OpenRouter',
-        'model': 'openai/gpt-oss-120b:free',
-        'model_display': 'GPT OSS 120B (OpenRouter)',
-        'api_key': OPENROUTER_API_KEY,
-        'base_url': OPENROUTER_BASE_URL,
-        'available': bool(OPENROUTER_API_KEY),
-    },
-}
+OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'openai/gpt-oss-120b:free')
 
 # Vector DB — Qdrant Cloud (for RAG retrieval)
 QDRANT_URL = os.getenv('QDRANT_URL', '')
