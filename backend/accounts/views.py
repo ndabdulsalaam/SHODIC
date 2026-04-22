@@ -28,20 +28,29 @@ def _is_trusted_device(user, request):
     """Check if the current device is trusted and active (used within 15 days)."""
     device_token = _get_device_token(request)
     if not device_token:
+        # Diagnostic: help identify why it's failing in dev
+        print(f"DEBUG: No device_token cookie found for user {user.email}")
         return False
+    
     try:
         device = TrustedDevice.objects.get(user=user, device_token=device_token)
     except TrustedDevice.DoesNotExist:
+        print(f"DEBUG: device_token {device_token} not found in DB for user {user.email}")
         return False
+    
     if not device.is_active():
+        print(f"DEBUG: device_token {device_token} has expired for user {user.email}")
         device.delete()  # Clean up stale device
         return False
+    
+    print(f"DEBUG: Trusted device found for user {user.email}")
     return device
 
 
 def _trust_device(user, request, response):
     """Create a trusted device entry and set the cookie."""
     from django.utils import timezone
+    from django.conf import settings
     user_agent = _get_user_agent(request)
     device, _created = TrustedDevice.objects.get_or_create(
         user=user,
@@ -50,12 +59,19 @@ def _trust_device(user, request, response):
     # Always refresh last_used on trust
     device.last_used = timezone.now()
     device.save(update_fields=['last_used'])
+
+    # Use settings-aware cookie parameters
+    secure = getattr(settings, 'SESSION_COOKIE_SECURE', False)
+    samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
+
     response.set_cookie(
         'device_token',
         str(device.device_token),
         max_age=TrustedDevice.TRUST_DAYS * 24 * 60 * 60,
         httponly=True,
-        samesite='Lax',
+        samesite=samesite,
+        secure=secure,
+        path='/',
     )
     return response
 
@@ -397,25 +413,25 @@ def resend_otp(request):
                 status=status.HTTP_404_NOT_FOUND,
             )
     elif purpose == 'password_reset':
-        try:
-            user = User.objects.get(email__iexact=email)
-            PasswordResetOTP.objects.filter(user=user).delete()
-            PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
-        except User.DoesNotExist:
+        user = _find_user_by_email(email)
+        if user is None:
             return Response(
                 {'error': 'User not found'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        PasswordResetOTP.objects.filter(user=user).delete()
+        PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
     else:
-        try:
-            user = User.objects.get(email__iexact=email, is_staff=False)
-            PendingLoginOTP.objects.filter(user=user).delete()
-            PendingLoginOTP.objects.create(user=user, otp_code=otp_code)
-        except User.DoesNotExist:
+        # Purpose: login / device verification
+        user = _find_user_by_email(email)
+        if user is None:
             return Response(
                 {'error': 'User not found'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        
+        PendingLoginOTP.objects.filter(user=user).delete()
+        PendingLoginOTP.objects.create(user=user, otp_code=otp_code)
 
     send_otp_email(email, otp_code, purpose=purpose)
 
