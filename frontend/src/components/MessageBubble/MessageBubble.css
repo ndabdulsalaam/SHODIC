@@ -154,33 +154,25 @@
     list-style: decimal;
 }
 
-/* Tables — use a wrapper approach for horizontal scroll */
-.message__markdown table {
-    border-collapse: collapse;
-    margin: var(--space-3) 0;
-    font-size: var(--font-size-sm);
-    width: 100%;
-    display: table;
-    table-layout: auto;
-}
+/* ---- Tables – content-aware sizing ---- */
 
-/* Scrollable wrapper injected by the Markdown component */
+/* Scrollable wrapper: enables scroll when table overflows in either direction */
 .message__table-wrapper {
     width: 100%;
     overflow-x: auto;
-    margin: var(--space-3) 0;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-light);
+    overflow-y: auto;
+    max-height: 70vh;
+    -webkit-overflow-scrolling: touch;
+    margin: var(--space-4) 0;
+    border: 1px solid #e3e3e3;
+    border-radius: 10px;
+    background: #ffffff;
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border) transparent;
-}
-
-.message__table-wrapper table {
-    margin: 0;
+    scrollbar-color: #c4c4c4 transparent;
 }
 
 .message__table-wrapper::-webkit-scrollbar {
-    height: 6px;
+    height: 5px;
 }
 
 .message__table-wrapper::-webkit-scrollbar-track {
@@ -188,30 +180,64 @@
 }
 
 .message__table-wrapper::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
+    background: #c4c4c4;
+    border-radius: 10px;
 }
 
-.message__markdown thead {
-    background: rgba(46, 196, 182, 0.08);
+.message__table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #a0a0a0;
 }
 
-.message__markdown th {
+/* Base table – fills width when small, overflows & scrolls when too wide */
+.message__markdown table {
+    min-width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    table-layout: auto;
+    margin: 0;
+}
+
+/* Header – sticky so it stays visible during vertical scroll */
+.message__markdown thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f9f9f9;
     font-weight: 600;
-    color: var(--color-text);
+    font-size: 0.8rem;
+    color: #374151;
     text-align: left;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 2px solid var(--color-border);
+    padding: 10px 16px;
+    border-bottom: 1px solid #e3e3e3;
     white-space: normal;
+    letter-spacing: 0.01em;
+    min-width: 140px;
 }
 
+/* Body cells */
 .message__markdown td {
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--color-border-light);
+    padding: 10px 16px;
+    color: #4b5563;
+    border-bottom: 1px solid #f0f0f0;
     vertical-align: top;
     white-space: normal;
+    line-height: 1.55;
+    min-width: 140px;
 }
 
+/* Zebra striping */
+.message__markdown tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+
+/* Row hover */
+.message__markdown tbody tr:hover {
+    background: rgba(46, 196, 182, 0.05);
+    transition: background 0.15s ease;
+}
+
+/* Last row: no border */
 .message__markdown tr:last-child td {
     border-bottom: none;
 }
