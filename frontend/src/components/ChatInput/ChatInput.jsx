@@ -1,10 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import { HiOutlinePaperAirplane } from 'react-icons/hi2'
+import { HiOutlinePaperAirplane, HiOutlineStopCircle } from 'react-icons/hi2'
 import './ChatInput.css'
 
-function ChatInput({ onSend, isLoading }) {
+function ChatInput({ onSend, isLoading, onStop, prefillText }) {
     const [text, setText] = useState('')
     const textareaRef = useRef(null)
+
+    // Pre-fill text from suggestion chips
+    useEffect(() => {
+        if (prefillText) {
+            setText(prefillText)
+            // Focus the textarea after pre-fill
+            setTimeout(() => textareaRef.current?.focus(), 0)
+        }
+    }, [prefillText])
 
     useEffect(() => {
         if (textareaRef.current) {
@@ -42,14 +51,25 @@ function ChatInput({ onSend, isLoading }) {
                 disabled={isLoading}
                 aria-label="Type your message"
             />
-            <button
-                className={`chat-input__send ${hasText ? 'chat-input__send--active' : ''}`}
-                onClick={handleSubmit}
-                disabled={!hasText || isLoading}
-                aria-label="Send message"
-            >
-                <HiOutlinePaperAirplane size={18} />
-            </button>
+            {isLoading ? (
+                <button
+                    className="chat-input__stop"
+                    onClick={onStop}
+                    aria-label="Stop generating"
+                    title="Stop generating"
+                >
+                    <HiOutlineStopCircle size={20} />
+                </button>
+            ) : (
+                <button
+                    className={`chat-input__send ${hasText ? 'chat-input__send--active' : ''}`}
+                    onClick={handleSubmit}
+                    disabled={!hasText}
+                    aria-label="Send message"
+                >
+                    <HiOutlinePaperAirplane size={18} />
+                </button>
+            )}
         </div>
     )
 }
