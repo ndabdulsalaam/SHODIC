@@ -18,6 +18,7 @@ Environment variables (backend/.env):
     QDRANT_URL       — your Qdrant Cloud cluster URL
     QDRANT_API_KEY   — your Qdrant Cloud API key
     QDRANT_COLLECTION — collection name (default: rxchat_drugs)
+    QDRANT_INFERENCE_MODEL — model name for Qdrant Cloud Inference
 """
 
 import logging
@@ -94,9 +95,20 @@ def retrieve_context(query: str, top_k: int = 5) -> list[dict]:
         # Document object — the cluster embeds it server-side.
         from qdrant_client.models import Document  # noqa: PLC0415
 
+        inference_model = getattr(settings, "QDRANT_INFERENCE_MODEL", "")
+        if not inference_model:
+            logger.warning(
+                "QDRANT_INFERENCE_MODEL is not set. "
+                "RAG context will be skipped for this request."
+            )
+            return []
+
         results = client.query_points(
             collection_name=collection,
-            query=Document(text=query),  # Qdrant Inference handles embedding
+            query=Document(
+                text=query,
+                model=inference_model,
+            ),  # Qdrant Inference handles embedding
             limit=top_k,
             with_payload=True,
         )
