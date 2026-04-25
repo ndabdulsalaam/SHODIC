@@ -9,6 +9,4 @@ urlpatterns = [
     path('api/chat/', include('chat.urls')),
     path('api/auth/', include('accounts.urls')),
     path('api/health/', health_check, name='health_check'),
-    # TEMPORARY – remove after debugging static files
-    path('debug-static/', include('config.debug_static_urls')),
 ]
