@@ -4,7 +4,23 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from .ai_service import build_system_message, build_user_message
 from .models import Conversation, Message
+
+
+class ChatPromptTests(TestCase):
+    def test_no_context_prompt_discourages_robotic_disclaimers(self):
+        system_message = build_system_message("pharmacist")
+        user_message = build_user_message(
+            "What are common adverse effects of metformin?",
+            chunks=[],
+            role="pharmacist",
+        )
+
+        self.assertIn("Do not use headings such as \"Safety Disclaimer\"", system_message)
+        self.assertIn("normal conversation", system_message)
+        self.assertNotIn("explicitly acknowledge that limitation", user_message)
+        self.assertIn("Do not announce the missing retrieval context", user_message)
 
 
 class ChatApiTests(TestCase):
