@@ -37,8 +37,9 @@
 }
 
 .message--user .message__bubble {
-    background: #E8ECF1;
+    background: #f4f7f6;
     color: var(--color-text);
+    border: 1px solid rgba(46, 196, 182, 0.35);
     border-top-right-radius: var(--radius-sm);
 }
 
@@ -366,23 +367,26 @@
 .message__actions {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: 2px;
     opacity: 0;
     transition: opacity var(--transition-fast);
 }
 
-.message:hover .message__actions {
+.message:hover .message__actions,
+.message:focus-within .message__actions {
     opacity: 1;
 }
 
 .message__action-btn {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 6px;
-    border-radius: var(--radius-sm);
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-md);
     font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     cursor: pointer;
     transition: all var(--transition-fast);
     background: none;
@@ -392,6 +396,37 @@
 .message__action-btn:hover {
     background: var(--color-surface-hover);
     color: var(--color-text);
+}
+
+.message__action-btn::after,
+.message__edit-btn::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(4px);
+    width: max-content;
+    max-width: 180px;
+    padding: 6px 9px;
+    border-radius: var(--radius-md);
+    background: var(--color-primary-dark);
+    color: var(--color-text-inverse);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast), transform var(--transition-fast);
+    z-index: 20;
+}
+
+.message__action-btn:hover::after,
+.message__action-btn:focus-visible::after,
+.message__edit-btn:hover::after,
+.message__edit-btn:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
 
 .message__action-btn--copied {
@@ -405,6 +440,29 @@
 .message__action-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+.message__action-btn:disabled::after {
+    display: none;
+}
+
+.message__variant-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.message__variant-count {
+    min-width: 34px;
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.message__variant-btn {
+    color: var(--color-text-muted);
 }
 
 /* ---- Inline edit area ---- */
@@ -436,29 +494,31 @@
 
 .message__edit-actions {
     display: flex;
+    justify-content: flex-end;
     gap: var(--space-2);
 }
 
 .message__edit-btn {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 500;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     border: none;
     transition: all var(--transition-fast);
 }
 
-.message__edit-btn--save {
+.message__edit-btn--send {
     background: var(--color-secondary);
     color: var(--color-primary);
 }
 
-.message__edit-btn--save:hover {
+.message__edit-btn--send:hover {
     filter: brightness(1.1);
+    transform: translateY(-1px);
 }
 
 .message__edit-btn--cancel {
@@ -469,4 +529,5 @@
 .message__edit-btn--cancel:hover {
     background: rgba(230, 57, 70, 0.1);
     color: var(--color-error);
+    transform: translateY(-1px);
 }
