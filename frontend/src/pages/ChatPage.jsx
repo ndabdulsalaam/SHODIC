@@ -5,6 +5,27 @@ import AuthModal from '../components/AuthModal/AuthModal'
 import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
 import './ChatPage.css'
 
+const AUTH_USER_CACHE_KEY = 'rxchat_auth_user'
+
+function readCachedAuthUser() {
+    try {
+        const cached = sessionStorage.getItem(AUTH_USER_CACHE_KEY)
+        return cached ? JSON.parse(cached) : null
+    } catch {
+        return null
+    }
+}
+
+function cacheAuthUser(user) {
+    try {
+        if (user?.id) {
+            sessionStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(user))
+        } else {
+            sessionStorage.removeItem(AUTH_USER_CACHE_KEY)
+        }
+    } catch { /* storage may be unavailable */ }
+}
+
 function ChatPage() {
     const [conversations, setConversations] = useState([])
     const [activeConversationId, setActiveConversationId] = useState(null)
@@ -13,12 +34,105 @@ function ChatPage() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [showAuthModal, setShowAuthModal] = useState(false)
     const [authMode, setAuthMode] = useState('login')
-    const [user, setUser] = useState(null)
+    const [user, setUser] = useState(() => readCachedAuthUser())
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [loadingConversationId, setLoadingConversationId] = useState(null)
     const abortControllerRef = useRef(null)
+    const conversationsRef = useRef([])
+    const editVariantsRef = useRef({})
 
     const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
+    useEffect(() => {
+        conversationsRef.current = conversations
+    }, [conversations])
+
+    const updateStreamingMessage = useCallback((conversationId, aiMsg, content, messageId, markComplete = false) => {
+        if (!conversationId) return
+
+        setConversations((prev) =>
+            prev.map((c) => {
+                if (c.id !== conversationId) return c
+
+                let foundStreamingMessage = false
+                const msgs = c.messages.map((m) => {
+                    if (!m._streaming) return m
+
+                    foundStreamingMessage = true
+                    return {
+                        ...m,
+                        id: messageId || m.id,
+                        content,
+                        _streaming: markComplete ? false : m._streaming,
+                    }
+                })
+
+                if (!foundStreamingMessage && (content || !markComplete)) {
+                    msgs.push({
+                        ...aiMsg,
+                        id: messageId || aiMsg.id,
+                        content,
+                        _streaming: !markComplete,
+                    })
+                }
+
+                return { ...c, messages: msgs }
+            })
+        )
+    }, [])
+
+    const createStreamingFrameFlusher = useCallback((flush) => {
+        let frameId = null
+        const requestFrame = typeof requestAnimationFrame === 'function'
+            ? requestAnimationFrame
+            : (callback) => setTimeout(callback, 16)
+        const cancelFrame = typeof cancelAnimationFrame === 'function'
+            ? cancelAnimationFrame
+            : clearTimeout
+
+        return {
+            schedule() {
+                if (frameId !== null) return
+                frameId = requestFrame(() => {
+                    frameId = null
+                    flush(false)
+                })
+            },
+            finalize() {
+                if (frameId !== null) {
+                    cancelFrame(frameId)
+                    frameId = null
+                }
+                flush(true)
+            },
+            cancel() {
+                if (frameId !== null) {
+                    cancelFrame(frameId)
+                    frameId = null
+                }
+            },
+        }
+    }, [])
+
+    const decorateVariantMessages = useCallback((messagesToDecorate, groupId, index, total) => (
+        messagesToDecorate.map((message, messageIndex) => {
+            if (messageIndex !== 0 || message.role !== 'user') return message
+            return {
+                ...message,
+                _variantNavigation: {
+                    groupId,
+                    index,
+                    total,
+                },
+            }
+        })
+    ), [])
+
+    const syncActiveVariantMessages = useCallback((groupId, updater) => {
+        const group = editVariantsRef.current[groupId]
+        if (!group) return
+        group.variants[group.activeIndex] = updater(group.variants[group.activeIndex] || [])
+    }, [])
 
     // Check if user is already logged in on mount
     useEffect(() => {
@@ -26,7 +140,13 @@ function ChatPage() {
             try {
                 const res = await fetch(`${API}/auth/me/`, { credentials: 'include' })
                 const data = await res.json()
-                if (data.id) setUser(data)
+                if (data.id) {
+                    setUser(data)
+                    cacheAuthUser(data)
+                } else {
+                    setUser(null)
+                    cacheAuthUser(null)
+                }
             } catch { /* not logged in */ }
         }
         checkAuth()
@@ -64,16 +184,22 @@ function ChatPage() {
             })
         } catch { /* ignore */ }
         setUser(null)
+        cacheAuthUser(null)
         setConversations([])
         setActiveConversationId(null)
     }
+
+    const handleLogin = useCallback((userData) => {
+        setUser(userData)
+        cacheAuthUser(userData)
+    }, [])
 
     const activeConversation = conversations.find((c) => c.id === activeConversationId)
     const messages = activeConversation?.messages || []
 
     // Load messages when selecting a conversation that hasn't been loaded
     const loadConversationMessages = useCallback(async (convId) => {
-        const conv = conversations.find(c => c.id === convId)
+        const conv = conversationsRef.current.find(c => c.id === convId)
         if (conv && conv._loaded) {
             setLoadingConversationId(null)
             return
@@ -92,7 +218,7 @@ function ChatPage() {
             }
         } catch { /* error */ }
         setLoadingConversationId(null)
-    }, [API, conversations])
+    }, [API])
 
     const handleSendMessage = useCallback(async (text) => {
         let convId = activeConversationId
@@ -118,6 +244,7 @@ function ChatPage() {
         setIsLoading(true)
         const controller = new AbortController()
         abortControllerRef.current = controller
+        let streamingFlusher = null
 
         try {
             const res = await fetch(`${API}/chat/send/`, {
@@ -150,6 +277,9 @@ function ChatPage() {
                 created_at: new Date().toISOString(),
                 _streaming: true,
             }
+            streamingFlusher = createStreamingFrameFlusher((markComplete) => {
+                updateStreamingMessage(actualConvId, aiMsg, aiContent, aiMessageId, markComplete)
+            })
 
             while (true) {
                 const { done, value } = await reader.read()
@@ -212,21 +342,7 @@ function ChatPage() {
                         // Text chunk — unescape newlines
                         const textChunk = data.replace(/\\n/g, '\n')
                         aiContent += textChunk
-
-                        // Update the AI message in state
-                        setConversations((prev) =>
-                            prev.map((c) => {
-                                if (c.id !== actualConvId) return c
-                                const msgs = [...c.messages]
-                                const lastMsg = msgs[msgs.length - 1]
-                                if (lastMsg?.role === 'assistant' && lastMsg?._streaming) {
-                                    msgs[msgs.length - 1] = { ...lastMsg, content: aiContent, id: aiMessageId || lastMsg.id }
-                                } else {
-                                    msgs.push({ ...aiMsg, content: aiContent })
-                                }
-                                return { ...c, messages: msgs }
-                            })
-                        )
+                        streamingFlusher.schedule()
                     }
 
                     if (line.startsWith('event: done')) {
@@ -236,16 +352,9 @@ function ChatPage() {
             }
 
             // Final update: mark streaming complete
-            setConversations((prev) =>
-                prev.map((c) => {
-                    if (c.id !== actualConvId) return c
-                    const msgs = c.messages.map((m) =>
-                        m._streaming ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: false } : m
-                    )
-                    return { ...c, messages: msgs }
-                })
-            )
+            streamingFlusher.finalize()
         } catch (err) {
+            streamingFlusher?.cancel()
             console.error('Send message error:', err)
             const errorMsg = {
                 role: 'assistant',
@@ -264,7 +373,7 @@ function ChatPage() {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, API])
+    }, [activeConversationId, API, createStreamingFrameFlusher, updateStreamingMessage])
 
     const handleNewChat = useCallback(() => {
         setActiveConversationId(null)
@@ -306,19 +415,53 @@ function ChatPage() {
 
     const handleEditMessage = useCallback(async (messageId, newContent) => {
         if (!activeConversationId) return
+        const conversationSnapshot = conversationsRef.current.find((c) => c.id === activeConversationId)
+        const messageIndex = conversationSnapshot?.messages.findIndex((m) => m.id === messageId) ?? -1
+        if (!conversationSnapshot || messageIndex === -1) return
+
+        const existingTail = conversationSnapshot.messages.slice(messageIndex)
+        const existingGroup = editVariantsRef.current[messageId]
+        const variantGroup = existingGroup || {
+            conversationId: activeConversationId,
+            variants: [existingTail],
+            activeIndex: 0,
+        }
+
+        if (existingGroup) {
+            variantGroup.variants[variantGroup.activeIndex] = existingTail
+        }
+
+        const newVariantIndex = variantGroup.variants.length
+        const editedUserMessage = {
+            ...existingTail[0],
+            content: newContent,
+            updated_at: new Date().toISOString(),
+        }
+        const aiMsg = { id: `pending-assistant-${Date.now()}`, role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
+
+        variantGroup.variants.push([editedUserMessage, aiMsg])
+        variantGroup.activeIndex = newVariantIndex
+        editVariantsRef.current[messageId] = variantGroup
+
         setIsLoading(true)
         const controller = new AbortController()
         abortControllerRef.current = controller
+        let streamingFlusher = null
 
-        // Optimistically trim messages after the edited one
+        // Optimistically switch to the new edit variant and stream the replacement response.
         setConversations((prev) =>
             prev.map((c) => {
                 if (c.id !== activeConversationId) return c
-                const idx = c.messages.findIndex(m => m.id === messageId)
+                const idx = c.messages.findIndex((m) => m.id === messageId)
                 if (idx === -1) return c
-                const msgs = c.messages.slice(0, idx + 1)
-                msgs[idx] = { ...msgs[idx], content: newContent }
-                return { ...c, messages: msgs }
+                const prefix = c.messages.slice(0, idx)
+                const decoratedVariant = decorateVariantMessages(
+                    variantGroup.variants[newVariantIndex],
+                    messageId,
+                    newVariantIndex,
+                    variantGroup.variants.length,
+                )
+                return { ...c, messages: [...prefix, ...decoratedVariant] }
             })
         )
 
@@ -339,12 +482,16 @@ function ChatPage() {
             let aiMessageId = null
             let buffer = ''
 
-            const aiMsg = { id: `pending-assistant-${Date.now()}`, role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
-
-            // Add placeholder AI message
-            setConversations((prev) =>
-                prev.map((c) => c.id === activeConversationId ? { ...c, messages: [...c.messages, aiMsg] } : c)
-            )
+            streamingFlusher = createStreamingFrameFlusher((markComplete) => {
+                updateStreamingMessage(activeConversationId, aiMsg, aiContent, aiMessageId, markComplete)
+                syncActiveVariantMessages(messageId, (messagesForVariant) => (
+                    messagesForVariant.map((m) => (
+                        m._streaming
+                            ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: markComplete ? false : m._streaming }
+                            : m
+                    ))
+                ))
+            })
 
             while (true) {
                 const { done, value } = await reader.read()
@@ -364,38 +511,27 @@ function ChatPage() {
                         }
 
                         aiContent += data.replace(/\\n/g, '\n')
-                        setConversations((prev) =>
-                            prev.map((c) => {
-                                if (c.id !== activeConversationId) return c
-                                const msgs = [...c.messages]
-                                const last = msgs[msgs.length - 1]
-                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, id: aiMessageId || last.id, content: aiContent }
-                                return { ...c, messages: msgs }
-                            })
-                        )
+                        streamingFlusher.schedule()
                     }
                 }
             }
 
-            setConversations((prev) =>
-                prev.map((c) => {
-                    if (c.id !== activeConversationId) return c
-                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: false } : m) }
-                })
-            )
+            streamingFlusher.finalize()
         } catch (err) {
+            streamingFlusher?.cancel()
             console.error('Edit message error:', err)
         } finally {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, API])
+    }, [activeConversationId, API, createStreamingFrameFlusher, decorateVariantMessages, syncActiveVariantMessages, updateStreamingMessage])
 
     const handleResendMessage = useCallback(async (messageId) => {
         if (!activeConversationId) return
         setIsLoading(true)
         const controller = new AbortController()
         abortControllerRef.current = controller
+        let streamingFlusher = null
 
         // Remove messages after the target message
         setConversations((prev) =>
@@ -423,6 +559,9 @@ function ChatPage() {
             let buffer = ''
 
             const aiMsg = { id: `pending-assistant-${Date.now()}`, role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
+            streamingFlusher = createStreamingFrameFlusher((markComplete) => {
+                updateStreamingMessage(activeConversationId, aiMsg, aiContent, aiMessageId, markComplete)
+            })
 
             setConversations((prev) =>
                 prev.map((c) => c.id === activeConversationId ? { ...c, messages: [...c.messages, aiMsg] } : c)
@@ -446,32 +585,44 @@ function ChatPage() {
                         }
 
                         aiContent += data.replace(/\\n/g, '\n')
-                        setConversations((prev) =>
-                            prev.map((c) => {
-                                if (c.id !== activeConversationId) return c
-                                const msgs = [...c.messages]
-                                const last = msgs[msgs.length - 1]
-                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, id: aiMessageId || last.id, content: aiContent }
-                                return { ...c, messages: msgs }
-                            })
-                        )
+                        streamingFlusher.schedule()
                     }
                 }
             }
 
-            setConversations((prev) =>
-                prev.map((c) => {
-                    if (c.id !== activeConversationId) return c
-                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: false } : m) }
-                })
-            )
+            streamingFlusher.finalize()
         } catch (err) {
+            streamingFlusher?.cancel()
             console.error('Resend message error:', err)
         } finally {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, API])
+    }, [activeConversationId, API, createStreamingFrameFlusher, updateStreamingMessage])
+
+    const handleMessageVariantChange = useCallback((groupId, nextIndex) => {
+        const group = editVariantsRef.current[groupId]
+        if (!group || nextIndex < 0 || nextIndex >= group.variants.length) return
+
+        group.activeIndex = nextIndex
+        setConversations((prev) =>
+            prev.map((c) => {
+                if (c.id !== group.conversationId) return c
+                const messageIndex = c.messages.findIndex((m) => m.id === groupId)
+                if (messageIndex === -1) return c
+
+                const prefix = c.messages.slice(0, messageIndex)
+                const decoratedVariant = decorateVariantMessages(
+                    group.variants[nextIndex],
+                    groupId,
+                    nextIndex,
+                    group.variants.length,
+                )
+
+                return { ...c, messages: [...prefix, ...decoratedVariant] }
+            })
+        )
+    }, [decorateVariantMessages])
 
     const handleStopGeneration = useCallback(() => {
         if (abortControllerRef.current) {
@@ -509,12 +660,13 @@ function ChatPage() {
                 onLogout={handleLogout}
                 onEditMessage={handleEditMessage}
                 onResendMessage={handleResendMessage}
+                onMessageVariantChange={handleMessageVariantChange}
                 onStopGeneration={handleStopGeneration}
             />
             {showAuthModal && (
                 <AuthModal
                     onClose={() => setShowAuthModal(false)}
-                    onLogin={(userData) => setUser(userData)}
+                    onLogin={handleLogin}
                     initialMode={authMode}
                 />
             )}
@@ -523,7 +675,7 @@ function ChatPage() {
                 onClose={() => setSettingsOpen(false)}
                 user={user}
                 onLogout={() => { setSettingsOpen(false); handleLogout() }}
-                onUserUpdate={(data) => setUser(data)}
+                onUserUpdate={handleLogin}
             />
         </div>
     )
