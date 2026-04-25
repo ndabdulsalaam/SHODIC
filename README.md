@@ -53,10 +53,10 @@ work.
 | Frontend | React 19, Vite, React Router, React Icons |
 | Backend | Django 6, Django REST Framework |
 | Auth | Django sessions, email OTP, trusted-device cookie, Google OAuth |
-| AI | DeepSeek via the OpenAI-compatible SDK |
+| AI | OpenRouter via the OpenAI-compatible SDK |
 | Database | SQLite for local dev, PostgreSQL via `DATABASE_URL` for production |
 | Email | Brevo HTTP API, Django console fallback for local dev |
-| Planned RAG | Qdrant, OpenAI embeddings, curated drug-data ingestion |
+| RAG | Optional Qdrant Cloud retrieval with Qdrant Cloud Inference embeddings |
 | Deployment target | Vercel frontend, Render backend |
 
 ## Repository Structure
@@ -139,8 +139,17 @@ ALLOWED_ORIGINS=http://localhost:5173
 AI:
 
 ```env
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=openai/gpt-oss-120b:free
+```
+
+Optional RAG retrieval:
+
+```env
+QDRANT_URL=https://your-cluster-id.region.cloud.qdrant.io
+QDRANT_API_KEY=your_qdrant_api_key
+QDRANT_COLLECTION=rxchat_drugs
 ```
 
 Database:
@@ -215,17 +224,15 @@ Auth endpoints:
 
 ## AI Behavior
 
-The backend builds a role-aware prompt and streams responses from DeepSeek. It
-selects between:
-
-- `deepseek-chat` for general questions
-- `deepseek-reasoner` for complex queries such as interactions, renal/hepatic
-  dose adjustments, pregnancy, overdose, guideline comparisons, or clinical
-  reasoning
+The backend builds a role-aware prompt and streams responses through OpenRouter.
+Qdrant retrieval is optional: when matching knowledge-base chunks exist, the
+answer is instructed to stay grounded in those chunks; when no chunks are
+available, the answer must say it is relying on general model knowledge and be
+extra cautious for dosing, interactions, and high-risk populations.
 
 The prompt emphasizes:
 
-- No fabrication when evidence is missing
+- No fabrication when evidence or retrieval context is missing
 - One clarifying question when key clinical details are needed
 - Escalation for emergencies and high-risk situations
 - Different response depth for patients and healthcare professionals
@@ -235,17 +242,16 @@ The prompt emphasizes:
 
 Near-term engineering work:
 
-- Add backend tests for auth, chat ownership, edit/resend, and profile roles
-- Fix README/code drift as implementation evolves
-- Harden streaming and frontend SSE parsing
+- Expand backend tests for auth, chat ownership, edit/resend, and profile roles
+- Keep README/code/deployment config aligned as implementation evolves
 - Add usage limits based on subscription plan
-- Implement real RAG retrieval instead of prompt-only scaffolding
+- Build ingestion for the Qdrant-backed knowledge base
 
 RAG and data work:
 
 - Create ingestion pipeline for Nigerian drug and guideline sources
 - Store chunk metadata with source, license, revision date, and removal flags
-- Add Qdrant retrieval and OpenAI embeddings
+- Add Qdrant ingestion and source-aware retrieval controls
 - Add source-aware answer controls and audit logs
 - Keep non-commercial or licensed datasets removable before monetization
 
@@ -272,7 +278,14 @@ Backend deployment target:
 - Root directory: `backend/`
 - Start command: typically `gunicorn config.wsgi:application`
 - Configure `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`,
-  `ALLOWED_ORIGINS`, AI keys, and email keys in the host environment
+  `ALLOWED_ORIGINS`, OpenRouter, optional Qdrant, and email keys in the host
+  environment
+
+Manual provider connectivity checks can be run from `backend/` with:
+
+```bash
+python check_apis.py
+```
 
 ## License
 
