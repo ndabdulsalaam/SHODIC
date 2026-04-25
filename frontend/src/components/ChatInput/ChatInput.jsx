@@ -3,14 +3,11 @@ import { HiOutlinePaperAirplane, HiOutlineStopCircle } from 'react-icons/hi2'
 import './ChatInput.css'
 
 function ChatInput({ onSend, isLoading, onStop, prefillText }) {
-    const [text, setText] = useState('')
+    const [text, setText] = useState(prefillText || '')
     const textareaRef = useRef(null)
 
-    // Pre-fill text from suggestion chips
     useEffect(() => {
         if (prefillText) {
-            setText(prefillText)
-            // Focus the textarea after pre-fill
             setTimeout(() => textareaRef.current?.focus(), 0)
         }
     }, [prefillText])

@@ -106,14 +106,18 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
                                 remarkPlugins={[remarkGfm]}
                                 rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizedHtmlSchema]]}
                                 components={{
-                                    a: ({ node, ...props }) => (
-                                        <a {...props} target="_blank" rel="noopener noreferrer" />
-                                    ),
-                                    table: ({ node, ...props }) => (
-                                        <div className="message__table-wrapper">
-                                            <table {...props} />
-                                        </div>
-                                    ),
+                                    a: ({ node, ...props }) => {
+                                        void node
+                                        return <a {...props} target="_blank" rel="noopener noreferrer" />
+                                    },
+                                    table: ({ node, ...props }) => {
+                                        void node
+                                        return (
+                                            <div className="message__table-wrapper">
+                                                <table {...props} />
+                                            </div>
+                                        )
+                                    },
                                 }}
                             >
                                 {message.content}

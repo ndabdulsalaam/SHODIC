@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import './Sidebar.css'
 
-function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onLogout, onOpenSettings }) {
+function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onOpenSettings }) {
     const [editingId, setEditingId] = useState(null)
     const [editTitle, setEditTitle] = useState('')
     const editInputRef = useRef(null)

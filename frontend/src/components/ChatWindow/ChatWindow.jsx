@@ -24,11 +24,11 @@ function ChatWindow({
     const isNearBottomRef = useRef(true)
     const prevMessagesLenRef = useRef(0)
     const [prefillText, setPrefillText] = useState('')
-    const prefillKeyRef = useRef(0)
+    const [prefillKey, setPrefillKey] = useState(0)
 
     // Suggestion chip click → pre-fill input for editing
     const handleSuggestionClick = useCallback((text) => {
-        prefillKeyRef.current += 1
+        setPrefillKey((current) => current + 1)
         setPrefillText(text)
     }, [])
 
@@ -108,7 +108,7 @@ function ChatWindow({
                     user={user}
                     inputSlot={
                         <ChatInput
-                            key={prefillKeyRef.current}
+                            key={prefillKey}
                             onSend={onSendMessage}
                             isLoading={isLoading}
                             onStop={onStopGeneration}
