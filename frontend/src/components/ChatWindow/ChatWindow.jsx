@@ -8,8 +8,12 @@ import TypingIndicator from '../TypingIndicator/TypingIndicator'
 import './ChatWindow.css'
 
 function getMessageDomId(message, index) {
-    const rawId = message.id ?? index
+    const rawId = message._clientKey ?? message.id ?? index
     return `msg-${String(rawId).replace(/[^A-Za-z0-9_-]/g, '-')}`
+}
+
+function getMessageRenderKey(message, index) {
+    return message._clientKey ?? message.id ?? index
 }
 
 function getMessageDateKey(message) {
@@ -19,10 +23,20 @@ function getMessageDateKey(message) {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
 }
 
-function getMessagePreview(content) {
-    const preview = String(content || '').replace(/\s+/g, ' ').trim()
+function getMessagePreview(message) {
+    const content = message?.content || ''
+    const attachmentNames = Array.isArray(message?.attachments)
+        ? message.attachments.map((attachment) => attachment.name).filter(Boolean).join(', ')
+        : ''
+    const preview = String(content || attachmentNames || 'Attachment').replace(/\s+/g, ' ').trim()
     if (preview.length <= 50) return preview
     return `${preview.slice(0, 50)}...`
+}
+
+function hasRegeneratableAttachments(message) {
+    const attachments = Array.isArray(message?.attachments) ? message.attachments : []
+    return attachments.length > 0
+        && attachments.every((attachment) => attachment.kind === 'image' && attachment.preview_data_url)
 }
 
 function ChatWindow({
@@ -43,6 +57,7 @@ function ChatWindow({
     const messagesContainerRef = useRef(null)
     const isNearBottomRef = useRef(true)
     const prevMessagesLenRef = useRef(0)
+    const lastAutoScrolledUserIdRef = useRef(null)
     const [prefillText, setPrefillText] = useState('')
     const [prefillKey, setPrefillKey] = useState(0)
     const [showScrollButton, setShowScrollButton] = useState(false)
@@ -53,7 +68,7 @@ function ChatWindow({
         messages
             .map((msg, index) => ({
                 id: getMessageDomId(msg, index),
-                preview: getMessagePreview(msg.content),
+                preview: getMessagePreview(msg),
                 role: msg.role,
             }))
             .filter((item) => item.role === 'user')
@@ -99,22 +114,34 @@ function ChatWindow({
 
     const scrollSentMessageToTop = useCallback((message) => {
         if (!message) return
-        const messageIndex = messages.findIndex((item) => item === message)
+        const messageIndex = messages.findIndex((item) => (
+            item.id ? item.id === message.id : item === message
+        ))
         if (messageIndex === -1) return
         const messageDomId = getMessageDomId(message, messageIndex)
-        document.getElementById(messageDomId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        const scroll = (behavior = 'smooth') => {
+            document.getElementById(messageDomId)?.scrollIntoView({ behavior, block: 'start' })
+        }
+        scroll()
+        requestAnimationFrame(() => scroll())
+        window.setTimeout(() => scroll('auto'), 160)
         isNearBottomRef.current = false
     }, [messages])
 
-    // New user messages move to the top of the pane; streamed assistant text does not auto-follow.
+    // New sent user messages move near the top of the pane; streamed assistant text does not auto-follow.
     useEffect(() => {
         const newLen = messages.length
         const prevLen = prevMessagesLenRef.current
-        const lastMsg = messages[newLen - 1]
+        const newMessages = newLen > prevLen ? messages.slice(prevLen) : []
+        const sentUserMessage = newMessages.find((msg) => {
+            if (msg?.role !== 'user') return false
+            const id = String(msg.id || '')
+            return msg._pending || id.startsWith('pending-user-')
+        })
 
-        // New user message just added -> place it at the top of the pane.
-        if (newLen > prevLen && lastMsg?.role === 'user') {
-            scrollSentMessageToTop(lastMsg)
+        if (sentUserMessage && sentUserMessage.id !== lastAutoScrolledUserIdRef.current) {
+            lastAutoScrolledUserIdRef.current = sentUserMessage.id
+            scrollSentMessageToTop(sentUserMessage)
         }
 
         prevMessagesLenRef.current = newLen
@@ -124,7 +151,8 @@ function ChatWindow({
         for (let i = messageIndex - 1; i >= 0; i -= 1) {
             const candidate = messages[i]
             if (candidate.role === 'user' && candidate.id) {
-                return candidate.id
+                const hasAttachments = Array.isArray(candidate.attachments) && candidate.attachments.length > 0
+                return !hasAttachments || hasRegeneratableAttachments(candidate) ? candidate.id : null
             }
         }
         return null
@@ -172,7 +200,7 @@ function ChatWindow({
                     const messageDomId = getMessageDomId(msg, i)
 
                     return (
-                        <Fragment key={msg.id || i}>
+                        <Fragment key={getMessageRenderKey(msg, i)}>
                             {shouldShowDateSeparator && <DateSeparator date={msg.created_at} />}
                             <div id={messageDomId} className="chat-window__message-anchor">
                                 <MessageBubble
@@ -189,6 +217,7 @@ function ChatWindow({
                     )
                 })}
                 {isLoading && <TypingIndicator />}
+                {isLoading && <div className="chat-window__stream-spacer" aria-hidden="true" />}
             </>
         )
     }

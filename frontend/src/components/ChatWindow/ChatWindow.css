@@ -152,7 +152,12 @@
 }
 
 .chat-window__message-anchor {
-    scroll-margin-top: calc(var(--header-height) + var(--space-4));
+    scroll-margin-top: var(--space-3);
+}
+
+.chat-window__stream-spacer {
+    flex: 0 0 clamp(180px, 32vh, 360px);
+    pointer-events: none;
 }
 
 .chat-window__scroll-bottom {
@@ -338,6 +343,10 @@
 
     .chat-window__messages {
         padding: var(--space-4) var(--space-3);
+    }
+
+    .chat-window__stream-spacer {
+        flex-basis: clamp(140px, 28dvh, 260px);
     }
 
     .chat-window__scroll-bottom {
