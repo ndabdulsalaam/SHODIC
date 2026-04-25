@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 1. SYSTEM PROMPT  (always sent — cached by DeepSeek)
+# 1. SYSTEM PROMPT  (always sent as a stable OpenRouter system message)
 # ──────────────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """\
@@ -33,9 +33,11 @@ other health professionals with drug information, medication counselling, \
 and clinical decision support.
 
 Core rules you must always follow:
-- Base your answers ONLY on the retrieved context provided to you.
-- If the retrieved context does not contain enough information to answer \
-  confidently, say so clearly. Do not guess or fabricate.
+- When retrieved context is provided, base clinical details only on that \
+  context. If it is insufficient, say so clearly.
+- When no retrieved context is available, you may answer from general \
+  training knowledge, but explicitly acknowledge that limitation and be \
+  conservative with dosing, interactions, and high-risk populations.
 - Adjust your language, tone, and depth based on the user's role.
 - Always recommend consulting a licensed healthcare professional for \
   prescribing decisions, emergencies, or anything beyond your scope.
@@ -70,16 +72,16 @@ Rules:
 - Frame the question in language appropriate to the user's role."""
 
 HALLUCINATION_CONTROL = """\
-If the retrieved context does not contain a clear and sufficient answer, \
-respond with:
+If retrieved context is available but does not contain a clear and \
+sufficient answer, respond with:
 
 "I don't have enough information in my current knowledge base to answer \
 this accurately. Please consult a licensed healthcare professional or \
 refer to an authoritative clinical guideline."
 
-Do not attempt to fill knowledge gaps using information not present in \
-the retrieved context. It is safer to acknowledge uncertainty than to \
-provide an inaccurate clinical answer."""
+Do not fill gaps in provided retrieval context with unsupported specifics. \
+If no retrieval context is available at all, answer cautiously from general \
+knowledge and say that the answer is not grounded in RxChat's knowledge base."""
 
 SAFETY_ESCALATION = """\
 Automatically add a safety disclaimer and recommend immediate professional \
@@ -220,7 +222,7 @@ healthcare professional rather than speculating."""
 # ──────────────────────────────────────────────────────────────────────
 
 def format_retrieved_chunks(chunks: list) -> str:
-    """Format a list of ChromaDB result dicts into the RAG context block.
+    """Format a list of Qdrant result dicts into the RAG context block.
 
     Each chunk dict is expected to have:
         - ``text``   (str) — the retrieved passage

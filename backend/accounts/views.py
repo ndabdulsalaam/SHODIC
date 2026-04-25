@@ -1,4 +1,4 @@
-import uuid
+import logging
 from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
@@ -13,6 +13,7 @@ from .models import (
 )
 from .otp import generate_otp, send_otp_email
 
+logger = logging.getLogger(__name__)
 VALID_ROLES = [choice[0] for choice in ROLE_CHOICES]
 
 
@@ -28,22 +29,21 @@ def _is_trusted_device(user, request):
     """Check if the current device is trusted and active (used within 15 days)."""
     device_token = _get_device_token(request)
     if not device_token:
-        # Diagnostic: help identify why it's failing in dev
-        print(f"DEBUG: No device_token cookie found for user {user.email}")
+        logger.debug("No trusted-device cookie found for user_id=%s", user.id)
         return False
     
     try:
         device = TrustedDevice.objects.get(user=user, device_token=device_token)
     except TrustedDevice.DoesNotExist:
-        print(f"DEBUG: device_token {device_token} not found in DB for user {user.email}")
+        logger.debug("Trusted-device token not found for user_id=%s", user.id)
         return False
-    
+
     if not device.is_active():
-        print(f"DEBUG: device_token {device_token} has expired for user {user.email}")
+        logger.debug("Trusted-device token expired for user_id=%s", user.id)
         device.delete()  # Clean up stale device
         return False
-    
-    print(f"DEBUG: Trusted device found for user {user.email}")
+
+    logger.debug("Trusted device accepted for user_id=%s", user.id)
     return device
 
 
@@ -965,4 +965,3 @@ def google_complete_setup(request):
     }
     response = Response(resp_data, status=status.HTTP_201_CREATED)
     return response
-

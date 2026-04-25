@@ -16,7 +16,23 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: DEEPSEEK_API_KEY
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: "https://openrouter.ai/api/v1"
+      - key: OPENROUTER_MODEL
+        value: "openai/gpt-oss-120b:free"
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: "rxchat_drugs"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: BREVO_API_KEY
         sync: false
