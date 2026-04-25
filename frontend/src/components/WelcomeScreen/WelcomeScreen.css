@@ -53,7 +53,7 @@
     margin-bottom: var(--space-4);
 }
 
-/* Suggestion chips – horizontal pill row */
+/* Suggestion chips */
 .welcome__chips {
     display: flex;
     flex-wrap: wrap;
@@ -69,7 +69,7 @@
     padding: var(--space-2) var(--space-4);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--color-text-secondary);
