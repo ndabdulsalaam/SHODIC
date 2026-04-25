@@ -12,11 +12,41 @@ const ROLES = [
     { value: 'other_health_professional', label: 'Other Health Professional' },
 ]
 
+const GENDERS = [
+    { value: '', label: 'Select gender' },
+    { value: 'male', label: 'Male' },
+    { value: 'female', label: 'Female' },
+]
+
+const AGE_RANGES = [
+    { value: '', label: 'Select age range' },
+    { value: 'under_18', label: 'Under 18' },
+    { value: '18_24', label: '18-24' },
+    { value: '25_34', label: '25-34' },
+    { value: '35_44', label: '35-44' },
+    { value: '45_54', label: '45-54' },
+    { value: '55_64', label: '55-64' },
+    { value: '65_plus', label: '65+' },
+]
+
+function normalizeNigeriaPhone(value) {
+    const digits = value.replace(/\D/g, '')
+    const withoutCountryCode = digits.replace(/^234/, '').replace(/^0/, '')
+    return withoutCountryCode ? `+234${withoutCountryCode}` : ''
+}
+
+function formatPhoneForInput(value) {
+    return String(value || '').replace(/\D/g, '').replace(/^234/, '').replace(/^0/, '')
+}
+
 function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
     const [firstName, setFirstName] = useState('')
     const [lastName, setLastName] = useState('')
     const [preferredName, setPreferredName] = useState('')
     const [role, setRole] = useState('patient')
+    const [gender, setGender] = useState('')
+    const [ageRange, setAgeRange] = useState('')
+    const [phoneNumber, setPhoneNumber] = useState('')
     const [saving, setSaving] = useState(false)
     const [saveMsg, setSaveMsg] = useState('')
 
@@ -35,6 +65,9 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
             setLastName(user.last_name || '')
             setPreferredName(user.preferred_name || '')
             setRole(user.role || 'patient')
+            setGender(user.gender || '')
+            setAgeRange(user.age_range || '')
+            setPhoneNumber(formatPhoneForInput(user.phone_number))
             setSaveMsg('')
         }
     }, [user])
@@ -54,7 +87,10 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         firstName !== (user.first_name || '') ||
         lastName !== (user.last_name || '') ||
         preferredName !== (user.preferred_name || '') ||
-        role !== (user.role || 'patient')
+        role !== (user.role || 'patient') ||
+        gender !== (user.gender || '') ||
+        ageRange !== (user.age_range || '') ||
+        normalizeNigeriaPhone(phoneNumber) !== (user.phone_number || '')
     )
 
     const handleSaveProfile = async () => {
@@ -66,7 +102,15 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ first_name: firstName, last_name: lastName, preferred_name: preferredName, role }),
+                body: JSON.stringify({
+                    first_name: firstName,
+                    last_name: lastName,
+                    preferred_name: preferredName,
+                    role,
+                    gender,
+                    age_range: ageRange,
+                    phone_number: normalizeNigeriaPhone(phoneNumber),
+                }),
             })
             const data = await resp.json()
             if (resp.ok) {
@@ -206,10 +250,62 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
                             </select>
                         </div>
 
+                        <div className="settings-panel__field-row">
+                            <div className="settings-panel__field">
+                                <label className="settings-panel__label" htmlFor="sp-gender">Gender</label>
+                                <select
+                                    id="sp-gender"
+                                    className="settings-panel__select"
+                                    value={gender}
+                                    onChange={(e) => setGender(e.target.value)}
+                                    required
+                                >
+                                    {GENDERS.map((item) => (
+                                        <option key={item.value} value={item.value} disabled={!item.value}>
+                                            {item.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="settings-panel__field">
+                                <label className="settings-panel__label" htmlFor="sp-age-range">Age Range</label>
+                                <select
+                                    id="sp-age-range"
+                                    className="settings-panel__select"
+                                    value={ageRange}
+                                    onChange={(e) => setAgeRange(e.target.value)}
+                                    required
+                                >
+                                    {AGE_RANGES.map((item) => (
+                                        <option key={item.value} value={item.value} disabled={!item.value}>
+                                            {item.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="settings-panel__field">
+                            <label className="settings-panel__label" htmlFor="sp-phone-number">Phone Number</label>
+                            <div className="settings-panel__phone-input">
+                                <span className="settings-panel__country-prefix">+234</span>
+                                <input
+                                    id="sp-phone-number"
+                                    className="settings-panel__input"
+                                    type="tel"
+                                    inputMode="tel"
+                                    value={phoneNumber}
+                                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="8012345678"
+                                />
+                            </div>
+                        </div>
+
                         <button
                             className="settings-panel__save-btn"
                             onClick={handleSaveProfile}
-                            disabled={saving || !hasChanges}
+                            disabled={saving || !hasChanges || !gender || !ageRange}
                         >
                             {saving ? 'Saving...' : 'Save Changes'}
                         </button>
