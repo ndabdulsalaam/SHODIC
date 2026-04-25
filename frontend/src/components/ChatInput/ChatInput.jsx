@@ -45,7 +45,6 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about medications, interactions, side effects..."
                 rows={1}
-                disabled={isLoading}
                 aria-label="Type your message"
             />
             {isLoading ? (
@@ -63,6 +62,7 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
                     onClick={handleSubmit}
                     disabled={!hasText}
                     aria-label="Send message"
+                    title="Send message"
                 >
                     <HiOutlinePaperAirplane size={18} />
                 </button>
