@@ -26,11 +26,14 @@ def section(title):
 
 
 def check_openrouter():
-    section("1. OpenRouter  →  openai/gpt-oss-120b:free")
+    section("1. OpenRouter  →  configured text model")
 
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
     openrouter_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-    openrouter_model = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free")
+    openrouter_model = os.getenv(
+        "OPENROUTER_TEXT_MODEL",
+        os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free"),
+    )
 
     if not openrouter_key:
         print(f"  {SKIP}  OPENROUTER_API_KEY not set")
