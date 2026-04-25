@@ -131,13 +131,17 @@ REST_FRAMEWORK = {
 
 # ── LLM Configuration (OpenRouter) ──────────────────────────────────
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
+OPENROUTER_BACKUP_API_KEY = os.getenv('OPENROUTER_BACKUP_API_KEY', '')
 OPENROUTER_BASE_URL = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
-OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'openai/gpt-oss-120b:free')
+OPENROUTER_TEXT_MODEL = os.getenv('OPENROUTER_MODEL', 'openai/gpt-oss-120b:free')
+OPENROUTER_VISION_MODEL = os.getenv('OPENROUTER_VISION_MODEL', 'google/gemma-4-31b-it:free')
+OPENROUTER_VISION_MODEL_FALLBACK = os.getenv('OPENROUTER_VISION_MODEL_FALLBACK', 'baidu/qianfan-ocr-fast:free')
 
 # Vector DB — Qdrant Cloud (for RAG retrieval)
 QDRANT_URL = os.getenv('QDRANT_URL', '')
 QDRANT_API_KEY = os.getenv('QDRANT_API_KEY', '')
 QDRANT_COLLECTION = os.getenv('QDRANT_COLLECTION', 'rxchat_drugs')
+QDRANT_INFERENCE_MODEL = os.getenv('QDRANT_INFERENCE_MODEL', '')
 
 # Email — Brevo HTTP API (primary), Django console (dev fallback)
 BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
