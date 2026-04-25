@@ -21,24 +21,29 @@ def _build_html_email(otp_code, purpose):
     if purpose == 'registration':
         heading = 'Welcome to RxChat!'
         intro = 'Your verification code is:'
+        preheader = 'Use this code to verify your email address.'
         footer_note = "If you didn't request this, please ignore this email."
     elif purpose == 'password_reset':
         heading = 'Reset Your Password'
         intro = 'Your password reset code is:'
+        preheader = 'Use this code to reset your RxChat password.'
         footer_note = "If you didn't request a password reset, please ignore this email."
     elif purpose == 'email_change':
         heading = 'Verify Your New Email'
         intro = 'You requested to add this email to your RxChat account. Your verification code is:'
+        preheader = 'Use this code to verify your new email address.'
         footer_note = "If you didn't request this, please ignore this email."
     else:
         heading = 'Login Verification'
         intro = 'We noticed a login from a new device. Your verification code is:'
+        preheader = 'We noticed a login from a new device. Your verification code is inside.'
         footer_note = "If this wasn't you, please consider changing your password."
 
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
 <body style="margin:0; padding:0; background:#f0f2f5; font-family:'Inter',Arial,sans-serif;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent; mso-hide:all;">{preheader}</div>
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
     <tr><td align="center">
       <table width="420" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08);">
@@ -125,16 +130,16 @@ def send_otp_email(email, otp_code, purpose='registration'):
     """
     if purpose == 'registration':
         subject = 'Verify Your Email'
-        plain = f"Welcome to RxChat! Your code: {otp_code} (expires in 5 min)"
+        plain = f"Use this code to verify your email address: {otp_code} (expires in 5 min)"
     elif purpose == 'password_reset':
         subject = 'Reset Your Password'
-        plain = f"Your password reset code: {otp_code} (expires in 5 min)"
+        plain = f"Use this code to reset your RxChat password: {otp_code} (expires in 5 min)"
     elif purpose == 'email_change':
         subject = 'Verify Your New Email'
-        plain = f"Your email verification code: {otp_code} (expires in 5 min)"
+        plain = f"Use this code to verify your new email address: {otp_code} (expires in 5 min)"
     else:
-        subject = 'Login Verification'
-        plain = f"Login from new device. Your code: {otp_code} (expires in 5 min)"
+        subject = 'We noticed a login from a new device'
+        plain = f"We noticed a login from a new device. Your verification code is {otp_code} (expires in 5 min)"
 
     html_content = _build_html_email(otp_code, purpose)
 
