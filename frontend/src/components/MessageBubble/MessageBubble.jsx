@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { HiOutlinePencil, HiOutlineClipboard, HiOutlineArrowPath, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
 import './MessageBubble.css'
 
@@ -81,6 +82,7 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                         <div className="message__markdown">
                             <Markdown
                                 remarkPlugins={[remarkGfm]}
+                                rehypePlugins={[rehypeRaw]}
                                 components={{
                                     a: ({ node, ...props }) => (
                                         <a {...props} target="_blank" rel="noopener noreferrer" />
