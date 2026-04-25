@@ -1,9 +1,18 @@
-import { Children, isValidElement, useMemo, useState } from 'react'
+import { Children, isValidElement, memo, useMemo, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import { HiOutlinePencil, HiOutlineClipboard, HiOutlineArrowPath, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
+import {
+    HiOutlineArrowPath,
+    HiOutlineCheck,
+    HiOutlineChevronLeft,
+    HiOutlineChevronRight,
+    HiOutlineClipboard,
+    HiOutlinePaperAirplane,
+    HiOutlinePencil,
+    HiOutlineXMark,
+} from 'react-icons/hi2'
 import './MessageBubble.css'
 
 const sanitizedHtmlSchema = {
@@ -134,8 +143,10 @@ function SmartMarkdownTable({ children, ...props }) {
     )
 }
 
-function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLoading }) {
+function MessageBubble({ message, index, onEdit, onResend, onVariantChange, resendMessageId, isLoading }) {
     const isUser = message.role === 'user'
+    const variantNavigation = message._variantNavigation
+    const hasVariants = Boolean(variantNavigation && variantNavigation.total > 1)
     const [isEditing, setIsEditing] = useState(false)
     const [editText, setEditText] = useState(message.content)
     const [copied, setCopied] = useState(false)
@@ -182,7 +193,7 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
     return (
         <div
             className={`message message--${isUser ? 'user' : 'ai'}`}
-            style={{ animationDelay: `${index * 0.05}s` }}
+            style={{ animationDelay: `${Math.min(index * 0.05, 0.5)}s` }}
         >
             <div className="message__content">
                 <div className="message__bubble">
@@ -197,11 +208,21 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
                                 rows={3}
                             />
                             <div className="message__edit-actions">
-                                <button className="message__edit-btn message__edit-btn--save" onClick={handleEditSave}>
-                                    <HiOutlineCheck size={14} /> Save
+                                <button
+                                    className="message__edit-btn message__edit-btn--cancel"
+                                    onClick={handleEditCancel}
+                                    aria-label="Cancel edit"
+                                    data-tooltip="Cancel edit"
+                                >
+                                    <HiOutlineXMark size={18} />
                                 </button>
-                                <button className="message__edit-btn message__edit-btn--cancel" onClick={handleEditCancel}>
-                                    <HiOutlineXMark size={14} /> Cancel
+                                <button
+                                    className="message__edit-btn message__edit-btn--send"
+                                    onClick={handleEditSave}
+                                    aria-label="Send edited message"
+                                    data-tooltip="Send edit"
+                                >
+                                    <HiOutlinePaperAirplane size={17} />
                                 </button>
                             </div>
                         </div>
@@ -239,7 +260,8 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
                                 <button
                                     className={`message__action-btn ${copied ? 'message__action-btn--copied' : ''}`}
                                     onClick={handleCopy}
-                                    title={copied ? 'Copied!' : 'Copy'}
+                                    aria-label={copied ? 'Copied' : 'Copy message'}
+                                    data-tooltip={copied ? 'Copied' : 'Copy message'}
                                 >
                                     {copied ? <HiOutlineCheck size={13} /> : <HiOutlineClipboard size={13} />}
                                 </button>
@@ -248,18 +270,46 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
                                     <button
                                         className="message__action-btn"
                                         onClick={handleEditStart}
-                                        title="Edit message"
+                                        aria-label="Edit message"
+                                        data-tooltip="Edit message"
                                         disabled={isLoading}
                                     >
                                         <HiOutlinePencil size={13} />
                                     </button>
                                 )}
 
-                                {!isUser && onResend && resendMessageId && (
+                                {isUser && hasVariants && onVariantChange && (
+                                    <div className="message__variant-nav" aria-label="Message edit versions">
+                                        <button
+                                            className="message__action-btn message__variant-btn"
+                                            onClick={() => onVariantChange(variantNavigation.groupId, variantNavigation.index - 1)}
+                                            disabled={isLoading || variantNavigation.index === 0}
+                                            aria-label="Previous edit"
+                                            data-tooltip="Previous edit"
+                                        >
+                                            <HiOutlineChevronLeft size={15} />
+                                        </button>
+                                        <span className="message__variant-count">
+                                            {variantNavigation.index + 1}/{variantNavigation.total}
+                                        </span>
+                                        <button
+                                            className="message__action-btn message__variant-btn"
+                                            onClick={() => onVariantChange(variantNavigation.groupId, variantNavigation.index + 1)}
+                                            disabled={isLoading || variantNavigation.index === variantNavigation.total - 1}
+                                            aria-label="Next edit"
+                                            data-tooltip="Next edit"
+                                        >
+                                            <HiOutlineChevronRight size={15} />
+                                        </button>
+                                    </div>
+                                )}
+
+                                {!isUser && !message._error && onResend && resendMessageId && (
                                     <button
                                         className="message__action-btn"
                                         onClick={() => onResend(resendMessageId)}
-                                        title="Regenerate response"
+                                        aria-label="Regenerate response"
+                                        data-tooltip="Regenerate response"
                                         disabled={isLoading}
                                     >
                                         <HiOutlineArrowPath size={13} />
@@ -270,7 +320,8 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
                                     <button
                                         className="message__action-btn message__action-btn--error"
                                         onClick={() => onResend(resendMessageId)}
-                                        title="Retry"
+                                        aria-label="Retry response"
+                                        data-tooltip="Retry response"
                                         disabled={isLoading}
                                     >
                                         <HiOutlineArrowPath size={13} /> Retry
@@ -285,4 +336,4 @@ function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLo
     )
 }
 
-export default MessageBubble
+export default memo(MessageBubble)
