@@ -69,9 +69,10 @@ function normalizeNigeriaPhone(value) {
     return withoutCountryCode ? `+234${withoutCountryCode}` : ''
 }
 
-function suggestPreferredName(role, firstName, lastName, gender) {
+function suggestPreferredName(role, firstName, lastName, gender, profession = '') {
     const first = firstName.trim()
     const last = lastName.trim()
+    const professionalTitle = profession.trim().replace(/\s+/g, ' ')
     const professionalName = last || first
 
     if (!role) return ''
@@ -79,6 +80,10 @@ function suggestPreferredName(role, firstName, lastName, gender) {
     if (role === 'pharmacist') return professionalName ? `Pharm. ${professionalName}` : ''
     if (role === 'physician') return professionalName ? `Dr. ${professionalName}` : ''
     if (role === 'nurse') return professionalName ? `Nr. ${professionalName}` : ''
+    if (role === 'other_health_professional') {
+        if (professionalTitle && professionalName) return `${professionalTitle} ${professionalName}`
+        return professionalName
+    }
     if (role === 'patient') {
         if (!first) return ''
         if (gender === 'male') return `Mr. ${first}`
@@ -135,6 +140,7 @@ function AuthPage() {
     const [ageRange, setAgeRange] = useState('')
     const [phoneNumber, setPhoneNumber] = useState('')
     const [setupRole, setSetupRole] = useState('')
+    const [setupProfession, setSetupProfession] = useState('')
     const [setupPassword, setSetupPassword] = useState('')
     const [setupConfirmPassword, setSetupConfirmPassword] = useState('')
 
@@ -149,6 +155,7 @@ function AuthPage() {
     const [googlePassword, setGooglePassword] = useState('')
     const [googleConfirmPassword, setGoogleConfirmPassword] = useState('')
     const [googleRole, setGoogleRole] = useState('')
+    const [googleProfession, setGoogleProfession] = useState('')
 
     const googlePasswordsMatch = useMemo(() => {
         if (!googleConfirmPassword) return null
@@ -373,6 +380,10 @@ function AuthPage() {
             setError('Please select your role')
             return
         }
+        if (setupRole === 'other_health_professional' && !setupProfession.trim()) {
+            setError('Please enter your profession')
+            return
+        }
         if (setupPassword.length < 8) {
             setError('Password must be at least 8 characters')
             return
@@ -433,6 +444,10 @@ function AuthPage() {
         }
         if (!googleRole) {
             setError('Please select your role')
+            return
+        }
+        if (googleRole === 'other_health_professional' && !googleProfession.trim()) {
+            setError('Please enter your profession')
             return
         }
         if (googlePassword.length < 8) {
@@ -502,6 +517,8 @@ function AuthPage() {
         setPhone,
         role,
         setRole,
+        profession,
+        setProfession,
         preferred,
         setPreferred,
         password,
@@ -513,16 +530,23 @@ function AuthPage() {
         showPasswordId,
     }) => {
         const canContinueStep1 = Boolean(first.trim() && selectedGender && selectedAgeRange)
-        const canContinueStep2 = Boolean(role && preferred.trim())
+        const needsProfession = role === 'other_health_professional'
+        const canContinueStep2 = Boolean(role && preferred.trim() && (!needsProfession || profession.trim()))
         const preferredNameHint = role === 'patient'
             ? 'Suggestion based on your role and gender. You can use anything you prefer.'
-            : role === 'other_health_professional'
-                ? 'Add any title you prefer. The suggestion is only a starting point.'
-                : 'Suggestion based on your role.'
+            : needsProfession
+                ? 'Suggestion based on your profession and name. You can use anything you prefer.'
+                : 'Suggestion based on your role. You can use anything you prefer.'
 
         const handleRoleChange = (value) => {
             setRole(value)
-            setPreferred(suggestPreferredName(value, first, last, selectedGender))
+            if (value !== 'other_health_professional') setProfession('')
+            setPreferred(suggestPreferredName(value, first, last, selectedGender, profession))
+        }
+
+        const handleProfessionChange = (value) => {
+            setProfession(value)
+            setPreferred(suggestPreferredName(role, first, last, selectedGender, value))
         }
 
         const handleWizardSubmit = (e) => {
@@ -678,6 +702,20 @@ function AuthPage() {
                                         </select>
                                     </div>
 
+                                    {needsProfession && (
+                                        <div className="auth-page__input-group">
+                                            <label htmlFor={`${variant}-profession`}>Profession</label>
+                                            <input
+                                                id={`${variant}-profession`}
+                                                type="text"
+                                                value={profession}
+                                                onChange={(e) => handleProfessionChange(e.target.value)}
+                                                placeholder="e.g. Dietitian, Laboratory Scientist"
+                                                required
+                                            />
+                                        </div>
+                                    )}
+
                                     <div className="auth-page__input-group">
                                         <label htmlFor={`${variant}-preferred-name`}>What should Rx call you?</label>
                                         <input
@@ -802,6 +840,8 @@ function AuthPage() {
             setPhone: setPhoneNumber,
             role: setupRole,
             setRole: setSetupRole,
+            profession: setupProfession,
+            setProfession: setSetupProfession,
             preferred: preferredName,
             setPreferred: setPreferredName,
             password: setupPassword,
@@ -833,6 +873,8 @@ function AuthPage() {
             setPhone: setGooglePhoneNumber,
             role: googleRole,
             setRole: setGoogleRole,
+            profession: googleProfession,
+            setProfession: setGoogleProfession,
             preferred: googlePreferredName,
             setPreferred: setGooglePreferredName,
             password: googlePassword,
