@@ -26,7 +26,7 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(PendingRegistration)
 class PendingRegistrationAdmin(admin.ModelAdmin):
-    list_display = ['email', 'created_at', 'expires_at']
+    list_display = ['email', 'created_at', 'otp_expires_at', 'expires_at']
     search_fields = ['email']
 
 
@@ -50,9 +50,9 @@ class PasswordResetOTPAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ['first_name', 'last_name', 'preferred_name', 'email', 'role']
-    search_fields = ['user__email', 'first_name', 'last_name', 'preferred_name']
-    list_filter = ['role']
+    list_display = ['first_name', 'last_name', 'preferred_name', 'email', 'role', 'gender', 'age_range']
+    search_fields = ['user__email', 'first_name', 'last_name', 'preferred_name', 'phone_number']
+    list_filter = ['role', 'gender', 'age_range']
 
     @admin.display(description='Email')
     def email(self, obj):
