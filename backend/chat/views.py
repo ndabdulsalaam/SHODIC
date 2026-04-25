@@ -66,7 +66,7 @@ def send_message(request):
         conversation = Conversation.objects.create(title=title, **owner)
 
     # Save user message
-    Message.objects.create(
+    user_message = Message.objects.create(
         conversation=conversation,
         role='user',
         content=user_text,
@@ -87,7 +87,12 @@ def send_message(request):
         full_response = []
 
         # Send conversation metadata as the first event
-        yield f"event: meta\ndata: {{\"conversation_id\": \"{conversation.id}\", \"conversation_title\": \"{conversation.title}\"}}\n\n"
+        yield (
+            "event: meta\n"
+            f"data: {{\"conversation_id\": \"{conversation.id}\", "
+            f"\"conversation_title\": \"{conversation.title}\", "
+            f"\"user_message_id\": \"{user_message.id}\"}}\n\n"
+        )
 
         for chunk in stream_ai_response(user_text, conversation_history=history, role=effective_role):
             full_response.append(chunk)
@@ -340,4 +345,3 @@ def resend_message(request, message_id):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'
     return response
-

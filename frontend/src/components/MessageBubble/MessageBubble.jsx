@@ -2,10 +2,32 @@ import { useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { HiOutlinePencil, HiOutlineClipboard, HiOutlineArrowPath, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
 import './MessageBubble.css'
 
-function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
+const sanitizedHtmlSchema = {
+    ...defaultSchema,
+    clobberPrefix: 'rxchat-user-content-',
+    tagNames: [
+        'a', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2',
+        'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'li', 'ol', 'p', 'pre', 'span',
+        'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr',
+        'ul',
+    ],
+    attributes: {
+        '*': ['ariaLabel', 'ariaLabelledBy', 'title'],
+        a: ['href', 'title'],
+        code: ['className'],
+        td: ['align'],
+        th: ['align'],
+    },
+    protocols: {
+        href: ['http', 'https', 'mailto', 'tel'],
+    },
+}
+
+function MessageBubble({ message, index, onEdit, onResend, resendMessageId, isLoading }) {
     const isUser = message.role === 'user'
     const [isEditing, setIsEditing] = useState(false)
     const [editText, setEditText] = useState(message.content)
@@ -82,7 +104,7 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                         <div className="message__markdown">
                             <Markdown
                                 remarkPlugins={[remarkGfm]}
-                                rehypePlugins={[rehypeRaw]}
+                                rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizedHtmlSchema]]}
                                 components={{
                                     a: ({ node, ...props }) => (
                                         <a {...props} target="_blank" rel="noopener noreferrer" />
@@ -126,10 +148,10 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                                     </button>
                                 )}
 
-                                {!isUser && onResend && (
+                                {!isUser && onResend && resendMessageId && (
                                     <button
                                         className="message__action-btn"
-                                        onClick={() => onResend(message.id)}
+                                        onClick={() => onResend(resendMessageId)}
                                         title="Regenerate response"
                                         disabled={isLoading}
                                     >
@@ -137,10 +159,10 @@ function MessageBubble({ message, index, onEdit, onResend, isLoading }) {
                                     </button>
                                 )}
 
-                                {message._error && onResend && (
+                                {message._error && onResend && resendMessageId && (
                                     <button
                                         className="message__action-btn message__action-btn--error"
-                                        onClick={() => onResend(message.id)}
+                                        onClick={() => onResend(resendMessageId)}
                                         title="Retry"
                                         disabled={isLoading}
                                     >

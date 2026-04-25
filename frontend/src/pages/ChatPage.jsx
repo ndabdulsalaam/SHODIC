@@ -96,11 +96,14 @@ function ChatPage() {
 
     const handleSendMessage = useCallback(async (text) => {
         let convId = activeConversationId
+        const tempUserMessageId = `pending-user-${Date.now()}`
 
         const userMsg = {
+            id: tempUserMessageId,
             role: 'user',
             content: text,
             created_at: new Date().toISOString(),
+            _pending: true,
         }
 
         // Optimistically add user message
@@ -136,10 +139,12 @@ function ChatPage() {
             const decoder = new TextDecoder()
             let aiContent = ''
             let actualConvId = convId
+            let aiMessageId = null
             let buffer = ''
 
             // Create a placeholder AI message
             const aiMsg = {
+                id: `pending-assistant-${Date.now()}`,
                 role: 'assistant',
                 content: '',
                 created_at: new Date().toISOString(),
@@ -184,10 +189,21 @@ function ChatPage() {
                                         setActiveConversationId(actualConvId)
                                     }
                                 }
+                                if (parsed.user_message_id) {
+                                    setConversations((prev) =>
+                                        prev.map((c) => {
+                                            if (c.id !== actualConvId) return c
+                                            const msgs = c.messages.map((m) =>
+                                                m.id === tempUserMessageId
+                                                    ? { ...m, id: parsed.user_message_id, _pending: false }
+                                                    : m
+                                            )
+                                            return { ...c, messages: msgs }
+                                        })
+                                    )
+                                }
                                 if (parsed.message_id) {
-                                    // Done event — mark streaming complete
-                                    aiMsg._streaming = false
-                                    aiMsg.id = parsed.message_id
+                                    aiMessageId = parsed.message_id
                                 }
                                 continue
                             } catch { /* not JSON, treat as text chunk */ }
@@ -204,7 +220,7 @@ function ChatPage() {
                                 const msgs = [...c.messages]
                                 const lastMsg = msgs[msgs.length - 1]
                                 if (lastMsg?.role === 'assistant' && lastMsg?._streaming) {
-                                    msgs[msgs.length - 1] = { ...lastMsg, content: aiContent }
+                                    msgs[msgs.length - 1] = { ...lastMsg, content: aiContent, id: aiMessageId || lastMsg.id }
                                 } else {
                                     msgs.push({ ...aiMsg, content: aiContent })
                                 }
@@ -224,7 +240,7 @@ function ChatPage() {
                 prev.map((c) => {
                     if (c.id !== actualConvId) return c
                     const msgs = c.messages.map((m) =>
-                        m._streaming ? { ...m, content: aiContent, _streaming: false } : m
+                        m._streaming ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: false } : m
                     )
                     return { ...c, messages: msgs }
                 })
@@ -320,9 +336,10 @@ function ChatPage() {
             const reader = res.body.getReader()
             const decoder = new TextDecoder()
             let aiContent = ''
+            let aiMessageId = null
             let buffer = ''
 
-            const aiMsg = { role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
+            const aiMsg = { id: `pending-assistant-${Date.now()}`, role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
 
             // Add placeholder AI message
             setConversations((prev) =>
@@ -336,14 +353,23 @@ function ChatPage() {
                 const lines = buffer.split('\n')
                 buffer = lines.pop() || ''
                 for (const line of lines) {
-                    if (line.startsWith('data: ') && !line.slice(6).startsWith('{')) {
-                        aiContent += line.slice(6).replace(/\\n/g, '\n')
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6)
+                        if (data.startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(data)
+                                if (parsed.message_id) aiMessageId = parsed.message_id
+                                continue
+                            } catch { /* not JSON, treat as text chunk */ }
+                        }
+
+                        aiContent += data.replace(/\\n/g, '\n')
                         setConversations((prev) =>
                             prev.map((c) => {
                                 if (c.id !== activeConversationId) return c
                                 const msgs = [...c.messages]
                                 const last = msgs[msgs.length - 1]
-                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, content: aiContent }
+                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, id: aiMessageId || last.id, content: aiContent }
                                 return { ...c, messages: msgs }
                             })
                         )
@@ -354,7 +380,7 @@ function ChatPage() {
             setConversations((prev) =>
                 prev.map((c) => {
                     if (c.id !== activeConversationId) return c
-                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, content: aiContent, _streaming: false } : m) }
+                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: false } : m) }
                 })
             )
         } catch (err) {
@@ -393,9 +419,10 @@ function ChatPage() {
             const reader = res.body.getReader()
             const decoder = new TextDecoder()
             let aiContent = ''
+            let aiMessageId = null
             let buffer = ''
 
-            const aiMsg = { role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
+            const aiMsg = { id: `pending-assistant-${Date.now()}`, role: 'assistant', content: '', created_at: new Date().toISOString(), _streaming: true }
 
             setConversations((prev) =>
                 prev.map((c) => c.id === activeConversationId ? { ...c, messages: [...c.messages, aiMsg] } : c)
@@ -408,14 +435,23 @@ function ChatPage() {
                 const lines = buffer.split('\n')
                 buffer = lines.pop() || ''
                 for (const line of lines) {
-                    if (line.startsWith('data: ') && !line.slice(6).startsWith('{')) {
-                        aiContent += line.slice(6).replace(/\\n/g, '\n')
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6)
+                        if (data.startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(data)
+                                if (parsed.message_id) aiMessageId = parsed.message_id
+                                continue
+                            } catch { /* not JSON, treat as text chunk */ }
+                        }
+
+                        aiContent += data.replace(/\\n/g, '\n')
                         setConversations((prev) =>
                             prev.map((c) => {
                                 if (c.id !== activeConversationId) return c
                                 const msgs = [...c.messages]
                                 const last = msgs[msgs.length - 1]
-                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, content: aiContent }
+                                if (last?._streaming) msgs[msgs.length - 1] = { ...last, id: aiMessageId || last.id, content: aiContent }
                                 return { ...c, messages: msgs }
                             })
                         )
@@ -426,7 +462,7 @@ function ChatPage() {
             setConversations((prev) =>
                 prev.map((c) => {
                     if (c.id !== activeConversationId) return c
-                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, content: aiContent, _streaming: false } : m) }
+                    return { ...c, messages: c.messages.map(m => m._streaming ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: false } : m) }
                 })
             )
         } catch (err) {

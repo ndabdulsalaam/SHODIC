@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { HiOutlineXMark, HiOutlineArrowRightOnRectangle, HiOutlineEnvelope, HiOutlineShieldCheck } from 'react-icons/hi2'
 import './SettingsPanel.css'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 const ROLES = [
     { value: 'patient', label: 'Patient' },
@@ -62,7 +62,7 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         setSaving(true)
         setSaveMsg('')
         try {
-            const resp = await fetch(`${API}/api/auth/profile/`, {
+            const resp = await fetch(`${API}/auth/profile/`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -87,7 +87,7 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         setEmailSaving(true)
         setEmailMsg('')
         try {
-            const resp = await fetch(`${API}/api/auth/email/add/`, {
+            const resp = await fetch(`${API}/auth/email/add/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -111,7 +111,7 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         setEmailSaving(true)
         setEmailMsg('')
         try {
-            const resp = await fetch(`${API}/api/auth/email/verify/`, {
+            const resp = await fetch(`${API}/auth/email/verify/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

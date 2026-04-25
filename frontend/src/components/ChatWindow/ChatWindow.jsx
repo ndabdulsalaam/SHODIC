@@ -77,6 +77,16 @@ function ChatWindow({
 
     const isWelcome = !isLoadingMessages && messages.length === 0
 
+    const findResendMessageId = (messageIndex) => {
+        for (let i = messageIndex - 1; i >= 0; i -= 1) {
+            const candidate = messages[i]
+            if (candidate.role === 'user' && candidate.id) {
+                return candidate.id
+            }
+        }
+        return null
+    }
+
     // Determine what to render in the messages area
     const renderContent = () => {
         if (isLoadingMessages) {
@@ -111,16 +121,21 @@ function ChatWindow({
 
         return (
             <>
-                {messages.map((msg, i) => (
-                    <MessageBubble
-                        key={msg.id || i}
-                        message={msg}
-                        index={i}
-                        onEdit={onEditMessage}
-                        onResend={onResendMessage}
-                        isLoading={isLoading}
-                    />
-                ))}
+                {messages.map((msg, i) => {
+                    const resendMessageId = msg.role === 'assistant' ? findResendMessageId(i) : null
+
+                    return (
+                        <MessageBubble
+                            key={msg.id || i}
+                            message={msg}
+                            index={i}
+                            onEdit={onEditMessage}
+                            onResend={onResendMessage}
+                            resendMessageId={resendMessageId}
+                            isLoading={isLoading}
+                        />
+                    )
+                })}
                 {isLoading && <TypingIndicator />}
             </>
         )
