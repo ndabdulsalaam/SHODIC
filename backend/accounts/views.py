@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -9,12 +10,15 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from .models import (
     PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP,
-    UserProfile, UserEmail, PendingEmailChange, ROLE_CHOICES,
+    UserProfile, UserEmail, PendingEmailChange, ROLE_CHOICES, GENDER_CHOICES,
+    AGE_RANGE_CHOICES,
 )
 from .otp import generate_otp, send_otp_email
 
 logger = logging.getLogger(__name__)
 VALID_ROLES = [choice[0] for choice in ROLE_CHOICES]
+VALID_GENDERS = [choice[0] for choice in GENDER_CHOICES]
+VALID_AGE_RANGES = [choice[0] for choice in AGE_RANGE_CHOICES]
 
 
 def _get_user_agent(request):
@@ -85,12 +89,19 @@ def _user_response(user):
         'last_name': profile.last_name if profile else '',
         'preferred_name': profile.preferred_name if profile else '',
         'role': profile.role if profile else 'patient',
+        'gender': profile.gender if profile else '',
+        'age_range': profile.age_range if profile else '',
+        'phone_number': profile.phone_number if profile else '',
     }
 
 
 def _find_user_by_email(email):
     """Find a user by email (case-insensitive)."""
     return User.objects.filter(email__iexact=email).first()
+
+
+def _drop_stale_pending_registrations():
+    PendingRegistration.objects.filter(expires_at__lt=timezone.now()).delete()
 
 
 # ─── Registration Flow ───
@@ -118,6 +129,7 @@ def register(request):
             status=status.HTTP_409_CONFLICT,
         )
 
+    _drop_stale_pending_registrations()
     otp_code = generate_otp()
 
     # Upsert pending registration (handles resend)
@@ -162,8 +174,14 @@ def verify_otp(request):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    if pending.is_expired():
+    if pending.is_stale():
         pending.delete()
+        return Response(
+            {'error': 'Pending registration has expired. Please register again.'},
+            status=status.HTTP_410_GONE,
+        )
+
+    if pending.is_expired():
         return Response(
             {'error': 'OTP has expired. Please register again.'},
             status=status.HTTP_410_GONE,
@@ -205,6 +223,9 @@ def complete_setup(request):
     preferred_name = request.data.get('preferred_name', '').strip()
     first_name = request.data.get('first_name', '').strip()
     last_name = request.data.get('last_name', '').strip()
+    gender = request.data.get('gender', '').strip().lower()
+    age_range = request.data.get('age_range', '').strip()
+    phone_number = request.data.get('phone_number', '').strip()
     role = request.data.get('role', '').strip().lower()
     password = request.data.get('password', '')
 
@@ -223,6 +244,18 @@ def complete_setup(request):
     if role not in VALID_ROLES:
         return Response(
             {'error': 'Please select a valid role'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if gender not in VALID_GENDERS:
+        return Response(
+            {'error': 'Please select a valid gender'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if age_range not in VALID_AGE_RANGES:
+        return Response(
+            {'error': 'Please select a valid age range'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -252,6 +285,9 @@ def complete_setup(request):
     profile.first_name = first_name
     profile.last_name = last_name
     profile.role = role
+    profile.gender = gender
+    profile.age_range = age_range
+    profile.phone_number = phone_number
     profile.save()
 
     # Clean up session
@@ -398,15 +434,15 @@ def resend_otp(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    _drop_stale_pending_registrations()
     otp_code = generate_otp()
 
     if purpose == 'registration':
         try:
             pending = PendingRegistration.objects.get(email=email)
             pending.otp_code = otp_code
-            from django.utils import timezone
-            pending.expires_at = timezone.now() + timedelta(minutes=5)
-            pending.save()
+            pending.otp_expires_at = timezone.now() + timedelta(minutes=PendingRegistration.OTP_MINUTES)
+            pending.save(update_fields=['otp_code', 'otp_expires_at'])
         except PendingRegistration.DoesNotExist:
             return Response(
                 {'error': 'No pending registration found'},
@@ -600,12 +636,12 @@ def me(request):
 def update_profile(request):
     """
     PATCH /api/auth/profile/
-    Body: any of { "first_name", "last_name", "preferred_name", "role" }
+    Body: any of { "first_name", "last_name", "preferred_name", "role", "gender", "age_range", "phone_number" }
     Updates profile fields for the authenticated user.
     """
     profile = request.user.profile
 
-    allowed_fields = ['first_name', 'last_name', 'preferred_name', 'role']
+    allowed_fields = ['first_name', 'last_name', 'preferred_name', 'role', 'gender', 'age_range', 'phone_number']
     updated = []
 
     for field in allowed_fields:
@@ -615,6 +651,16 @@ def update_profile(request):
             if field == 'role' and value not in VALID_ROLES:
                 return Response(
                     {'error': 'Please select a valid role'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if field == 'gender' and value not in VALID_GENDERS:
+                return Response(
+                    {'error': 'Please select a valid gender'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if field == 'age_range' and value not in VALID_AGE_RANGES:
+                return Response(
+                    {'error': 'Please select a valid age range'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             setattr(profile, field, value)
@@ -912,6 +958,9 @@ def google_complete_setup(request):
     preferred_name = request.data.get('preferred_name', '').strip()
     first_name = request.data.get('first_name', '').strip()
     last_name = request.data.get('last_name', '').strip()
+    gender = request.data.get('gender', '').strip().lower()
+    age_range = request.data.get('age_range', '').strip()
+    phone_number = request.data.get('phone_number', '').strip()
     role = request.data.get('role', '').strip().lower()
     password = request.data.get('password', '')
 
@@ -930,6 +979,18 @@ def google_complete_setup(request):
     if role not in VALID_ROLES:
         return Response(
             {'error': 'Please select a valid role'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if gender not in VALID_GENDERS:
+        return Response(
+            {'error': 'Please select a valid gender'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if age_range not in VALID_AGE_RANGES:
+        return Response(
+            {'error': 'Please select a valid age range'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -953,6 +1014,9 @@ def google_complete_setup(request):
     profile.first_name = first_name or pending.get('first_name', '')
     profile.last_name = last_name or pending.get('last_name', '')
     profile.role = role
+    profile.gender = gender
+    profile.age_range = age_range
+    profile.phone_number = phone_number
     profile.save()
 
     # Clean up session
