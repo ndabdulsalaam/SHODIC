@@ -12,6 +12,7 @@ python-dotenv>=1.2,<2.0
 
 # AI (DeepSeek via OpenAI-compatible SDK)
 openai>=2.31,<3.0
+markitdown[all]>=0.1.5,<0.2.0
 
 # HTTP (Brevo email API, Google OAuth)
 requests>=2.33,<3.0
