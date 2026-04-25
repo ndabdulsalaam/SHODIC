@@ -15,6 +15,21 @@ ROLE_CHOICES = [
     ('other_health_professional', 'Other Health Professional'),
 ]
 
+GENDER_CHOICES = [
+    ('male', 'Male'),
+    ('female', 'Female'),
+]
+
+AGE_RANGE_CHOICES = [
+    ('under_18', 'Under 18'),
+    ('18_24', '18-24'),
+    ('25_34', '25-34'),
+    ('35_44', '35-44'),
+    ('45_54', '45-54'),
+    ('55_64', '55-64'),
+    ('65_plus', '65+'),
+]
+
 
 class UserProfile(models.Model):
     """Extends Django User with identity and role for Audience-Aware Prompting."""
@@ -23,6 +38,9 @@ class UserProfile(models.Model):
     last_name = models.CharField(max_length=150, blank=True)
     preferred_name = models.CharField(max_length=150, blank=True, help_text="What should Rx call you?")
     role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='patient')
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
+    age_range = models.CharField(max_length=20, choices=AGE_RANGE_CHOICES, blank=True)
+    phone_number = models.CharField(max_length=30, blank=True)
 
     def __str__(self):
         return f"{self.user.email} — {self.get_role_display()}"
@@ -64,17 +82,28 @@ class UserEmail(models.Model):
 
 class PendingRegistration(models.Model):
     """Stores pending email verification until OTP is confirmed."""
+    RETENTION_DAYS = 30
+    OTP_MINUTES = 5
+
     email = models.EmailField(unique=True)
     otp_code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField()
 
     def is_expired(self):
+        otp_expires_at = self.otp_expires_at or self.expires_at
+        return timezone.now() > otp_expires_at
+
+    def is_stale(self):
         return timezone.now() > self.expires_at
 
     def save(self, *args, **kwargs):
+        now = timezone.now()
+        if not self.otp_expires_at:
+            self.otp_expires_at = now + timedelta(minutes=self.OTP_MINUTES)
         if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=5)
+            self.expires_at = now + timedelta(days=self.RETENTION_DAYS)
         super().save(*args, **kwargs)
 
     def __str__(self):
