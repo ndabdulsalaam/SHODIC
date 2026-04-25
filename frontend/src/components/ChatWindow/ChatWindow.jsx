@@ -1,10 +1,29 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { HiOutlineBars3, HiOutlineArrowRightOnRectangle } from 'react-icons/hi2'
+import { Fragment, useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { HiOutlineBars3, HiOutlineArrowRightOnRectangle, HiOutlineChevronDown } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
+import DateSeparator from '../DateSeparator/DateSeparator'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
 import TypingIndicator from '../TypingIndicator/TypingIndicator'
 import './ChatWindow.css'
+
+function getMessageDomId(message, index) {
+    const rawId = message.id ?? index
+    return `msg-${String(rawId).replace(/[^A-Za-z0-9_-]/g, '-')}`
+}
+
+function getMessageDateKey(message) {
+    if (!message?.created_at) return ''
+    const date = new Date(message.created_at)
+    if (Number.isNaN(date.getTime())) return ''
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+}
+
+function getMessagePreview(content) {
+    const preview = String(content || '').replace(/\s+/g, ' ').trim()
+    if (preview.length <= 50) return preview
+    return `${preview.slice(0, 50)}...`
+}
 
 function ChatWindow({
     messages,
@@ -17,6 +36,7 @@ function ChatWindow({
     onLogout,
     onEditMessage,
     onResendMessage,
+    onMessageVariantChange,
     onStopGeneration,
 }) {
     const messagesEndRef = useRef(null)
@@ -25,6 +45,21 @@ function ChatWindow({
     const prevMessagesLenRef = useRef(0)
     const [prefillText, setPrefillText] = useState('')
     const [prefillKey, setPrefillKey] = useState(0)
+    const [showScrollButton, setShowScrollButton] = useState(false)
+
+    const isWelcome = !isLoadingMessages && messages.length === 0
+
+    const userMessageNavItems = useMemo(() => (
+        messages
+            .map((msg, index) => ({
+                id: getMessageDomId(msg, index),
+                preview: getMessagePreview(msg.content),
+                role: msg.role,
+            }))
+            .filter((item) => item.role === 'user')
+    ), [messages])
+
+    const showMinimap = userMessageNavItems.length > 2 && !isWelcome && !isLoadingMessages
 
     // Suggestion chip click → pre-fill input for editing
     const handleSuggestionClick = useCallback((text) => {
@@ -43,39 +78,47 @@ function ChatWindow({
 
     // Track scroll position to know if user has scrolled up
     const handleScroll = useCallback(() => {
-        isNearBottomRef.current = checkIfNearBottom()
+        const isNearBottom = checkIfNearBottom()
+        isNearBottomRef.current = isNearBottom
+        setShowScrollButton(!isNearBottom)
     }, [checkIfNearBottom])
 
-    // Auto-scroll only when:
-    // 1. A new user message was just sent (messages length increased and last msg is user)
-    // 2. User is already near the bottom while AI is streaming
+    const scrollToBottom = useCallback((behavior = 'smooth') => {
+        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' })
+        isNearBottomRef.current = true
+    }, [])
+
+    const handleScrollToBottomClick = useCallback(() => {
+        scrollToBottom('smooth')
+        setShowScrollButton(false)
+    }, [scrollToBottom])
+
+    const scrollToMessage = useCallback((id) => {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, [])
+
+    const scrollSentMessageToTop = useCallback((message) => {
+        if (!message) return
+        const messageIndex = messages.findIndex((item) => item === message)
+        if (messageIndex === -1) return
+        const messageDomId = getMessageDomId(message, messageIndex)
+        document.getElementById(messageDomId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        isNearBottomRef.current = false
+    }, [messages])
+
+    // New user messages move to the top of the pane; streamed assistant text does not auto-follow.
     useEffect(() => {
         const newLen = messages.length
         const prevLen = prevMessagesLenRef.current
         const lastMsg = messages[newLen - 1]
 
-        // New user message just added → always scroll to bottom
+        // New user message just added -> place it at the top of the pane.
         if (newLen > prevLen && lastMsg?.role === 'user') {
-            isNearBottomRef.current = true
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }
-        // Streaming AI content or new AI message → scroll only if near bottom
-        else if (isNearBottomRef.current) {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            scrollSentMessageToTop(lastMsg)
         }
 
         prevMessagesLenRef.current = newLen
-    }, [messages])
-
-    // Also scroll when loading state starts (typing indicator appears)
-    // but only if near bottom
-    useEffect(() => {
-        if (isLoading && isNearBottomRef.current) {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }
-    }, [isLoading])
-
-    const isWelcome = !isLoadingMessages && messages.length === 0
+    }, [messages, scrollSentMessageToTop])
 
     const findResendMessageId = (messageIndex) => {
         for (let i = messageIndex - 1; i >= 0; i -= 1) {
@@ -123,17 +166,26 @@ function ChatWindow({
             <>
                 {messages.map((msg, i) => {
                     const resendMessageId = msg.role === 'assistant' ? findResendMessageId(i) : null
+                    const currentDateKey = getMessageDateKey(msg)
+                    const previousDateKey = getMessageDateKey(messages[i - 1])
+                    const shouldShowDateSeparator = currentDateKey && currentDateKey !== previousDateKey
+                    const messageDomId = getMessageDomId(msg, i)
 
                     return (
-                        <MessageBubble
-                            key={msg.id || i}
-                            message={msg}
-                            index={i}
-                            onEdit={onEditMessage}
-                            onResend={onResendMessage}
-                            resendMessageId={resendMessageId}
-                            isLoading={isLoading}
-                        />
+                        <Fragment key={msg.id || i}>
+                            {shouldShowDateSeparator && <DateSeparator date={msg.created_at} />}
+                            <div id={messageDomId} className="chat-window__message-anchor">
+                                <MessageBubble
+                                    message={msg}
+                                    index={i}
+                                    onEdit={onEditMessage}
+                                    onResend={onResendMessage}
+                                    onVariantChange={onMessageVariantChange}
+                                    resendMessageId={resendMessageId}
+                                    isLoading={isLoading}
+                                />
+                            </div>
+                        </Fragment>
                     )
                 })}
                 {isLoading && <TypingIndicator />}
@@ -172,15 +224,44 @@ function ChatWindow({
             </header>
 
             {/* Messages */}
-            <div
-                className="chat-window__messages"
-                ref={messagesContainerRef}
-                onScroll={handleScroll}
-            >
-                <div className="chat-window__messages-inner">
-                    {renderContent()}
-                    <div ref={messagesEndRef} />
+            <div className="chat-window__messages-area">
+                <div
+                    className="chat-window__messages"
+                    ref={messagesContainerRef}
+                    onScroll={handleScroll}
+                >
+                    <div className="chat-window__messages-inner">
+                        {renderContent()}
+                        <div ref={messagesEndRef} />
+                    </div>
                 </div>
+
+                {showMinimap && (
+                    <nav className="chat-window__minimap" aria-label="User message navigation">
+                        {userMessageNavItems.map((item, index) => (
+                            <button
+                                key={`${item.id}-${index}`}
+                                className="chat-window__minimap-dot"
+                                type="button"
+                                onClick={() => scrollToMessage(item.id)}
+                                aria-label={`Jump to message: ${item.preview}`}
+                            >
+                                <span className="chat-window__minimap-tooltip">{item.preview}</span>
+                            </button>
+                        ))}
+                    </nav>
+                )}
+
+                {showScrollButton && !isWelcome && !isLoadingMessages && (
+                    <button
+                        className="chat-window__scroll-bottom"
+                        type="button"
+                        onClick={handleScrollToBottomClick}
+                        aria-label="Scroll to bottom"
+                    >
+                        <HiOutlineChevronDown size={20} />
+                    </button>
+                )}
             </div>
 
             {/* Input – hidden on welcome screen since it's rendered inline */}
