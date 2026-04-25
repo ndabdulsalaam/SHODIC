@@ -237,6 +237,27 @@ announce the missing retrieval context to the user unless it materially \
 limits the answer. When in doubt, ask one clarifying question or advise \
 checking with the appropriate clinician rather than speculating."""
 
+IMAGE_ANALYSIS_PROMPT = """\
+The user has attached one or more images. Examine each image carefully.
+If an image appears to be a PRESCRIPTION, transcribe visible text, identify
+medications, dosages, instructions, and flag illegible parts. If it appears
+to be a PILL or PACKAGING, identify the drug name, strength, and manufacturer
+where visible. If it appears to show a BODY PART, describe observations, do
+not diagnose, and suggest consulting a clinician if needed. If it appears to
+be a LAB RESULT, summarize findings, flag abnormal values, and suggest
+possible diagnoses cautiously without being assertive. For unclear
+prescriptions, recommend confirming with a pharmacist."""
+
+DOCUMENT_ANALYSIS_PROMPT = """\
+The user has attached one or more documents. Review the extracted or parsed
+content. If a document appears to be a PRESCRIPTION or ORDER, list all
+medications, dosages, routes, and flag interactions or unusual dosing. If it
+appears to be a LAB REPORT, flag abnormal values and explain clinical
+significance. If it is a DRUG MONOGRAPH, extract the specific information the
+user asks about. If it is a SPREADSHEET, interpret the data and summarize key
+findings. Relate the analysis to the user's specific question. If content is
+truncated or unclear, say so."""
+
 
 # ──────────────────────────────────────────────────────────────────────
 # 5. HELPERS
@@ -301,17 +322,104 @@ def build_user_message(
     return f"{NO_CONTEXT_NOTE}\n\nUSER ROLE: {role}\nUSER QUESTION: {query}"
 
 
+def _format_document_sections(document_sections: list | None) -> str:
+    """Format extracted Office document text for the dynamic user turn."""
+    if not document_sections:
+        return ""
+
+    sections = []
+    for section in document_sections:
+        name = section.get("name", "document")
+        text = (section.get("text") or "").strip()
+        if not text:
+            text = "[No readable text was extracted.]"
+        sections.append(
+            f"DOCUMENT CONTENT (from: {name}):\n---\n{text}\n---"
+        )
+    return "\n\n".join(sections)
+
+
+def _build_attachment_user_text(
+    query: str,
+    chunks: list | None,
+    role: str,
+    attachments: list | None,
+    document_sections: list | None,
+) -> str:
+    """Build the text part that accompanies optional multimodal attachments."""
+    attachments = attachments or []
+    has_image = any(item.get("kind") == "image" for item in attachments)
+    has_document = any(item.get("kind") == "file" for item in attachments) or bool(document_sections)
+
+    prompt_blocks = []
+    if has_image:
+        prompt_blocks.append(IMAGE_ANALYSIS_PROMPT)
+    if has_document:
+        prompt_blocks.append(DOCUMENT_ANALYSIS_PROMPT)
+
+    document_block = _format_document_sections(document_sections)
+    if document_block:
+        prompt_blocks.append(document_block)
+
+    prompt_blocks.append(build_user_message(query, chunks=chunks, role=role))
+    return "\n\n".join(prompt_blocks)
+
+
+def _build_user_content(text_part: str, attachments: list | None):
+    """Return OpenRouter-compatible user content, string or multimodal parts."""
+    attachments = attachments or []
+    if not attachments:
+        return text_part
+
+    content = [{"type": "text", "text": text_part}]
+    for attachment in attachments:
+        if attachment.get("kind") == "image":
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": attachment["data_url"]},
+            })
+        elif attachment.get("kind") == "file":
+            content.append({
+                "type": "file",
+                "file": {
+                    "filename": attachment["name"],
+                    "file_data": attachment["data_url"],
+                },
+            })
+    return content
+
+
+def _select_models(attachments: list | None) -> list[str]:
+    """Return an ordered list of models to try (primary, then fallback)."""
+    if any(item.get("kind") == "image" for item in attachments or []):
+        models = [settings.OPENROUTER_VISION_MODEL]
+        fallback = settings.OPENROUTER_VISION_MODEL_FALLBACK
+        if fallback and fallback != models[0]:
+            models.append(fallback)
+        return models
+    return [settings.OPENROUTER_TEXT_MODEL]
+
+
+def _build_pdf_plugin(attachments: list | None):
+    if any(item.get("type") == "application/pdf" for item in attachments or []):
+        return [{
+            "id": "file-parser",
+            "pdf": {"engine": "cloudflare-ai"},
+        }]
+    return None
+
+
 # ──────────────────────────────────────────────────────────────────────
 # 6. LLM CLIENT  (OpenRouter only)
 # ──────────────────────────────────────────────────────────────────────
 
-def _get_client():
+def _get_client(api_key=None):
     """Return an OpenAI-compatible client configured for OpenRouter.
 
     Returns:
         OpenAI client instance, or None if the API key is missing.
     """
-    api_key = settings.OPENROUTER_API_KEY
+    api_key = api_key or settings.OPENROUTER_API_KEY
     if not api_key:
         logger.error("OPENROUTER_API_KEY is not set — cannot create LLM client")
         return None
@@ -381,6 +489,8 @@ def stream_ai_response(
     user_message,
     conversation_history=None,
     role="patient",
+    attachments=None,
+    document_sections=None,
 ):
     """Stream an AI response for a pharmacy-related query.
 
@@ -393,50 +503,73 @@ def stream_ai_response(
         conversation_history:  List of prior messages
             [{'role': 'user'|'assistant', 'content': '...'}]
         role:  One of 'patient', 'pharmacist', 'physician', 'nurse', 'other'.
+        attachments:  List of image/PDF attachment dicts to send to OpenRouter.
+        document_sections:  Extracted Office document text blocks.
 
     Yields:
         str: Text chunks as they are generated.
     """
-    client = _get_client()
-    if not client:
+    attachments = attachments or []
+    document_sections = document_sections or []
+
+    primary_key = settings.OPENROUTER_API_KEY
+    backup_key = settings.OPENROUTER_BACKUP_API_KEY
+    key_attempts = [("primary", primary_key)]
+    if backup_key:
+        key_attempts.append(("backup", backup_key))
+
+    if not primary_key and not backup_key:
+        logger.error("No OpenRouter API key is configured")
         yield _get_fallback_response()
         return
 
-    model = settings.OPENROUTER_MODEL
+    models_to_try = _select_models(attachments)
 
-    try:
-        use_reasoner = _is_complex_query(user_message, role)
+    use_reasoner = _is_complex_query(user_message, role)
 
-        logger.info(
-            f"Provider: OpenRouter | Model: {model} "
-            f"(role={role}, complex={use_reasoner})"
-        )
+    logger.info(
+        f"Provider: OpenRouter | Models: {models_to_try} "
+        f"(role={role}, complex={use_reasoner}, attachments={len(attachments)}, "
+        f"documents={len(document_sections)})"
+    )
 
-        system_message = build_system_message(role)
+    system_message = build_system_message(role)
 
-        messages = [{"role": "system", "content": system_message}]
+    messages = [{"role": "system", "content": system_message}]
 
-        if conversation_history:
-            for msg in conversation_history[-10:]:
-                messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"],
-                })
+    if conversation_history:
+        for msg in conversation_history[-10:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"],
+            })
 
-        # Retrieve relevant drug-knowledge chunks from Qdrant
-        # Qdrant Cloud Inference handles embedding server-side — no external API call
-        chunks = retrieve_context(user_message, top_k=5)
-        if chunks:
-            logger.info(f"RAG: {len(chunks)} chunks retrieved from Qdrant")
-        else:
-            logger.info("RAG: No chunks retrieved — LLM will answer from training data")
+    # Retrieve relevant drug-knowledge chunks from Qdrant
+    # Qdrant Cloud Inference handles embedding server-side — no external API call
+    chunks = retrieve_context(user_message, top_k=5)
+    if chunks:
+        logger.info(f"RAG: {len(chunks)} chunks retrieved from Qdrant")
+    else:
+        logger.info("RAG: No chunks retrieved — LLM will answer from training data")
 
-        messages.append({
-            "role": "user",
-            "content": build_user_message(user_message, chunks=chunks, role=role),
-        })
+    user_text_part = _build_attachment_user_text(
+        user_message,
+        chunks=chunks,
+        role=role,
+        attachments=attachments,
+        document_sections=document_sections,
+    )
 
-        # Complex queries get more tokens
+    messages.append({
+        "role": "user",
+        "content": _build_user_content(user_text_part, attachments),
+    })
+
+    pdf_plugin = _build_pdf_plugin(attachments)
+
+    last_error = None
+    for model_index, model in enumerate(models_to_try):
+        # Build request kwargs for this model
         create_kwargs = dict(
             model=model,
             messages=messages,
@@ -448,25 +581,69 @@ def stream_ai_response(
             create_kwargs["temperature"] = 0.7
             create_kwargs["max_tokens"] = 2048
 
-        stream = client.chat.completions.create(**create_kwargs)
+        if pdf_plugin:
+            create_kwargs["extra_body"] = {"plugins": pdf_plugin}
 
-        for chunk in stream:
-            delta = chunk.choices[0].delta
-            if delta.content:
-                yield delta.content
+        for attempt_index, (key_label, api_key) in enumerate(key_attempts):
+            if not api_key:
+                continue
 
-    except Exception as e:
-        logger.error(f"LLM API error (OpenRouter): {e}")
-        yield _get_fallback_response()
+            client = _get_client(api_key)
+            if not client:
+                continue
+
+            emitted_any = False
+            try:
+                stream = client.chat.completions.create(**create_kwargs)
+                for chunk in stream:
+                    delta = chunk.choices[0].delta
+                    if delta.content:
+                        emitted_any = True
+                        yield delta.content
+                return
+            except Exception as e:
+                last_error = e
+                logger.error(
+                    f"LLM API error (model={model}, {key_label} key): {e}"
+                )
+
+                has_next_key = attempt_index < len(key_attempts) - 1
+                if not emitted_any and has_next_key:
+                    logger.info("Retrying with backup API key")
+                    continue
+
+                if emitted_any:
+                    yield (
+                        "\n\nThe response was interrupted before RxChat could finish. "
+                        "Please send the message again if you need a complete answer."
+                    )
+                    return
+                break  # break key loop, try next model
+
+        # If we reach here, all keys failed for this model — try next model
+        has_next_model = model_index < len(models_to_try) - 1
+        if has_next_model:
+            next_model = models_to_try[model_index + 1]
+            logger.info(f"Model {model} failed, falling back to {next_model}")
+            continue
+
+    logger.error(f"All model/key attempts failed: {last_error}")
+    yield _get_fallback_response()
 
 
-def get_ai_response(user_message, conversation_history=None, role="patient"):
+def get_ai_response(user_message, conversation_history=None, role="patient", attachments=None, document_sections=None):
     """Non-streaming wrapper — collects the full response.
 
     Kept for backward compatibility and non-streaming endpoints.
     """
     parts = []
-    for chunk in stream_ai_response(user_message, conversation_history, role):
+    for chunk in stream_ai_response(
+        user_message,
+        conversation_history,
+        role,
+        attachments=attachments,
+        document_sections=document_sections,
+    ):
         parts.append(chunk)
     return "".join(parts)
 
