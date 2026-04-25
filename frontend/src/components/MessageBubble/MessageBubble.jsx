@@ -9,6 +9,7 @@ import {
     HiOutlineChevronLeft,
     HiOutlineChevronRight,
     HiOutlineClipboard,
+    HiOutlineDocument,
     HiOutlinePaperAirplane,
     HiOutlinePencil,
     HiOutlineXMark,
@@ -145,6 +146,11 @@ function SmartMarkdownTable({ children, ...props }) {
 
 function MessageBubble({ message, index, onEdit, onResend, onVariantChange, resendMessageId, isLoading }) {
     const isUser = message.role === 'user'
+    const attachments = Array.isArray(message.attachments) ? message.attachments : []
+    const hasAttachments = attachments.length > 0
+    const hasEditableAttachments = hasAttachments
+        && attachments.every((attachment) => attachment.kind === 'image' && attachment.preview_data_url)
+    const canEdit = isUser && onEdit && (!hasAttachments || hasEditableAttachments)
     const variantNavigation = message._variantNavigation
     const hasVariants = Boolean(variantNavigation && variantNavigation.total > 1)
     const [isEditing, setIsEditing] = useState(false)
@@ -169,7 +175,8 @@ function MessageBubble({ message, index, onEdit, onResend, onVariantChange, rese
 
     const handleEditSave = () => {
         const trimmed = editText.trim()
-        if (trimmed && trimmed !== message.content && onEdit) {
+        const changed = trimmed !== message.content
+        if (changed && (trimmed || hasEditableAttachments) && onEdit) {
             onEdit(message.id, trimmed)
         }
         setIsEditing(false)
@@ -227,7 +234,26 @@ function MessageBubble({ message, index, onEdit, onResend, onVariantChange, rese
                             </div>
                         </div>
                     ) : isUser ? (
-                        <p>{message.content}</p>
+                        <div className="message__user-body">
+                            {hasAttachments && (
+                                <div className="message__attachments">
+                                    {attachments.map((attachment, attachmentIndex) => (
+                                        <div
+                                            className={`message__attachment message__attachment--${attachment.kind}`}
+                                            key={`${attachment.name}-${attachmentIndex}`}
+                                        >
+                                            {attachment.kind === 'image' && attachment.preview_data_url ? (
+                                                <img src={attachment.preview_data_url} alt={attachment.name} />
+                                            ) : (
+                                                <HiOutlineDocument size={17} />
+                                            )}
+                                            <span>{attachment.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {message.content && <p>{message.content}</p>}
+                        </div>
                     ) : (
                         <div className="message__markdown">
                             <Markdown
@@ -266,7 +292,7 @@ function MessageBubble({ message, index, onEdit, onResend, onVariantChange, rese
                                     {copied ? <HiOutlineCheck size={13} /> : <HiOutlineClipboard size={13} />}
                                 </button>
 
-                                {isUser && onEdit && (
+                                {canEdit && (
                                     <button
                                         className="message__action-btn"
                                         onClick={handleEditStart}

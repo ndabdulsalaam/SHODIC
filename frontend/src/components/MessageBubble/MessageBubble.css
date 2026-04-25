@@ -86,6 +86,49 @@
     color: var(--color-secondary-dark);
 }
 
+.message__user-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.message__attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.message__attachment {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: min(100%, 260px);
+    min-height: 38px;
+    padding: 5px 8px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(46, 196, 182, 0.32);
+    color: var(--color-text-secondary);
+}
+
+.message__attachment img {
+    width: 54px;
+    height: 54px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.message__attachment span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
 /* ---- Markdown content (AI messages) ---- */
 .message__markdown {
     font-size: var(--font-size-base);
