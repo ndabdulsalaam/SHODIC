@@ -8,37 +8,11 @@ import './ChatPage.css'
 const AUTH_USER_CACHE_KEY = 'rxchat_auth_user'
 function normalizeSendPayload(payload) {
     if (typeof payload === 'string') {
-        return { text: payload, attachments: [] }
+        return { text: payload }
     }
     return {
         text: payload?.text || '',
-        attachments: Array.isArray(payload?.attachments) ? payload.attachments : [],
     }
-}
-
-function attachmentMetadata(attachments) {
-    return attachments.map((attachment) => {
-        const metadata = {
-            kind: attachment.kind,
-            name: attachment.name,
-            type: attachment.type,
-            size_bytes: attachment.size_bytes,
-        }
-        if (attachment.kind === 'image' && attachment.preview_data_url) {
-            metadata.preview_data_url = attachment.preview_data_url
-        }
-        return metadata
-    })
-}
-
-function attachmentRequestPayload(attachments) {
-    return attachments.map((attachment) => ({
-        kind: attachment.kind,
-        name: attachment.name,
-        type: attachment.type,
-        data_url: attachment.data_url,
-        preview_data_url: attachment.preview_data_url || '',
-    }))
 }
 
 function readCachedAuthUser() {
@@ -84,6 +58,7 @@ function ChatPage() {
     const updateStreamingMessage = useCallback((conversationId, aiMsg, content, messageId, markComplete = false) => {
         if (!conversationId) return
 
+        const targetKey = aiMsg._clientKey || aiMsg.id
         setConversations((prev) =>
             prev.map((c) => {
                 if (c.id !== conversationId) return c
@@ -91,6 +66,8 @@ function ChatPage() {
                 let foundStreamingMessage = false
                 const msgs = c.messages.map((m) => {
                     if (!m._streaming) return m
+                    const messageKey = m._clientKey || m.id
+                    if (messageKey !== targetKey) return m
 
                     foundStreamingMessage = true
                     return {
@@ -255,21 +232,20 @@ function ChatPage() {
     }, [API])
 
     const handleSendMessage = useCallback(async (payload) => {
-        const { text, attachments } = normalizeSendPayload(payload)
+        const { text } = normalizeSendPayload(payload)
         const trimmedText = text.trim()
-        if (!trimmedText && attachments.length === 0) return
-        const localTitleSource = trimmedText || attachments.map((attachment) => attachment.name).join(', ') || 'New Conversation'
+        if (!trimmedText) return
+        const localTitleSource = trimmedText || 'New Conversation'
 
         let convId = activeConversationId
         const tempUserMessageId = `pending-user-${Date.now()}`
-        const messageAttachments = attachmentMetadata(attachments)
 
         const userMsg = {
             id: tempUserMessageId,
             _clientKey: tempUserMessageId,
             role: 'user',
             content: trimmedText,
-            attachments: messageAttachments,
+            attachments: [],
             created_at: new Date().toISOString(),
             _pending: true,
         }
@@ -295,7 +271,6 @@ function ChatPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: trimmedText,
-                    attachments: attachmentRequestPayload(attachments),
                     ...(convId ? { conversation_id: convId } : {}),
                 }),
                 signal: controller.signal,

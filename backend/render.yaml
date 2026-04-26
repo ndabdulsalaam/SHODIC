@@ -27,7 +27,7 @@ services:
       - key: QDRANT_API_KEY
         sync: false
       - key: QDRANT_COLLECTION
-        value: "rxchat_drugs"
+        value: "rxchat"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
@@ -38,7 +38,6 @@ services:
         sync: false
       - key: BREVO_SENDER_EMAIL
         sync: false
-      - key: BREVO_SENDER_NAME
-        value: "RxChat"
+
       - key: PYTHON_VERSION
         value: "3.12.3"

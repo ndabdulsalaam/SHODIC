@@ -6,6 +6,13 @@ from unittest.mock import patch
 from rest_framework.test import APIClient
 
 from .models import PendingLoginOTP, PendingRegistration
+from .otp import generate_otp
+
+
+class OtpUtilityTests(TestCase):
+    def test_generate_otp_returns_zero_padded_six_digit_code(self):
+        with patch("accounts.otp.secrets.randbelow", return_value=42):
+            self.assertEqual(generate_otp(), "000042")
 
 
 class ProfileApiTests(TestCase):

@@ -68,7 +68,7 @@ def check_qdrant():
 
     qdrant_url = os.getenv("QDRANT_URL", "")
     qdrant_key = os.getenv("QDRANT_API_KEY", "")
-    qdrant_col = os.getenv("QDRANT_COLLECTION", "rxchat_drugs")
+    qdrant_col = os.getenv("QDRANT_COLLECTION", "rxchat")
 
     if not qdrant_url or not qdrant_key:
         print(f"  {SKIP}  QDRANT_URL or QDRANT_API_KEY not set")

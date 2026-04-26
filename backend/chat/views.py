@@ -1,5 +1,7 @@
+import json
 import tempfile
 
+from django.db.models import Count
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -18,6 +20,7 @@ DEFAULT_ATTACHMENT_PROMPT = "Please review the attached files/images."
 OFFICE_EXTENSIONS = {'.docx', '.pptx', '.xls', '.xlsx'}
 MAX_DOCUMENT_CHARS_PER_ATTACHMENT = 20000
 MAX_DOCUMENT_CHARS_TOTAL = 45000
+MAX_HISTORY_MESSAGES = 10
 
 
 def _get_owner_filter(request):
@@ -38,6 +41,37 @@ def _get_user_role(request):
         except Exception:
             pass
     return 'patient'
+
+
+def _get_owned_user_message(message_id, owner):
+    filters = {
+        'id': message_id,
+        'role': 'user',
+    }
+    if owner.get('user'):
+        filters['conversation__user'] = owner['user']
+    else:
+        filters['conversation__session_key'] = owner.get('session_key')
+    return Message.objects.select_related('conversation').get(**filters)
+
+
+def _conversation_history_before(conversation, message, limit=MAX_HISTORY_MESSAGES):
+    recent = list(
+        conversation.messages
+        .filter(created_at__lt=message.created_at)
+        .order_by('-created_at')
+        .values('role', 'content')[:limit]
+    )
+    return list(reversed(recent))
+
+
+def _sse_json(event, payload):
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _sse_text(chunk):
+    escaped = chunk.replace('\r', '').replace('\n', '\\n')
+    return f"data: {escaped}\n\n"
 
 
 def _attachment_metadata(attachments):
@@ -196,11 +230,7 @@ def send_message(request):
     )
 
     # Get conversation history for context
-    history = list(
-        conversation.messages
-        .order_by('created_at')
-        .values('role', 'content')
-    )[:-1]  # Exclude the message we just saved (already in user_text)
+    history = _conversation_history_before(conversation, user_message)
 
     # Check for role override on the conversation
     effective_role = getattr(conversation, 'role_override', None) or role
@@ -210,12 +240,11 @@ def send_message(request):
         full_response = []
 
         # Send conversation metadata as the first event
-        yield (
-            "event: meta\n"
-            f"data: {{\"conversation_id\": \"{conversation.id}\", "
-            f"\"conversation_title\": \"{conversation.title}\", "
-            f"\"user_message_id\": \"{user_message.id}\"}}\n\n"
-        )
+        yield _sse_json("meta", {
+            "conversation_id": str(conversation.id),
+            "conversation_title": conversation.title,
+            "user_message_id": str(user_message.id),
+        })
 
         for chunk in stream_ai_response(
             ai_user_text,
@@ -225,9 +254,7 @@ def send_message(request):
             document_sections=document_sections,
         ):
             full_response.append(chunk)
-            # Escape newlines for SSE data field
-            escaped = chunk.replace('\n', '\\n')
-            yield f"data: {escaped}\n\n"
+            yield _sse_text(chunk)
 
         # Save the complete AI message to the database
         ai_content = "".join(full_response)
@@ -239,7 +266,7 @@ def send_message(request):
         conversation.save()
 
         # Send done event with message ID
-        yield f"event: done\ndata: {{\"message_id\": \"{ai_message.id}\"}}\n\n"
+        yield _sse_json("done", {"message_id": str(ai_message.id)})
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -257,7 +284,7 @@ def list_conversations(request):
     List all conversations for the current user/session.
     """
     owner = _get_owner_filter(request)
-    conversations = Conversation.objects.filter(**owner)
+    conversations = Conversation.objects.filter(**owner).annotate(message_count=Count('messages'))
     serializer = ConversationListSerializer(conversations, many=True)
     return Response(serializer.data)
 
@@ -270,7 +297,12 @@ def get_conversation(request, conversation_id):
     """
     owner = _get_owner_filter(request)
     try:
-        conversation = Conversation.objects.get(id=conversation_id, **owner)
+        conversation = (
+            Conversation.objects
+            .prefetch_related('messages')
+            .annotate(message_count=Count('messages'))
+            .get(id=conversation_id, **owner)
+        )
     except Conversation.DoesNotExist:
         return Response(
             {'error': 'Conversation not found'},
@@ -339,14 +371,9 @@ def edit_message(request, message_id):
     content = request.data.get('content', '').strip()
 
     try:
-        message = Message.objects.get(id=message_id, role='user')
+        message = _get_owned_user_message(message_id, owner)
         conversation = message.conversation
-        # Verify ownership
-        if owner.get('user'):
-            assert conversation.user == owner['user']
-        else:
-            assert conversation.session_key == owner.get('session_key')
-    except (Message.DoesNotExist, AssertionError):
+    except Message.DoesNotExist:
         return Response(
             {'error': 'Message not found'},
             status=status.HTTP_404_NOT_FOUND
@@ -376,11 +403,7 @@ def edit_message(request, message_id):
     message.save()
 
     # Get conversation history up to the edited message
-    history = list(
-        conversation.messages
-        .order_by('created_at')
-        .values('role', 'content')
-    )[:-1]
+    history = _conversation_history_before(conversation, message)
 
     role = _get_user_role(request)
     effective_role = getattr(conversation, 'role_override', None) or role
@@ -390,7 +413,10 @@ def edit_message(request, message_id):
     def event_stream():
         full_response = []
 
-        yield f"event: meta\ndata: {{\"conversation_id\": \"{conversation.id}\", \"edited_message_id\": \"{message.id}\"}}\n\n"
+        yield _sse_json("meta", {
+            "conversation_id": str(conversation.id),
+            "edited_message_id": str(message.id),
+        })
 
         for chunk in stream_ai_response(
             ai_user_text,
@@ -399,8 +425,7 @@ def edit_message(request, message_id):
             attachments=llm_attachments,
         ):
             full_response.append(chunk)
-            escaped = chunk.replace('\n', '\\n')
-            yield f"data: {escaped}\n\n"
+            yield _sse_text(chunk)
 
         ai_content = "".join(full_response)
         ai_message = Message.objects.create(
@@ -410,7 +435,7 @@ def edit_message(request, message_id):
         )
         conversation.save()
 
-        yield f"event: done\ndata: {{\"message_id\": \"{ai_message.id}\"}}\n\n"
+        yield _sse_json("done", {"message_id": str(ai_message.id)})
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -432,13 +457,9 @@ def resend_message(request, message_id):
     owner = _get_owner_filter(request)
 
     try:
-        message = Message.objects.get(id=message_id, role='user')
+        message = _get_owned_user_message(message_id, owner)
         conversation = message.conversation
-        if owner.get('user'):
-            assert conversation.user == owner['user']
-        else:
-            assert conversation.session_key == owner.get('session_key')
-    except (Message.DoesNotExist, AssertionError):
+    except Message.DoesNotExist:
         return Response(
             {'error': 'Message not found'},
             status=status.HTTP_404_NOT_FOUND
@@ -458,11 +479,7 @@ def resend_message(request, message_id):
     ).delete()
 
     # Get conversation history up to and including this message
-    history = list(
-        conversation.messages
-        .order_by('created_at')
-        .values('role', 'content')
-    )[:-1]
+    history = _conversation_history_before(conversation, message)
 
     role = _get_user_role(request)
     effective_role = getattr(conversation, 'role_override', None) or role
@@ -472,7 +489,7 @@ def resend_message(request, message_id):
     def event_stream():
         full_response = []
 
-        yield f"event: meta\ndata: {{\"conversation_id\": \"{conversation.id}\"}}\n\n"
+        yield _sse_json("meta", {"conversation_id": str(conversation.id)})
 
         for chunk in stream_ai_response(
             ai_user_text,
@@ -481,8 +498,7 @@ def resend_message(request, message_id):
             attachments=llm_attachments,
         ):
             full_response.append(chunk)
-            escaped = chunk.replace('\n', '\\n')
-            yield f"data: {escaped}\n\n"
+            yield _sse_text(chunk)
 
         ai_content = "".join(full_response)
         ai_message = Message.objects.create(
@@ -492,7 +508,7 @@ def resend_message(request, message_id):
         )
         conversation.save()
 
-        yield f"event: done\ndata: {{\"message_id\": \"{ai_message.id}\"}}\n\n"
+        yield _sse_json("done", {"message_id": str(ai_message.id)})
 
     response = StreamingHttpResponse(
         event_stream(),

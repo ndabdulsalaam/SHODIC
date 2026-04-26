@@ -37,6 +37,9 @@
         --rxc-accent-dark: #1f9a8e;
         --rxc-error: #E63946;
         --rxc-success: #2ECC71;
+        --rxc-admin-header-height: 88px;
+        --rxc-admin-breadcrumb-height: 48px;
+        --rxc-admin-changelist-header-height: 74px;
     }
 
     /* Dark mode */
@@ -103,6 +106,10 @@
         background: var(--rxc-bg) !important;
     }
 
+    #container {
+        min-height: 100dvh;
+    }
+
     /* ── Header — clean white bar ────────────────── */
     #header {
         background: var(--rxc-surface) !important;
@@ -110,6 +117,11 @@
         padding: 14px 24px !important;
         box-shadow: 0 1px 0 var(--rxc-border);
         border-bottom: none;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        min-height: var(--rxc-admin-header-height);
+        box-sizing: border-box;
     }
 
     #rxchat-branding {
@@ -176,6 +188,11 @@
         padding: 8px 24px !important;
         font-size: 0.78rem;
         border-bottom: 1px solid var(--rxc-border) !important;
+        position: sticky;
+        top: var(--rxc-admin-header-height);
+        z-index: 900;
+        min-height: var(--rxc-admin-breadcrumb-height);
+        box-sizing: border-box;
     }
 
     div.breadcrumbs a {
@@ -185,12 +202,71 @@
     /* ── Content ─────────────────────────────────── */
     #content {
         padding: 24px !important;
+        min-width: 0;
+    }
+
+    #main {
+        align-items: flex-start;
     }
 
     #content h1 {
         font-weight: 600 !important;
         font-size: 1.35rem !important;
         color: var(--rxc-text) !important;
+    }
+
+    .rxc-changelist-header {
+        position: sticky;
+        top: calc(var(--rxc-admin-header-height) + var(--rxc-admin-breadcrumb-height));
+        z-index: 870;
+        display: grid;
+        grid-template-columns: minmax(240px, auto) minmax(340px, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        background: var(--rxc-bg) !important;
+        margin: -24px -24px 16px !important;
+        padding: 14px 24px !important;
+        border-bottom: 1px solid var(--rxc-border);
+        box-sizing: border-box;
+        min-height: var(--rxc-admin-changelist-header-height);
+    }
+
+    .rxc-changelist-header h1 {
+        margin: 0 !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .rxc-changelist-search {
+        min-width: 0;
+    }
+
+    .rxc-changelist-search #toolbar {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .rxc-changelist-search #toolbar form {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 620px;
+    }
+
+    .rxc-changelist-search #searchbar {
+        flex: 1 1 320px;
+        min-width: 160px;
+        max-width: 480px;
+    }
+
+    .rxc-changelist-header .object-tools {
+        float: none;
+        display: flex;
+        justify-content: flex-end;
+        margin: 0 !important;
+        padding: 0 !important;
+        white-space: nowrap;
     }
 
     /* ── Modules (cards) ─────────────────────────── */
@@ -212,6 +288,68 @@
         text-transform: uppercase;
         letter-spacing: 0.4px;
         border-bottom: 1px solid var(--rxc-border) !important;
+    }
+
+    /* ── Admin navigation sidebar ───────────────────── */
+    #nav-sidebar {
+        background: var(--rxc-surface) !important;
+        border-right: 1px solid var(--rxc-border) !important;
+        position: sticky !important;
+        top: calc(var(--rxc-admin-header-height) + var(--rxc-admin-breadcrumb-height)) !important;
+        align-self: flex-start;
+        max-height: calc(100dvh - var(--rxc-admin-header-height) - var(--rxc-admin-breadcrumb-height));
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+    }
+
+    #nav-sidebar::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    #nav-sidebar::-webkit-scrollbar-thumb {
+        background: var(--rxc-border);
+        border-radius: 999px;
+    }
+
+    #nav-sidebar #nav-filter {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--rxc-surface) !important;
+        border: 1px solid var(--rxc-border) !important;
+        color: var(--rxc-text) !important;
+        box-sizing: border-box;
+    }
+
+    #nav-sidebar .module {
+        background: var(--rxc-surface) !important;
+        border: 1px solid var(--rxc-border) !important;
+        border-radius: 8px !important;
+        overflow: hidden;
+    }
+
+    #nav-sidebar .module h2,
+    #nav-sidebar .module caption,
+    #nav-sidebar caption {
+        background: var(--rxc-bg) !important;
+        color: var(--rxc-text) !important;
+        opacity: 1 !important;
+        text-shadow: none !important;
+    }
+
+    #nav-sidebar .module th,
+    #nav-sidebar .module td {
+        background: var(--rxc-surface) !important;
+        color: var(--rxc-text) !important;
+        border-bottom: 1px solid var(--rxc-border-light) !important;
+    }
+
+    #nav-sidebar .module a {
+        color: var(--rxc-text) !important;
+    }
+
+    #nav-sidebar .module a:hover {
+        color: var(--rxc-accent) !important;
     }
 
     /* ── Tables ───────────────────────────────────── */
@@ -352,6 +490,12 @@
         background: var(--rxc-surface) !important;
         border: 1px solid var(--rxc-border);
         border-radius: 8px;
+        position: sticky;
+        top: calc(var(--rxc-admin-header-height) + var(--rxc-admin-breadcrumb-height) + var(--rxc-admin-changelist-header-height) + 12px);
+        align-self: flex-start;
+        max-height: calc(100dvh - var(--rxc-admin-header-height) - var(--rxc-admin-breadcrumb-height) - var(--rxc-admin-changelist-header-height) - 24px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
 
     #changelist-filter h2 {
@@ -404,6 +548,34 @@
 
     #content a:hover {
         color: var(--rxc-accent);
+    }
+
+    @media (max-width: 980px) {
+        :root {
+            --rxc-admin-changelist-header-height: 148px;
+        }
+
+        .rxc-changelist-header {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .rxc-changelist-header h1 {
+            white-space: normal;
+        }
+
+        .rxc-changelist-search #toolbar form {
+            max-width: none;
+        }
+
+        .rxc-changelist-search #searchbar {
+            max-width: none;
+        }
+
+        .rxc-changelist-header .object-tools {
+            justify-content: flex-start;
+        }
     }
 
     /* ── Messages ────────────────────────────────── */

@@ -1,4 +1,5 @@
 import base64
+import json
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -86,13 +87,14 @@ class ChatPromptTests(TestCase):
 
 
 class ChatInputSerializerTests(TestCase):
-    def test_allows_attachment_only_message(self):
+    def test_rejects_attachment_only_message_while_paused(self):
         serializer = ChatInputSerializer(data={
             "message": "",
             "attachments": [image_attachment()],
         })
 
-        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("Attachments are temporarily unavailable.", str(serializer.errors))
 
     def test_requires_message_or_attachment(self):
         serializer = ChatInputSerializer(data={"message": ""})
@@ -199,7 +201,27 @@ class ChatApiTests(TestCase):
         self.assertEqual(assistant_message.content, "Hello from RxChat")
 
     @patch("chat.views.stream_ai_response")
-    def test_send_message_persists_attachment_metadata_without_uploaded_data(self, mock_stream):
+    def test_send_message_meta_event_escapes_json_title(self, mock_stream):
+        mock_stream.return_value = iter(["Safe answer"])
+
+        response = self.client.post(
+            "/api/chat/send/",
+            {"message": 'What about "quoted" dosing?'},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = self._consume_stream(response)
+        meta_line = next(
+            line for line in body.splitlines()
+            if line.startswith('data: {"conversation_id"')
+        )
+        meta = json.loads(meta_line.removeprefix("data: "))
+
+        self.assertEqual(meta["conversation_title"], 'What about "quoted" dosing?')
+
+    @patch("chat.views.stream_ai_response")
+    def test_send_message_rejects_new_attachments_while_paused(self, mock_stream):
         mock_stream.return_value = iter(["Attachment answer"])
 
         response = self.client.post(
@@ -211,21 +233,10 @@ class ChatApiTests(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, 200)
-        self._consume_stream(response)
-
-        conversation = Conversation.objects.get()
-        user_message = conversation.messages.get(role="user")
-        self.assertEqual(user_message.content, "")
-        self.assertEqual(len(user_message.attachments), 1)
-        self.assertEqual(user_message.attachments[0]["name"], "prescription.jpg")
-        self.assertIn("preview_data_url", user_message.attachments[0])
-        self.assertNotIn("data_url", user_message.attachments[0])
-
-        args, kwargs = mock_stream.call_args
-        self.assertEqual(args[0], "Please review the attached files/images.")
-        self.assertEqual(kwargs["attachments"][0]["name"], "prescription.jpg")
-        self.assertEqual(kwargs["attachments"][0]["kind"], "image")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Attachments are temporarily unavailable.", str(response.data))
+        self.assertFalse(Conversation.objects.exists())
+        mock_stream.assert_not_called()
 
     def test_conversation_detail_is_limited_to_owner(self):
         owner = User.objects.create_user(username="owner@example.com", email="owner@example.com", password="password123")

@@ -66,6 +66,9 @@ class ConversationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_message_count(self, obj):
+        annotated_count = getattr(obj, 'message_count', None)
+        if annotated_count is not None:
+            return annotated_count
         return obj.messages.count()
 
 
@@ -78,6 +81,9 @@ class ConversationListSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'created_at', 'updated_at', 'message_count']
 
     def get_message_count(self, obj):
+        annotated_count = getattr(obj, 'message_count', None)
+        if annotated_count is not None:
+            return annotated_count
         return obj.messages.count()
 
 
@@ -92,6 +98,9 @@ class ChatInputSerializer(serializers.Serializer):
     )
 
     def validate_attachments(self, attachments):
+        if attachments:
+            raise serializers.ValidationError('Attachments are temporarily unavailable.')
+
         if len(attachments) > MAX_ATTACHMENTS:
             raise serializers.ValidationError(f'Attach up to {MAX_ATTACHMENTS} files per message.')
 

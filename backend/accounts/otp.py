@@ -1,7 +1,7 @@
 """OTP generation and email sending utilities."""
 
-import random
 import logging
+import secrets
 import threading
 import requests
 from django.conf import settings
@@ -13,7 +13,7 @@ BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
 def generate_otp():
     """Generate a 6-digit OTP code."""
-    return str(random.randint(100000, 999999))
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def _build_html_email(otp_code, purpose):
@@ -138,7 +138,7 @@ def send_otp_email(email, otp_code, purpose='registration'):
         subject = 'Verify Your New Email'
         plain = f"Use this code to verify your new email address: {otp_code} (expires in 5 min)"
     else:
-        subject = 'We noticed a login from a new device'
+        subject = 'Login Verification'
         plain = f"We noticed a login from a new device. Your verification code is {otp_code} (expires in 5 min)"
 
     html_content = _build_html_email(otp_code, purpose)

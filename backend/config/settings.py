@@ -3,6 +3,7 @@ Django settings for RxChat.
 """
 
 import os
+import importlib.util
 from pathlib import Path
 from dotenv import load_dotenv
 import dj_database_url
@@ -31,6 +32,9 @@ INSTALLED_APPS = [
     'chat',
     'accounts',
 ]
+
+if importlib.util.find_spec('django_q'):
+    INSTALLED_APPS.append('django_q')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -93,6 +97,8 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -140,8 +146,25 @@ OPENROUTER_VISION_MODEL_FALLBACK = os.getenv('OPENROUTER_VISION_MODEL_FALLBACK',
 # Vector DB — Qdrant Cloud (for RAG retrieval)
 QDRANT_URL = os.getenv('QDRANT_URL', '')
 QDRANT_API_KEY = os.getenv('QDRANT_API_KEY', '')
-QDRANT_COLLECTION = os.getenv('QDRANT_COLLECTION', 'rxchat_drugs')
-QDRANT_INFERENCE_MODEL = os.getenv('QDRANT_INFERENCE_MODEL', '')
+QDRANT_COLLECTION = os.getenv('QDRANT_COLLECTION', 'rxchat')
+QDRANT_INFERENCE_MODEL = os.getenv('QDRANT_INFERENCE_MODEL', 'intfloat/multilingual-e5-small')
+QDRANT_SPARSE_MODEL = os.getenv('QDRANT_SPARSE_MODEL', 'qdrant/bm25')
+QDRANT_DENSE_VECTOR_NAME = os.getenv('QDRANT_DENSE_VECTOR_NAME', 'dense')
+QDRANT_SPARSE_VECTOR_NAME = os.getenv('QDRANT_SPARSE_VECTOR_NAME', 'sparse')
+QDRANT_VECTOR_SIZE = int(os.getenv('QDRANT_VECTOR_SIZE', '384'))
+QDRANT_DISTANCE = os.getenv('QDRANT_DISTANCE', 'Cosine')
+
+# Data acquisition
+OPENFDA_API_KEY = os.getenv('OPENFDA_API_KEY', '')
+
+Q_CLUSTER = {
+    'name': 'rxchat',
+    'workers': 1,
+    'timeout': 14400,
+    'retry': 14500,
+    'orm': 'default',
+    'save_limit': 50,
+}
 
 # Email — Brevo HTTP API (primary), Django console (dev fallback)
 BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')

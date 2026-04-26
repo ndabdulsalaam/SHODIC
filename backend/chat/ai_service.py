@@ -400,6 +400,11 @@ def _select_models(attachments: list | None) -> list[str]:
     return [settings.OPENROUTER_TEXT_MODEL]
 
 
+def _select_model(attachments: list | None) -> str:
+    """Backward-compatible single-model selector used by older tests."""
+    return _select_models(attachments)[0]
+
+
 def _build_pdf_plugin(attachments: list | None):
     if any(item.get("type") == "application/pdf" for item in attachments or []):
         return [{
@@ -546,7 +551,7 @@ def stream_ai_response(
 
     # Retrieve relevant drug-knowledge chunks from Qdrant
     # Qdrant Cloud Inference handles embedding server-side — no external API call
-    chunks = retrieve_context(user_message, top_k=5)
+    chunks = retrieve_context(user_message, top_k=10)
     if chunks:
         logger.info(f"RAG: {len(chunks)} chunks retrieved from Qdrant")
     else:
