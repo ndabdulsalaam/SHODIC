@@ -1,0 +1,142 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a> &rsaquo; Data Ingestion
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Data Ingestion</h1>
+
+    <div class="module">
+        <h2>Run Background Tasks</h2>
+        <div style="padding: 16px; display: grid; gap: 12px; max-width: 720px;">
+            <form method="post" class="ingestion-action" data-confirm="Queue a full NAFDAC scrape?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="scrape_nafdac_full">
+                <button type="submit" class="button default">Scrape NAFDAC full</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Resume the last NAFDAC scrape?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="scrape_nafdac_resume">
+                <button type="submit" class="button">Scrape NAFDAC resume</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Queue a NAFDAC category scrape?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="scrape_nafdac_category">
+                <label for="category">NAFDAC category</label>
+                <select id="category" name="category">
+                    {% for category_id, category_name in categories.items %}
+                    <option value="{{ category_id }}">{{ category_name }} ({{ category_id }})</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="button">Scrape category</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Queue curated OpenFDA pull?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="pull_openfda_curated">
+                <button type="submit" class="button default">Pull OpenFDA curated</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Queue full OpenFDA pull? This can be large.">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="pull_openfda_full">
+                <button type="submit" class="button">Pull OpenFDA full</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Queue full parsing and Qdrant ingestion?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="ingest_all">
+                <button type="submit" class="button default">Ingest drugs</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Create or update default Django-Q2 schedules?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="setup_schedules">
+                <button type="submit" class="button">Setup schedules</button>
+            </form>
+
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="check_sources">
+                <button type="submit" class="button">Check sources</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="module">
+        <h2>Upload Manual Source</h2>
+        <div style="padding: 16px; max-width: 720px;">
+            <form method="post" enctype="multipart/form-data" class="ingestion-action" data-confirm="Upload and queue processing for this source file?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload_source_file">
+                <p>
+                    <label for="source">Source</label>
+                    <select id="source" name="source">
+                        {% for source_value, source_label in manual_sources %}
+                        <option value="{{ source_value }}">{{ source_label }}</option>
+                        {% endfor %}
+                    </select>
+                </p>
+                <p>
+                    <label for="file">File</label>
+                    <input id="file" name="file" type="file" required>
+                </p>
+                <p>
+                    <label for="description">Description</label>
+                    <input id="description" name="description" type="text">
+                </p>
+                <button type="submit" class="button default">Upload and process</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="module">
+        <h2>Source Status</h2>
+        <table style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Type</th>
+                    <th>Expected file</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in source_rows %}
+                <tr>
+                    <td>{{ row.source }}</td>
+                    <td>{{ row.type }}</td>
+                    <td>{{ row.expected_file }}</td>
+                    <td>{{ row.status }}</td>
+                    <td>
+                        {% if row.command %}
+                            <code>{{ row.command }}</code>
+                        {% elif row.url %}
+                            <a href="{{ row.url }}" rel="noopener noreferrer" target="_blank">{{ row.url }}</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll(".ingestion-action").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+        var message = form.getAttribute("data-confirm") || "Queue this task?";
+        if (!window.confirm(message)) {
+            event.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}
