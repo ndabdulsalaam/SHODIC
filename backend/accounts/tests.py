@@ -29,7 +29,7 @@ class ProfileApiTests(TestCase):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.patch(
-            "/api/auth/profile/",
+            "/auth/profile/",
             {
                 "first_name": "Ada",
                 "last_name": "Okafor",
@@ -58,7 +58,7 @@ class ProfileApiTests(TestCase):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.patch(
-            "/api/auth/profile/",
+            "/auth/profile/",
             {"role": "wizard"},
             format="json",
         )
@@ -80,7 +80,7 @@ class AuthOtpFlowTests(TestCase):
     @patch("accounts.views.send_otp_email")
     def test_trusted_device_does_not_request_otp_on_second_or_third_visit(self, send_otp_email):
         first_login = self.client.post(
-            "/api/auth/login/",
+            "/auth/login/",
             {"email": self.user.email, "password": "password123"},
             format="json",
             HTTP_USER_AGENT="trusted-browser",
@@ -91,7 +91,7 @@ class AuthOtpFlowTests(TestCase):
 
         pending = PendingLoginOTP.objects.get(user=self.user)
         verify = self.client.post(
-            "/api/auth/verify-device/",
+            "/auth/verify-device/",
             {"email": self.user.email, "otp": pending.otp_code},
             format="json",
             HTTP_USER_AGENT="trusted-browser",
@@ -99,9 +99,9 @@ class AuthOtpFlowTests(TestCase):
         self.assertEqual(verify.status_code, 200)
         self.assertIn("device_token", self.client.cookies)
 
-        self.client.post("/api/auth/logout/", format="json")
+        self.client.post("/auth/logout/", format="json")
         second_login = self.client.post(
-            "/api/auth/login/",
+            "/auth/login/",
             {"email": self.user.email, "password": "password123"},
             format="json",
             HTTP_USER_AGENT="trusted-browser",
@@ -109,9 +109,9 @@ class AuthOtpFlowTests(TestCase):
         self.assertEqual(second_login.status_code, 200)
         self.assertNotIn("otp_required", second_login.data)
 
-        self.client.post("/api/auth/logout/", format="json")
+        self.client.post("/auth/logout/", format="json")
         third_login = self.client.post(
-            "/api/auth/login/",
+            "/auth/login/",
             {"email": self.user.email, "password": "password123"},
             format="json",
             HTTP_USER_AGENT="trusted-browser",
@@ -124,7 +124,7 @@ class AuthOtpFlowTests(TestCase):
     @patch("accounts.views.generate_otp", return_value="123456")
     def test_pending_registration_keeps_email_after_otp_expires(self, generate_otp, send_otp_email):
         response = self.client.post(
-            "/api/auth/register/",
+            "/auth/register/",
             {"email": "pending@example.com"},
             format="json",
         )
@@ -134,7 +134,7 @@ class AuthOtpFlowTests(TestCase):
         pending.save(update_fields=["otp_expires_at"])
 
         verify = self.client.post(
-            "/api/auth/verify-otp/",
+            "/auth/verify-otp/",
             {"email": "pending@example.com", "otp": "123456"},
             format="json",
         )
@@ -143,7 +143,7 @@ class AuthOtpFlowTests(TestCase):
         self.assertTrue(PendingRegistration.objects.filter(email="pending@example.com").exists())
 
         resend = self.client.post(
-            "/api/auth/resend-otp/",
+            "/auth/resend-otp/",
             {"email": "pending@example.com", "purpose": "registration"},
             format="json",
         )
@@ -161,7 +161,7 @@ class AuthOtpFlowTests(TestCase):
         )
 
         response = self.client.post(
-            "/api/auth/verify-otp/",
+            "/auth/verify-otp/",
             {"email": old_pending.email, "otp": "123456"},
             format="json",
         )
@@ -184,75 +184,77 @@ class GoogleOAuthRedirectTests(TestCase):
         ALLOWED_ORIGINS=[
             "http://localhost:5173",
             "http://localhost:3000",
-            "https://rxchat.vercel.app",
+            "https://rxchat.fildah.com",
         ],
     )
     def test_google_login_uses_local_callback_for_localhost(self):
         response = self.client.get(
-            "/api/auth/google/login/",
+            "/auth/google/login/",
             HTTP_HOST="localhost:8000",
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             self._redirect_uri_from_location(response),
-            "http://localhost:8000/api/auth/google/callback/",
+            "http://localhost:8000/auth/google/callback/",
         )
         session = self.client.session
         self.assertEqual(
             session["google_redirect_uri"],
-            "http://localhost:8000/api/auth/google/callback/",
+            "http://localhost:8000/auth/google/callback/",
         )
         self.assertEqual(session["google_frontend_url"], "http://localhost:5173")
 
     @override_settings(
         DEBUG=False,
         GOOGLE_CLIENT_ID="client-id",
+        ALLOWED_HOSTS=["api.fildah.com"],
         ALLOWED_ORIGINS=[
-            "https://rxchat.vercel.app",
+            "https://rxchat.fildah.com",
             "http://localhost:5173",
             "http://localhost:3000",
         ],
     )
     def test_google_login_uses_remote_callback_for_remote_host(self):
         response = self.client.get(
-            "/api/auth/google/login/",
+            "/auth/google/login/",
             secure=True,
-            HTTP_HOST="rxchat.onrender.com",
+            HTTP_HOST="api.fildah.com",
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             self._redirect_uri_from_location(response),
-            "https://rxchat.onrender.com/api/auth/google/callback/",
+            "https://api.fildah.com/auth/google/callback/",
         )
         session = self.client.session
         self.assertEqual(
             session["google_redirect_uri"],
-            "https://rxchat.onrender.com/api/auth/google/callback/",
+            "https://api.fildah.com/auth/google/callback/",
         )
-        self.assertEqual(session["google_frontend_url"], "https://rxchat.vercel.app")
+        self.assertEqual(session["google_frontend_url"], "https://rxchat.fildah.com")
 
     @override_settings(
         DEBUG=False,
         GOOGLE_CLIENT_ID="client-id",
+        ALLOWED_HOSTS=["api.fildah.com"],
         ALLOWED_ORIGINS=[
-            "https://rxchat.vercel.app",
-            "https://rxchat-preview.vercel.app",
+            "https://rxchat.fildah.com",
+            "https://rxchat-preview.fildah.com",
         ],
     )
     def test_google_login_returns_to_allowed_referrer_origin(self):
         response = self.client.get(
-            "/api/auth/google/login/",
+            "/auth/google/login/",
             secure=True,
-            HTTP_HOST="rxchat.onrender.com",
-            HTTP_REFERER="https://rxchat-preview.vercel.app/auth",
+            HTTP_HOST="api.fildah.com",
+            HTTP_REFERER="https://rxchat-preview.fildah.com/auth",
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             self._redirect_uri_from_location(response),
-            "https://rxchat.onrender.com/api/auth/google/callback/",
+            "https://api.fildah.com/auth/google/callback/",
         )
         session = self.client.session
-        self.assertEqual(session["google_frontend_url"], "https://rxchat-preview.vercel.app")
+        self.assertEqual(session["google_frontend_url"], "https://rxchat-preview.fildah.com")
