@@ -846,7 +846,7 @@ def remove_email(request):
 # ─── Google OAuth ───
 
 import requests as http_requests
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from django.shortcuts import redirect
 from django.conf import settings
 
@@ -865,10 +865,16 @@ def _is_local_host(host):
     return hostname in {'localhost', '127.0.0.1', '::1'}
 
 
+def _is_local_url(url):
+    return _is_local_host(urlparse(url or '').netloc)
+
+
 def _google_frontend_url_for_request(request):
     if _is_local_host(request.get_host()):
         return settings.LOCAL_FRONTEND_URL.rstrip('/')
-    return settings.FRONTEND_URL.rstrip('/')
+    if settings.FRONTEND_URL:
+        return settings.FRONTEND_URL.rstrip('/')
+    return request.build_absolute_uri('/').rstrip('/')
 
 
 def _google_redirect_uri_for_request(request):
@@ -879,7 +885,12 @@ def _google_redirect_uri_for_request(request):
     allowed_uris = set(getattr(settings, 'GOOGLE_REDIRECT_URIS', []))
     if current_uri in allowed_uris:
         return current_uri
-    return settings.GOOGLE_REDIRECT_URI
+    if (
+        settings.GOOGLE_REDIRECT_URI
+        and not _is_local_url(settings.GOOGLE_REDIRECT_URI)
+    ):
+        return settings.GOOGLE_REDIRECT_URI
+    return current_uri
 
 
 @csrf_exempt
