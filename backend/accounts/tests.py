@@ -228,3 +228,30 @@ class GoogleOAuthRedirectTests(TestCase):
             "https://rxchat-backend.onrender.com/api/auth/google/callback/",
         )
         self.assertEqual(session["google_frontend_url"], "https://rxchat.dev")
+
+    @override_settings(
+        GOOGLE_CLIENT_ID="client-id",
+        FRONTEND_URL="",
+        GOOGLE_REDIRECT_URI="http://localhost:8000/api/auth/google/callback/",
+        GOOGLE_REDIRECT_URIS=[
+            "http://localhost:8000/api/auth/google/callback/",
+        ],
+    )
+    def test_google_login_remote_host_never_falls_back_to_local_callback(self):
+        response = self.client.get(
+            "/api/auth/google/login/",
+            secure=True,
+            HTTP_HOST="rxchat-backend.onrender.com",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._redirect_uri_from_location(response),
+            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        )
+        session = self.client.session
+        self.assertEqual(
+            session["google_redirect_uri"],
+            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        )
+        self.assertEqual(session["google_frontend_url"], "https://rxchat-backend.onrender.com")
