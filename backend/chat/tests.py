@@ -54,9 +54,28 @@ class ChatPromptTests(TestCase):
         self.assertIn("Do not use headings such as \"Safety Disclaimer\"", system_message)
         self.assertIn("normal conversation", system_message)
         self.assertIn("response budget", system_message)
-        self.assertIn("Follow-up question", system_message)
+        self.assertIn("Do not label it", system_message)
+        self.assertNotIn("Follow-up question", system_message)
+        self.assertNotIn("follow-up question", system_message.lower())
         self.assertNotIn("explicitly acknowledge that limitation", user_message)
-        self.assertIn("Do not announce the missing retrieval context", user_message)
+        self.assertIn("Answer cautiously from general drug knowledge", user_message)
+        self.assertIn("Do not tell the user that no background material", user_message)
+
+    def test_source_notes_prompt_does_not_force_retrieval_disclaimer(self):
+        user_message = build_user_message(
+            "What should I know about diclofenac?",
+            chunks=[{
+                "source": "NAFDAC Greenbook excerpt",
+                "text": "This excerpt does not include diclofenac.",
+            }],
+            role="patient",
+        )
+
+        self.assertIn("MODEL-ONLY BACKGROUND", user_message)
+        self.assertIn("answer cautiously from general drug knowledge", user_message)
+        self.assertIn("Do not mention this background or how it was selected", user_message)
+        self.assertNotIn("RETRIEVED CONTEXT", user_message)
+        self.assertNotIn("Answer based strictly", user_message)
 
     @override_settings(
         OPENROUTER_TEXT_MODEL="text-model",
@@ -203,8 +222,9 @@ class ChatAiServiceTests(TestCase):
         response = "".join(stream_ai_response("What is metformin?", role="patient"))
 
         self.assertEqual(captured_kwargs["max_tokens"], 123)
-        self.assertIn("stays within RxChat's response limit", response)
-        self.assertIn("Follow-up question:", response)
+        self.assertIn("I'll pause there so the answer stays readable", response)
+        self.assertIn("Which part would you like me to expand on next?", response)
+        self.assertNotIn("Follow-up question:", response)
         mock_retrieve.assert_called_once()
 
 
