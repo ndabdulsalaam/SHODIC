@@ -111,7 +111,7 @@ def _drop_stale_pending_registrations():
 @permission_classes([AllowAny])
 def register(request):
     """
-    POST /api/auth/register/
+    POST /auth/register/
     Body: { "email" }
     Sends OTP email. Does NOT create user yet.
     """
@@ -153,7 +153,7 @@ def register(request):
 @permission_classes([AllowAny])
 def verify_otp(request):
     """
-    POST /api/auth/verify-otp/
+    POST /auth/verify-otp/
     Body: { "email": "...", "otp": "..." }
     Verifies OTP, stores verified email in session, returns setup_required.
     """
@@ -209,7 +209,7 @@ def verify_otp(request):
 @permission_classes([AllowAny])
 def complete_setup(request):
     """
-    POST /api/auth/complete-setup/
+    POST /auth/complete-setup/
     Body: { "preferred_name", "first_name", "last_name", "role", "password" }
     Creates account after email has been verified via OTP.
     """
@@ -310,7 +310,7 @@ def complete_setup(request):
 @permission_classes([AllowAny])
 def login_view(request):
     """
-    POST /api/auth/login/
+    POST /auth/login/
     Body: { "identifier": "email or username", "password": "..." }
     If trusted device → logs in directly.
     If new device → sends OTP, returns otp_required.
@@ -368,7 +368,7 @@ def login_view(request):
 @permission_classes([AllowAny])
 def verify_device(request):
     """
-    POST /api/auth/verify-device/
+    POST /auth/verify-device/
     Body: { "email": "...", "otp": "..." }
     Verifies OTP for login on a new device. Trusts the device.
     """
@@ -422,7 +422,7 @@ def verify_device(request):
 @permission_classes([AllowAny])
 def resend_otp(request):
     """
-    POST /api/auth/resend-otp/
+    POST /auth/resend-otp/
     Body: { "email": "...", "purpose": "registration" | "login" | "password_reset" }
     """
     email = request.data.get('email', '').strip().lower()
@@ -481,7 +481,7 @@ def resend_otp(request):
 @permission_classes([AllowAny])
 def forgot_password(request):
     """
-    POST /api/auth/forgot-password/
+    POST /auth/forgot-password/
     Body: { "email": "email or username" }
     Sends OTP to reset password.
     """
@@ -519,7 +519,7 @@ def forgot_password(request):
 @permission_classes([AllowAny])
 def verify_reset_otp(request):
     """
-    POST /api/auth/verify-reset-otp/
+    POST /auth/verify-reset-otp/
     Body: { "email": "...", "otp": "..." }
     Verifies OTP for password reset. Returns a token to confirm the reset.
     """
@@ -567,7 +567,7 @@ def verify_reset_otp(request):
 @permission_classes([AllowAny])
 def reset_password(request):
     """
-    POST /api/auth/reset-password/
+    POST /auth/reset-password/
     Body: { "email": "...", "password": "..." }
     Sets new password after OTP has been verified.
     """
@@ -615,7 +615,7 @@ def reset_password(request):
 @csrf_exempt
 @api_view(['POST'])
 def logout_view(request):
-    """POST /api/auth/logout/"""
+    """POST /auth/logout/"""
     logout(request)
     return Response({'message': 'Logged out'})
 
@@ -623,7 +623,7 @@ def logout_view(request):
 @csrf_exempt
 @api_view(['GET'])
 def me(request):
-    """GET /api/auth/me/"""
+    """GET /auth/me/"""
     if request.user.is_authenticated:
         return Response(_user_response(request.user))
     return Response({'user': None})
@@ -635,7 +635,7 @@ def me(request):
 @api_view(['PATCH'])
 def update_profile(request):
     """
-    PATCH /api/auth/profile/
+    PATCH /auth/profile/
     Body: any of { "first_name", "last_name", "preferred_name", "role", "gender", "age_range", "phone_number" }
     Updates profile fields for the authenticated user.
     """
@@ -685,7 +685,7 @@ def update_profile(request):
 @api_view(['POST'])
 def add_email(request):
     """
-    POST /api/auth/email/add/
+    POST /auth/email/add/
     Body: { "email": "new@example.com" }
     Sends OTP to the new email for verification.
     """
@@ -733,7 +733,7 @@ def add_email(request):
 @api_view(['POST'])
 def verify_email(request):
     """
-    POST /api/auth/email/verify/
+    POST /auth/email/verify/
     Body: { "email": "new@example.com", "otp": "123456" }
     Verifies the OTP, adds the email as verified, and sets it as primary.
     """
@@ -801,7 +801,7 @@ def verify_email(request):
 @api_view(['POST'])
 def remove_email(request):
     """
-    POST /api/auth/email/remove/
+    POST /auth/email/remove/
     Body: { "email": "old@example.com" }
     Removes a verified email — blocked if it's the only verified email.
     """
@@ -851,7 +851,7 @@ from django.shortcuts import redirect
 from django.conf import settings
 
 
-GOOGLE_CALLBACK_PATH = '/api/auth/google/callback/'
+GOOGLE_CALLBACK_PATH = '/auth/google/callback/'
 
 
 def _is_local_host(host):
@@ -914,7 +914,7 @@ def _google_redirect_uri_for_request(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def google_login(request):
-    """GET /api/auth/google/login/ — Redirect to Google consent screen."""
+    """GET /auth/google/login/ — Redirect to Google consent screen."""
     redirect_uri = _google_redirect_uri_for_request(request)
     request.session['google_redirect_uri'] = redirect_uri
     request.session['google_frontend_url'] = _google_frontend_url_for_request(request)
@@ -935,7 +935,7 @@ def google_login(request):
 @permission_classes([AllowAny])
 def google_callback(request):
     """
-    GET /api/auth/google/callback/?code=...
+    GET /auth/google/callback/?code=...
     Exchanges code for tokens, fetches profile, finds/creates user.
     New Google users are redirected to a setup page to pick username + password.
     """
@@ -1012,7 +1012,7 @@ def google_callback(request):
 @permission_classes([AllowAny])
 def google_complete_setup(request):
     """
-    POST /api/auth/google/complete-setup/
+    POST /auth/google/complete-setup/
     Body: { "preferred_name", "first_name", "last_name", "role", "password" }
     Creates account for a new Google user.
     """
