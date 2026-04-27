@@ -205,7 +205,6 @@ function ChatWindow({
                             <div id={messageDomId} className="chat-window__message-anchor">
                                 <MessageBubble
                                     message={msg}
-                                    index={i}
                                     onEdit={onEditMessage}
                                     onResend={onResendMessage}
                                     onVariantChange={onMessageVariantChange}
