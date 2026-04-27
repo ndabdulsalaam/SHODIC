@@ -5,6 +5,7 @@ Django settings for RxChat.
 import os
 import importlib.util
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 import dj_database_url
 
@@ -37,13 +38,19 @@ def unique_list(values):
             result.append(value)
     return result
 
+
+def url_hostname(value):
+    if not value:
+        return ''
+    return urlparse(value).hostname or ''
+
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = env_list(
     'ALLOWED_HOSTS',
-    'localhost,127.0.0.1,[::1],rxchat.dev,www.rxchat.dev,.onrender.com',
+    'localhost,127.0.0.1,[::1],.onrender.com',
 )
 
 INSTALLED_APPS = [
@@ -142,19 +149,47 @@ WHITENOISE_MANIFEST_STRICT = False
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Local/remote URLs
+LOCAL_FRONTEND_URL = os.getenv('LOCAL_FRONTEND_URL', 'http://localhost:5173')
+LOCAL_BACKEND_URL = os.getenv('LOCAL_BACKEND_URL', 'http://localhost:8000')
+RENDER_EXTERNAL_URL = os.getenv('RENDER_EXTERNAL_URL', '')
+FRONTEND_URL = os.getenv('FRONTEND_URL') or (LOCAL_FRONTEND_URL if DEBUG else '')
+BACKEND_EXTERNAL_URL = os.getenv('BACKEND_EXTERNAL_URL') or RENDER_EXTERNAL_URL
+if not BACKEND_EXTERNAL_URL and DEBUG:
+    BACKEND_EXTERNAL_URL = LOCAL_BACKEND_URL
+ALLOWED_HOSTS = unique_list(
+    ALLOWED_HOSTS
+    + [
+        'localhost',
+        '127.0.0.1',
+        '[::1]',
+        '.onrender.com',
+        url_hostname(LOCAL_BACKEND_URL),
+        url_hostname(BACKEND_EXTERNAL_URL),
+    ]
+)
+
 # CORS
-ALLOWED_ORIGINS = env_list(
-    'ALLOWED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173,https://rxchat.dev,https://www.rxchat.dev',
+DEFAULT_ALLOWED_ORIGINS = unique_list([
+    LOCAL_FRONTEND_URL,
+    'http://127.0.0.1:5173',
+    FRONTEND_URL,
+])
+ALLOWED_ORIGINS = unique_list(
+    env_list('ALLOWED_ORIGINS', '')
+    + DEFAULT_ALLOWED_ORIGINS
 )
 CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF — must include backend's own URL for /admin/ to work
-CSRF_TRUSTED_ORIGINS = list(ALLOWED_ORIGINS)
-RENDER_EXTERNAL_URL = os.getenv('RENDER_EXTERNAL_URL', '')
-if RENDER_EXTERNAL_URL:
-    CSRF_TRUSTED_ORIGINS.append(RENDER_EXTERNAL_URL)
+CSRF_TRUSTED_ORIGINS = unique_list(
+    list(ALLOWED_ORIGINS)
+    + [
+        RENDER_EXTERNAL_URL,
+        BACKEND_EXTERNAL_URL,
+    ]
+)
 
 # DRF
 REST_FRAMEWORK = {
@@ -211,14 +246,12 @@ DEFAULT_FROM_EMAIL = f'RxChat <{BREVO_SENDER_EMAIL}>' if BREVO_SENDER_EMAIL else
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
-LOCAL_FRONTEND_URL = os.getenv('LOCAL_FRONTEND_URL', 'http://localhost:5173')
-LOCAL_BACKEND_URL = os.getenv('LOCAL_BACKEND_URL', 'http://localhost:8000')
-FRONTEND_URL = os.getenv('FRONTEND_URL') or 'https://rxchat.dev'
-BACKEND_EXTERNAL_URL = os.getenv('BACKEND_EXTERNAL_URL') or RENDER_EXTERNAL_URL or 'https://rxchat.dev'
-GOOGLE_REDIRECT_URI = os.getenv(
-    'GOOGLE_REDIRECT_URI',
+DEFAULT_GOOGLE_REDIRECT_URI = (
     f"{BACKEND_EXTERNAL_URL.rstrip('/')}/api/auth/google/callback/"
+    if BACKEND_EXTERNAL_URL
+    else ''
 )
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI') or DEFAULT_GOOGLE_REDIRECT_URI
 GOOGLE_REDIRECT_URIS = unique_list(
     env_list('GOOGLE_REDIRECT_URIS', '')
     + [
