@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: "./build.sh"
-    startCommand: "python manage.py collectstatic --noinput && python manage.py migrate && gunicorn config.wsgi:application"
+    startCommand: "python manage.py collectstatic --noinput && python manage.py adopt_chat_migrations_for_rxchat && python manage.py migrate && gunicorn config.wsgi:application"
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -36,6 +36,8 @@ services:
         sync: false
       - key: BREVO_SENDER_EMAIL
         sync: false
+      - key: BREVO_SENDER_NAME_RXCHAT
+        value: "RxChat"
 
       - key: PYTHON_VERSION
         value: "3.12.3"
