@@ -179,9 +179,13 @@ class GoogleOAuthRedirectTests(TestCase):
         return parse_qs(urlparse(location).query)["redirect_uri"][0]
 
     @override_settings(
+        DEBUG=True,
         GOOGLE_CLIENT_ID="client-id",
-        LOCAL_BACKEND_URL="http://localhost:8000",
-        LOCAL_FRONTEND_URL="http://localhost:5173",
+        ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "https://rxchat.vercel.app",
+        ],
     )
     def test_google_login_uses_local_callback_for_localhost(self):
         response = self.client.get(
@@ -202,56 +206,53 @@ class GoogleOAuthRedirectTests(TestCase):
         self.assertEqual(session["google_frontend_url"], "http://localhost:5173")
 
     @override_settings(
+        DEBUG=False,
         GOOGLE_CLIENT_ID="client-id",
-        FRONTEND_URL="https://rxchat.dev",
-        GOOGLE_REDIRECT_URI="https://rxchat-backend.onrender.com/api/auth/google/callback/",
-        GOOGLE_REDIRECT_URIS=[
-            "http://localhost:8000/api/auth/google/callback/",
-            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        ALLOWED_ORIGINS=[
+            "https://rxchat.vercel.app",
+            "http://localhost:5173",
+            "http://localhost:3000",
         ],
     )
     def test_google_login_uses_remote_callback_for_remote_host(self):
         response = self.client.get(
             "/api/auth/google/login/",
             secure=True,
-            HTTP_HOST="rxchat-backend.onrender.com",
+            HTTP_HOST="rxchat.onrender.com",
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             self._redirect_uri_from_location(response),
-            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+            "https://rxchat.onrender.com/api/auth/google/callback/",
         )
         session = self.client.session
         self.assertEqual(
             session["google_redirect_uri"],
-            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+            "https://rxchat.onrender.com/api/auth/google/callback/",
         )
-        self.assertEqual(session["google_frontend_url"], "https://rxchat.dev")
+        self.assertEqual(session["google_frontend_url"], "https://rxchat.vercel.app")
 
     @override_settings(
+        DEBUG=False,
         GOOGLE_CLIENT_ID="client-id",
-        FRONTEND_URL="",
-        GOOGLE_REDIRECT_URI="http://localhost:8000/api/auth/google/callback/",
-        GOOGLE_REDIRECT_URIS=[
-            "http://localhost:8000/api/auth/google/callback/",
+        ALLOWED_ORIGINS=[
+            "https://rxchat.vercel.app",
+            "https://rxchat-preview.vercel.app",
         ],
     )
-    def test_google_login_remote_host_never_falls_back_to_local_callback(self):
+    def test_google_login_returns_to_allowed_referrer_origin(self):
         response = self.client.get(
             "/api/auth/google/login/",
             secure=True,
-            HTTP_HOST="rxchat-backend.onrender.com",
+            HTTP_HOST="rxchat.onrender.com",
+            HTTP_REFERER="https://rxchat-preview.vercel.app/auth",
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             self._redirect_uri_from_location(response),
-            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+            "https://rxchat.onrender.com/api/auth/google/callback/",
         )
         session = self.client.session
-        self.assertEqual(
-            session["google_redirect_uri"],
-            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
-        )
-        self.assertEqual(session["google_frontend_url"], "https://rxchat-backend.onrender.com")
+        self.assertEqual(session["google_frontend_url"], "https://rxchat-preview.vercel.app")
