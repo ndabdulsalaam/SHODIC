@@ -117,7 +117,13 @@ Conversation style:
   counselling points, e.g. "Check with a pharmacist if..." or "Seek care \
   urgently if...".
 - Keep answers scannable: short paragraphs or bullets are fine, but avoid \
-  long formal preambles."""
+  long formal preambles.
+- Plan the answer before writing so it fits within the response budget. If the \
+  user's request is broad, give a concise, useful summary instead of trying to \
+  exhaust every detail.
+- Always end with one relevant follow-up question in this exact format: \
+  "Follow-up question: ...". The question should naturally help the user take \
+  the next useful step."""
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -405,6 +411,19 @@ def _select_model(attachments: list | None) -> str:
     return _select_models(attachments)[0]
 
 
+def _response_token_budget(is_complex: bool) -> int:
+    if is_complex:
+        return settings.OPENROUTER_REASONING_MAX_TOKENS
+    return settings.OPENROUTER_TEXT_MAX_TOKENS
+
+
+def _length_limit_message() -> str:
+    return (
+        "\n\nI am stopping here so the answer stays within RxChat's response limit. "
+        "Follow-up question: Which part would you like me to expand next?"
+    )
+
+
 def _build_pdf_plugin(attachments: list | None):
     if any(item.get("type") == "application/pdf" for item in attachments or []):
         return [{
@@ -580,11 +599,9 @@ def stream_ai_response(
             messages=messages,
             stream=True,
         )
-        if use_reasoner:
-            create_kwargs["max_tokens"] = 4096
-        else:
+        create_kwargs["max_tokens"] = _response_token_budget(use_reasoner)
+        if not use_reasoner:
             create_kwargs["temperature"] = 0.7
-            create_kwargs["max_tokens"] = 2048
 
         if pdf_plugin:
             create_kwargs["extra_body"] = {"plugins": pdf_plugin}
@@ -600,11 +617,16 @@ def stream_ai_response(
             emitted_any = False
             try:
                 stream = client.chat.completions.create(**create_kwargs)
+                finish_reason = None
                 for chunk in stream:
-                    delta = chunk.choices[0].delta
+                    choice = chunk.choices[0]
+                    finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+                    delta = choice.delta
                     if delta.content:
                         emitted_any = True
                         yield delta.content
+                if finish_reason == "length":
+                    yield _length_limit_message()
                 return
             except Exception as e:
                 last_error = e
@@ -620,7 +642,8 @@ def stream_ai_response(
                 if emitted_any:
                     yield (
                         "\n\nThe response was interrupted before RxChat could finish. "
-                        "Please send the message again if you need a complete answer."
+                        "Please send the message again if you need a complete answer. "
+                        "Follow-up question: Which section should I continue with first?"
                     )
                     return
                 break  # break key loop, try next model
@@ -659,5 +682,6 @@ def _get_fallback_response():
         "I'm currently unable to process your request. "
         "Please try again shortly or consult a licensed healthcare professional.\n\n"
         "⚠️ For emergencies, please call emergency services or visit "
-        "the nearest hospital immediately."
+        "the nearest hospital immediately.\n\n"
+        "Follow-up question: What medication or symptom would you like help with next?"
     )

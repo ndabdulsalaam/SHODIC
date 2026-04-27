@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HiOutlineArrowLeft } from 'react-icons/hi2'
 import './AuthPage.css'
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+const API = import.meta.env.VITE_API_BASE_URL || '/api'
 const AUTH_USER_CACHE_KEY = 'rxchat_auth_user'
 
 const ROLE_OPTIONS = [

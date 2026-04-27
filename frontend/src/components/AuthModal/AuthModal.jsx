@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { HiOutlineXMark } from 'react-icons/hi2'
 import './AuthModal.css'
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+const API = import.meta.env.VITE_API_BASE_URL || '/api'
 
 function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     const [isLogin, setIsLogin] = useState(initialMode === 'login')
