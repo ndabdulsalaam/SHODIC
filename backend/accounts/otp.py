@@ -86,7 +86,11 @@ def _send_via_brevo(to_email, subject, plain_text, html_content):
     """Send email via Brevo HTTP API (never blocked by network firewalls)."""
     api_key = getattr(settings, 'BREVO_API_KEY', '')
     sender_email = getattr(settings, 'BREVO_SENDER_EMAIL', '')
-    sender_name = getattr(settings, 'BREVO_SENDER_NAME', 'RxChat')
+    sender_name = getattr(
+        settings,
+        'BREVO_SENDER_NAME_RXCHAT',
+        getattr(settings, 'BREVO_SENDER_NAME', 'RxChat'),
+    )
 
     headers = {
         'accept': 'application/json',
