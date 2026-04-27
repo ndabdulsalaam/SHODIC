@@ -1,13 +1,25 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
-{% block title %}{{ title }} | RxChat Admin{% endblock %}
+{% block title %}{{ title }} | Fildah Admin{% endblock %}
 
 {% block branding %}
-<div id="rxchat-branding">
-    <span class="rx-logo">
-        <span class="rx-r">R</span><span class="rx-x">x</span><span class="rx-chat">Chat</span>
-    </span>
+<div id="fildah-admin-branding">
+    <a class="fildah-admin-logo" href="{% url 'admin:index' %}?project=fildah" aria-label="Fildah admin home">
+        <span class="fildah-admin-logo__name">Fildah</span>
+        <span class="fildah-admin-logo__tag">Admin</span>
+    </a>
+    <nav class="fildah-admin-projects" aria-label="Admin project selector">
+        {% for project in fildah_admin_projects %}
+            <a
+                class="fildah-admin-projects__item{% if project.is_active %} fildah-admin-projects__item--active{% endif %}"
+                href="{{ project.url }}"
+                data-admin-project="{{ project.slug }}"
+            >
+                {{ project.name }}
+            </a>
+        {% endfor %}
+    </nav>
 </div>
 {% endblock %}
 
@@ -19,8 +31,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
     /* ================================================
-       RxChat Admin — Clean, light theme
-       Mirrors the frontend: white surfaces, subtle
+       Fildah Admin - clean, light theme
+       Mirrors the product frontends: white surfaces, subtle
        grey borders, Inter font, teal accent sparingly.
        ================================================ */
 
@@ -124,27 +136,60 @@
         box-sizing: border-box;
     }
 
-    #rxchat-branding {
-        display: inline-flex;
+    #fildah-admin-branding {
+        display: flex;
         align-items: center;
+        gap: 24px;
+        flex-wrap: wrap;
     }
 
-    .rx-logo {
+    .fildah-admin-logo {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        text-decoration: none;
+    }
+
+    .fildah-admin-logo__name {
         font-size: 1.4rem;
         font-weight: 800;
-        letter-spacing: -0.3px;
-    }
-
-    .rx-r {
-        color: var(--rxc-success);
-    }
-
-    .rx-x {
-        color: #3498DB;
-    }
-
-    .rx-chat {
         color: var(--rxc-text);
+    }
+
+    .fildah-admin-logo__tag {
+        color: var(--rxc-accent);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .fildah-admin-projects {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px;
+        border: 1px solid var(--rxc-border);
+        border-radius: 999px;
+        background: var(--rxc-bg);
+    }
+
+    .fildah-admin-projects__item {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 12px;
+        border-radius: 999px;
+        color: var(--rxc-text-secondary) !important;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .fildah-admin-projects__item:hover,
+    .fildah-admin-projects__item--active {
+        background: var(--rxc-surface);
+        color: var(--rxc-text) !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
     }
 
     /* Header links */
@@ -646,7 +691,7 @@
             background: var(--rxc-surface) !important;
         }
 
-        .rx-chat {
+        .fildah-admin-logo__name {
             color: var(--rxc-text) !important;
         }
     }
@@ -666,7 +711,7 @@
         background: var(--rxc-surface) !important;
     }
 
-    [data-theme="dark"] .rx-chat {
+    [data-theme="dark"] .fildah-admin-logo__name {
         color: var(--rxc-text) !important;
     }
 
