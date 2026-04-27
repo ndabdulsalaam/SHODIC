@@ -153,7 +153,7 @@ function normalizeTableMarkup(markdown = '') {
     }).join('\n')
 }
 
-function MessageBubble({ message, index, onEdit, onResend, onVariantChange, resendMessageId, isLoading }) {
+function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessageId, isLoading }) {
     const isUser = message.role === 'user'
     const attachments = Array.isArray(message.attachments) ? message.attachments : []
     const hasAttachments = attachments.length > 0
@@ -208,10 +208,7 @@ function MessageBubble({ message, index, onEdit, onResend, onVariantChange, rese
     }
 
     return (
-        <div
-            className={`message message--${isUser ? 'user' : 'ai'}`}
-            style={{ animationDelay: `${Math.min(index * 0.05, 0.5)}s` }}
-        >
+        <div className={`message message--${isUser ? 'user' : 'ai'}`}>
             <div className="message__content">
                 <div className="message__bubble">
                     {isEditing ? (
