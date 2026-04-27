@@ -1,0 +1,260 @@
+/* ============================================
+   RxChat Design System
+   ============================================ */
+
+:root {
+  /* Colors */
+  --color-primary: #0D1B3E;
+  --color-primary-light: #162850;
+  --color-primary-dark: #080f22;
+  --color-secondary: #2EC4B6;
+  --color-secondary-light: #5dd4c8;
+  --color-secondary-dark: #1f9a8e;
+  --color-accent: #48D1A0;
+  --color-accent-light: #7ae0bd;
+  --color-accent-dark: #2db87e;
+
+  --color-bg: #F8FAFB;
+  --color-bg-alt: #EEF2F5;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F0F4F8;
+
+  --color-text: #1A1A2E;
+  --color-text-secondary: #5A6578;
+  --color-text-muted: #8E99A8;
+  --color-text-inverse: #FFFFFF;
+
+  --color-error: #E63946;
+  --color-success: #2ECC71;
+  --color-warning: #F4A261;
+
+  --color-border: #E2E8F0;
+  --color-border-light: #F0F4F8;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 0.9375rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Borders */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 50%;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(13, 27, 62, 0.04);
+  --shadow-md: 0 4px 12px rgba(13, 27, 62, 0.06);
+  --shadow-lg: 0 8px 24px rgba(13, 27, 62, 0.08);
+  --shadow-xl: 0 12px 40px rgba(13, 27, 62, 0.12);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* Layout */
+  --sidebar-width: 280px;
+  --header-height: 56px;
+  --chat-max-width: 800px;
+}
+
+/* ============================================
+   CSS Reset & Global Styles
+   ============================================ */
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  body {
+    height: 100dvh;
+    /* allow safe-area insets to be respected */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    height: 100dvh;
+  }
+}
+
+a {
+  text-decoration: none;
+  color: var(--color-secondary);
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-secondary-dark);
+}
+
+button {
+  font-family: var(--font-family);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-size: var(--font-size-base);
+}
+
+input,
+textarea {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+/* Global Word Breaking */
+p, li, h1, h2, h3, h4, h5, h6, span {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes typingBounce {
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-4px);
+  }
+}
