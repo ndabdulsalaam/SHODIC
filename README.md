@@ -65,14 +65,15 @@ work.
 rxchat/
   backend/
     accounts/          # auth, OTPs, profiles, subscriptions, organizations
-    chat/              # conversations, messages, streaming chat API, AI service
+    rxchat/            # conversations, messages, streaming RxChat API, AI service
     config/            # Django settings, URLs, auth config
     templates/         # error templates
     manage.py
     requirements.txt
   frontend/
-    public/            # static assets
+    public/            # RxChat frontend static assets
     src/
+      config/          # RxChat product config for API namespace/domain
       components/      # chat, auth, sidebar, settings UI
       pages/           # ChatPage and AuthPage
     package.json
@@ -115,8 +116,12 @@ npm run dev
 
 Local frontend default: `http://localhost:5173`.
 
+The current `frontend/` directory is the RxChat product frontend. Future Fildah
+products should use their own frontend app/deployment and call the shared API at
+`https://api.fildah.com`.
+
 For local development, `VITE_API_BASE_URL` can be omitted; the app automatically uses
-`http://localhost:8000/api` when opened on `localhost` or `127.0.0.1`. Set
+`http://localhost:8000` when opened on `localhost` or `127.0.0.1`. Set
 `VITE_API_BASE_URL` to the deployed backend API origin before building the remote frontend.
 
 ## Environment Variables
@@ -128,8 +133,8 @@ Minimum setup for local and remote access:
 ```env
 SECRET_KEY=change-me
 DEBUG=False
-ALLOWED_HOSTS=localhost,127.0.0.1,[::1],rxchat.onrender.com
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,https://rxchat.vercel.app
+ALLOWED_HOSTS=localhost,127.0.0.1,[::1],api.fildah.com
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,https://rxchat.fildah.com,https://fildah.com
 ```
 
 AI:
@@ -163,7 +168,7 @@ Email OTP delivery:
 ```env
 BREVO_API_KEY=your_brevo_api_key
 BREVO_SENDER_EMAIL=verified-sender@example.com
-BREVO_SENDER_NAME=RxChat
+BREVO_SENDER_NAME_RXCHAT=RxChat
 ```
 
 If Brevo is not configured, OTP emails are sent through Django's console email
@@ -178,13 +183,13 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 The backend derives the Google callback URL from the request host. Add the
 actual backend callbacks to Google Cloud Console under Authorized redirect URIs,
-for example `http://localhost:8000/api/auth/google/callback/` and
-`https://rxchat.onrender.com/api/auth/google/callback/`.
+for example `http://localhost:8000/auth/google/callback/` and
+`https://api.fildah.com/auth/google/callback/`.
 
 Frontend environment variables can be added in `frontend/.env`:
 
 ```env
-VITE_API_BASE_URL=https://rxchat.onrender.com/api
+VITE_API_BASE_URL=https://api.fildah.com
 ```
 
 Omit `VITE_API_BASE_URL` locally unless you want to point the local frontend at
@@ -196,36 +201,36 @@ Chat endpoints:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/chat/send/` | Send a message and stream the AI response |
-| `GET` | `/api/chat/conversations/` | List current user's or session's conversations |
-| `GET` | `/api/chat/conversations/<id>/` | Fetch a conversation with messages |
-| `DELETE` | `/api/chat/conversations/<id>/delete/` | Delete a conversation |
-| `PATCH` | `/api/chat/conversations/<id>/rename/` | Rename a conversation |
-| `PUT` | `/api/chat/messages/<id>/` | Edit a user message and regenerate |
-| `POST` | `/api/chat/messages/<id>/resend/` | Regenerate from a user message |
+| `POST` | `/rxchat/send/` | Send a message and stream the AI response |
+| `GET` | `/rxchat/conversations/` | List current user's or session's conversations |
+| `GET` | `/rxchat/conversations/<id>/` | Fetch a conversation with messages |
+| `DELETE` | `/rxchat/conversations/<id>/delete/` | Delete a conversation |
+| `PATCH` | `/rxchat/conversations/<id>/rename/` | Rename a conversation |
+| `PUT` | `/rxchat/messages/<id>/` | Edit a user message and regenerate |
+| `POST` | `/rxchat/messages/<id>/resend/` | Regenerate from a user message |
 
 Auth endpoints:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/auth/register/` | Start email OTP registration |
-| `POST` | `/api/auth/verify-otp/` | Verify registration OTP |
-| `POST` | `/api/auth/complete-setup/` | Create account after OTP verification |
-| `POST` | `/api/auth/login/` | Login or request device OTP |
-| `POST` | `/api/auth/verify-device/` | Verify new device OTP |
-| `POST` | `/api/auth/resend-otp/` | Resend OTP |
-| `POST` | `/api/auth/forgot-password/` | Start password reset |
-| `POST` | `/api/auth/verify-reset-otp/` | Verify password reset OTP |
-| `POST` | `/api/auth/reset-password/` | Set a new password |
-| `GET` | `/api/auth/google/login/` | Start Google OAuth |
-| `GET` | `/api/auth/google/callback/` | Google OAuth callback |
-| `POST` | `/api/auth/google/complete-setup/` | Complete Google account setup |
-| `GET` | `/api/auth/me/` | Get current session user |
-| `POST` | `/api/auth/logout/` | Logout |
-| `PATCH` | `/api/auth/profile/` | Update profile fields |
-| `POST` | `/api/auth/email/add/` | Start verified email change |
-| `POST` | `/api/auth/email/verify/` | Verify and set new email |
-| `POST` | `/api/auth/email/remove/` | Remove a non-primary email |
+| `POST` | `/auth/register/` | Start email OTP registration |
+| `POST` | `/auth/verify-otp/` | Verify registration OTP |
+| `POST` | `/auth/complete-setup/` | Create account after OTP verification |
+| `POST` | `/auth/login/` | Login or request device OTP |
+| `POST` | `/auth/verify-device/` | Verify new device OTP |
+| `POST` | `/auth/resend-otp/` | Resend OTP |
+| `POST` | `/auth/forgot-password/` | Start password reset |
+| `POST` | `/auth/verify-reset-otp/` | Verify password reset OTP |
+| `POST` | `/auth/reset-password/` | Set a new password |
+| `GET` | `/auth/google/login/` | Start Google OAuth |
+| `GET` | `/auth/google/callback/` | Google OAuth callback |
+| `POST` | `/auth/google/complete-setup/` | Complete Google account setup |
+| `GET` | `/auth/me/` | Get current session user |
+| `POST` | `/auth/logout/` | Logout |
+| `PATCH` | `/auth/profile/` | Update profile fields |
+| `POST` | `/auth/email/add/` | Start verified email change |
+| `POST` | `/auth/email/verify/` | Verify and set new email |
+| `POST` | `/auth/email/remove/` | Remove a non-primary email |
 
 ## AI Behavior
 
@@ -281,7 +286,7 @@ Backend deployment target:
 
 - Render or another Django-compatible host
 - Root directory: `backend/`
-- Start command: typically `gunicorn config.wsgi:application`
+- Start command: `python manage.py adopt_chat_migrations_for_rxchat && python manage.py migrate && gunicorn config.wsgi:application`
 - Configure `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`,
   `ALLOWED_ORIGINS`, OpenRouter, optional Qdrant, and email keys in the host
   environment
@@ -291,6 +296,12 @@ Manual provider connectivity checks can be run from `backend/` with:
 ```bash
 python check_apis.py
 ```
+
+Django admin:
+
+- `/admin/?project=fildah` shows the all-products Fildah admin view.
+- `/admin/?project=rxchat` filters the admin index to RxChat sections.
+- Direct admin URLs still rely on Django model permissions for access control.
 
 ## License
 
