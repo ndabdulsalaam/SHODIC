@@ -19,11 +19,32 @@ def env_int(name, default):
     except (TypeError, ValueError):
         return default
 
+
+def env_list(name, default):
+    return [
+        item.strip()
+        for item in os.getenv(name, default).split(',')
+        if item.strip()
+    ]
+
+
+def unique_list(values):
+    seen = set()
+    result = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'rxchat.dev,www.rxchat.dev,.onrender.com').split(',')
+ALLOWED_HOSTS = env_list(
+    'ALLOWED_HOSTS',
+    'localhost,127.0.0.1,[::1],rxchat.dev,www.rxchat.dev,.onrender.com',
+)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -122,7 +143,10 @@ WHITENOISE_MANIFEST_STRICT = False
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'https://rxchat.dev,https://www.rxchat.dev').split(',')
+ALLOWED_ORIGINS = env_list(
+    'ALLOWED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173,https://rxchat.dev,https://www.rxchat.dev',
+)
 CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 
@@ -187,11 +211,20 @@ DEFAULT_FROM_EMAIL = f'RxChat <{BREVO_SENDER_EMAIL}>' if BREVO_SENDER_EMAIL else
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
-FRONTEND_URL = os.getenv('FRONTEND_URL') or (ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else 'https://rxchat.dev')
+LOCAL_FRONTEND_URL = os.getenv('LOCAL_FRONTEND_URL', 'http://localhost:5173')
+LOCAL_BACKEND_URL = os.getenv('LOCAL_BACKEND_URL', 'http://localhost:8000')
+FRONTEND_URL = os.getenv('FRONTEND_URL') or 'https://rxchat.dev'
 BACKEND_EXTERNAL_URL = os.getenv('BACKEND_EXTERNAL_URL') or RENDER_EXTERNAL_URL or 'https://rxchat.dev'
 GOOGLE_REDIRECT_URI = os.getenv(
     'GOOGLE_REDIRECT_URI',
     f"{BACKEND_EXTERNAL_URL.rstrip('/')}/api/auth/google/callback/"
+)
+GOOGLE_REDIRECT_URIS = unique_list(
+    env_list('GOOGLE_REDIRECT_URIS', '')
+    + [
+        GOOGLE_REDIRECT_URI,
+        f"{LOCAL_BACKEND_URL.rstrip('/')}/api/auth/google/callback/",
+    ]
 )
 
 # Session — 15-day session to match trusted device window

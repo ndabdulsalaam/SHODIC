@@ -1,7 +1,8 @@
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from datetime import timedelta
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 from rest_framework.test import APIClient
 
@@ -167,3 +168,63 @@ class AuthOtpFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 410)
         self.assertFalse(PendingRegistration.objects.filter(email=old_pending.email).exists())
+
+
+class GoogleOAuthRedirectTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def _redirect_uri_from_location(self, response):
+        location = response.headers["Location"]
+        return parse_qs(urlparse(location).query)["redirect_uri"][0]
+
+    @override_settings(
+        GOOGLE_CLIENT_ID="client-id",
+        LOCAL_BACKEND_URL="http://localhost:8000",
+        LOCAL_FRONTEND_URL="http://localhost:5173",
+    )
+    def test_google_login_uses_local_callback_for_localhost(self):
+        response = self.client.get(
+            "/api/auth/google/login/",
+            HTTP_HOST="localhost:8000",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._redirect_uri_from_location(response),
+            "http://localhost:8000/api/auth/google/callback/",
+        )
+        session = self.client.session
+        self.assertEqual(
+            session["google_redirect_uri"],
+            "http://localhost:8000/api/auth/google/callback/",
+        )
+        self.assertEqual(session["google_frontend_url"], "http://localhost:5173")
+
+    @override_settings(
+        GOOGLE_CLIENT_ID="client-id",
+        FRONTEND_URL="https://rxchat.dev",
+        GOOGLE_REDIRECT_URI="https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        GOOGLE_REDIRECT_URIS=[
+            "http://localhost:8000/api/auth/google/callback/",
+            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        ],
+    )
+    def test_google_login_uses_remote_callback_for_remote_host(self):
+        response = self.client.get(
+            "/api/auth/google/login/",
+            secure=True,
+            HTTP_HOST="rxchat-backend.onrender.com",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._redirect_uri_from_location(response),
+            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        )
+        session = self.client.session
+        self.assertEqual(
+            session["google_redirect_uri"],
+            "https://rxchat-backend.onrender.com/api/auth/google/callback/",
+        )
+        self.assertEqual(session["google_frontend_url"], "https://rxchat.dev")

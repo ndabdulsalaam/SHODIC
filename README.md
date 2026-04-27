@@ -97,6 +97,8 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+Local backend default: `http://localhost:8000`.
+
 Set `BACKEND_EXTERNAL_URL` to the deployed backend origin used by OAuth and callbacks.
 
 ## Frontend Setup
@@ -113,19 +115,25 @@ npm install
 npm run dev
 ```
 
-Set `VITE_API_BASE_URL` to the deployed backend API origin before building the frontend.
+Local frontend default: `http://localhost:5173`.
+
+For local development, `VITE_API_BASE_URL` can be omitted; the app automatically uses
+`http://localhost:8000/api` when opened on `localhost` or `127.0.0.1`. Set
+`VITE_API_BASE_URL` to the deployed backend API origin before building the remote frontend.
 
 ## Environment Variables
 
 Create `backend/.env` for backend configuration.
 
-Minimum deployed setup:
+Minimum setup for local and remote access:
 
 ```env
 SECRET_KEY=change-me
 DEBUG=False
-ALLOWED_HOSTS=rxchat.dev,www.rxchat.dev,rxchat-backend.onrender.com
-ALLOWED_ORIGINS=https://rxchat.dev,https://www.rxchat.dev
+ALLOWED_HOSTS=localhost,127.0.0.1,[::1],rxchat.dev,www.rxchat.dev,rxchat-backend.onrender.com
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://rxchat.dev,https://www.rxchat.dev
+LOCAL_FRONTEND_URL=http://localhost:5173
+LOCAL_BACKEND_URL=http://localhost:8000
 FRONTEND_URL=https://rxchat.dev
 BACKEND_EXTERNAL_URL=https://rxchat-backend.onrender.com
 ```
@@ -173,13 +181,21 @@ Google OAuth:
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 GOOGLE_REDIRECT_URI=https://rxchat-backend.onrender.com/api/auth/google/callback/
+GOOGLE_REDIRECT_URIS=http://localhost:8000/api/auth/google/callback/,https://rxchat-backend.onrender.com/api/auth/google/callback/
 ```
+
+Add every value in `GOOGLE_REDIRECT_URIS` to Google Cloud Console under
+Authorized redirect URIs. Google requires an exact match, including protocol,
+domain, port, and trailing slash.
 
 Frontend environment variables can be added in `frontend/.env`:
 
 ```env
 VITE_API_BASE_URL=https://rxchat-backend.onrender.com/api
 ```
+
+Omit `VITE_API_BASE_URL` locally unless you want to point the local frontend at
+a remote backend.
 
 ## API Overview
 

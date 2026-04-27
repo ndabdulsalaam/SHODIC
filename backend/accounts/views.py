@@ -851,14 +851,49 @@ from django.shortcuts import redirect
 from django.conf import settings
 
 
+GOOGLE_CALLBACK_PATH = '/api/auth/google/callback/'
+
+
+def _is_local_host(host):
+    host = (host or '').lower()
+    if host.startswith('['):
+        hostname = host.split(']', 1)[0].strip('[]')
+    elif host.count(':') == 1:
+        hostname = host.rsplit(':', 1)[0]
+    else:
+        hostname = host
+    return hostname in {'localhost', '127.0.0.1', '::1'}
+
+
+def _google_frontend_url_for_request(request):
+    if _is_local_host(request.get_host()):
+        return settings.LOCAL_FRONTEND_URL.rstrip('/')
+    return settings.FRONTEND_URL.rstrip('/')
+
+
+def _google_redirect_uri_for_request(request):
+    if _is_local_host(request.get_host()):
+        return f"{settings.LOCAL_BACKEND_URL.rstrip('/')}{GOOGLE_CALLBACK_PATH}"
+
+    current_uri = request.build_absolute_uri(GOOGLE_CALLBACK_PATH)
+    allowed_uris = set(getattr(settings, 'GOOGLE_REDIRECT_URIS', []))
+    if current_uri in allowed_uris:
+        return current_uri
+    return settings.GOOGLE_REDIRECT_URI
+
+
 @csrf_exempt
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def google_login(request):
     """GET /api/auth/google/login/ — Redirect to Google consent screen."""
+    redirect_uri = _google_redirect_uri_for_request(request)
+    request.session['google_redirect_uri'] = redirect_uri
+    request.session['google_frontend_url'] = _google_frontend_url_for_request(request)
+
     params = urlencode({
         'client_id': settings.GOOGLE_CLIENT_ID,
-        'redirect_uri': settings.GOOGLE_REDIRECT_URI,
+        'redirect_uri': redirect_uri,
         'response_type': 'code',
         'scope': 'openid email profile',
         'access_type': 'offline',
@@ -878,7 +913,8 @@ def google_callback(request):
     """
     code = request.query_params.get('code')
     error = request.query_params.get('error')
-    frontend = settings.FRONTEND_URL
+    frontend = request.session.get('google_frontend_url') or _google_frontend_url_for_request(request)
+    redirect_uri = request.session.get('google_redirect_uri') or _google_redirect_uri_for_request(request)
 
     if error or not code:
         return redirect(f'{frontend}/?auth_error=google_denied')
@@ -891,7 +927,7 @@ def google_callback(request):
                 'code': code,
                 'client_id': settings.GOOGLE_CLIENT_ID,
                 'client_secret': settings.GOOGLE_CLIENT_SECRET,
-                'redirect_uri': settings.GOOGLE_REDIRECT_URI,
+                'redirect_uri': redirect_uri,
                 'grant_type': 'authorization_code',
             },
             timeout=10,
@@ -926,6 +962,8 @@ def google_callback(request):
     if user:
         # Existing user — log in directly
         login(request, user)
+        request.session.pop('google_redirect_uri', None)
+        request.session.pop('google_frontend_url', None)
         resp = redirect(frontend)
         resp = _trust_device(user, request, resp)
         return resp
@@ -936,6 +974,8 @@ def google_callback(request):
             'first_name': google_first,
             'last_name': google_last,
         }
+        request.session.pop('google_redirect_uri', None)
+        request.session.pop('google_frontend_url', None)
         return redirect(f'{frontend}/auth?step=google_setup')
 
 

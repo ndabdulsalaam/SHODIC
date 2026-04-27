@@ -3,6 +3,7 @@ import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
 import AuthModal from '../components/AuthModal/AuthModal'
 import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
+import { API_BASE_URL as API } from '../utils/api'
 import './ChatPage.css'
 
 const AUTH_USER_CACHE_KEY = 'rxchat_auth_user'
@@ -48,8 +49,6 @@ function ChatPage() {
     const abortControllerRef = useRef(null)
     const conversationsRef = useRef([])
     const editVariantsRef = useRef({})
-
-    const API = import.meta.env.VITE_API_BASE_URL || '/api'
 
     useEffect(() => {
         conversationsRef.current = conversations
@@ -161,7 +160,7 @@ function ChatPage() {
             } catch { /* not logged in */ }
         }
         checkAuth()
-    }, [API])
+    }, [])
 
     // Load conversations from backend on mount and when user changes
     useEffect(() => {
@@ -180,7 +179,7 @@ function ChatPage() {
             } catch { /* offline or error */ }
         }
         loadConversations()
-    }, [API, user])
+    }, [user])
 
     const handleShowAuth = (mode = 'login') => {
         setAuthMode(mode)
@@ -229,7 +228,7 @@ function ChatPage() {
             }
         } catch { /* error */ }
         setLoadingConversationId(null)
-    }, [API])
+    }, [])
 
     const handleSendMessage = useCallback(async (payload) => {
         const { text } = normalizeSendPayload(payload)
@@ -393,7 +392,7 @@ function ChatPage() {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, API, createStreamingFrameFlusher, updateStreamingMessage])
+    }, [activeConversationId, createStreamingFrameFlusher, updateStreamingMessage])
 
     const handleNewChat = useCallback(() => {
         setActiveConversationId(null)
@@ -417,7 +416,7 @@ function ChatPage() {
         if (activeConversationId === id) {
             setActiveConversationId(null)
         }
-    }, [activeConversationId, API])
+    }, [activeConversationId])
 
     const handleRenameChat = useCallback(async (id, newTitle) => {
         try {
@@ -431,7 +430,7 @@ function ChatPage() {
         setConversations((prev) =>
             prev.map((c) => c.id === id ? { ...c, title: newTitle } : c)
         )
-    }, [API])
+    }, [])
 
     const handleEditMessage = useCallback(async (messageId, newContent) => {
         if (!activeConversationId) return
@@ -552,7 +551,7 @@ function ChatPage() {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, API, createStreamingFrameFlusher, decorateVariantMessages, syncActiveVariantMessages, updateStreamingMessage])
+    }, [activeConversationId, createStreamingFrameFlusher, decorateVariantMessages, syncActiveVariantMessages, updateStreamingMessage])
 
     const handleResendMessage = useCallback(async (messageId) => {
         if (!activeConversationId) return
@@ -634,7 +633,7 @@ function ChatPage() {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, API, createStreamingFrameFlusher, updateStreamingMessage])
+    }, [activeConversationId, createStreamingFrameFlusher, updateStreamingMessage])
 
     const handleMessageVariantChange = useCallback((groupId, nextIndex) => {
         const group = editVariantsRef.current[groupId]
