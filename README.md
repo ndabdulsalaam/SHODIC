@@ -99,8 +99,6 @@ python manage.py runserver
 
 Local backend default: `http://localhost:8000`.
 
-Set `BACKEND_EXTERNAL_URL` to the deployed backend origin used by OAuth and callbacks.
-
 ## Frontend Setup
 
 Prerequisites:
@@ -130,12 +128,8 @@ Minimum setup for local and remote access:
 ```env
 SECRET_KEY=change-me
 DEBUG=False
-ALLOWED_HOSTS=localhost,127.0.0.1,[::1],rxchat.dev,www.rxchat.dev,rxchat-backend.onrender.com
-ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://rxchat.dev,https://www.rxchat.dev
-LOCAL_FRONTEND_URL=http://localhost:5173
-LOCAL_BACKEND_URL=http://localhost:8000
-FRONTEND_URL=https://rxchat.dev
-BACKEND_EXTERNAL_URL=https://rxchat-backend.onrender.com
+ALLOWED_HOSTS=localhost,127.0.0.1,[::1],rxchat.onrender.com
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,https://rxchat.vercel.app
 ```
 
 AI:
@@ -180,18 +174,17 @@ Google OAuth:
 ```env
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=https://rxchat-backend.onrender.com/api/auth/google/callback/
-GOOGLE_REDIRECT_URIS=http://localhost:8000/api/auth/google/callback/,https://rxchat-backend.onrender.com/api/auth/google/callback/
 ```
 
-Add every value in `GOOGLE_REDIRECT_URIS` to Google Cloud Console under
-Authorized redirect URIs. Google requires an exact match, including protocol,
-domain, port, and trailing slash.
+The backend derives the Google callback URL from the request host. Add the
+actual backend callbacks to Google Cloud Console under Authorized redirect URIs,
+for example `http://localhost:8000/api/auth/google/callback/` and
+`https://rxchat.onrender.com/api/auth/google/callback/`.
 
 Frontend environment variables can be added in `frontend/.env`:
 
 ```env
-VITE_API_BASE_URL=https://rxchat-backend.onrender.com/api
+VITE_API_BASE_URL=https://rxchat.onrender.com/api
 ```
 
 Omit `VITE_API_BASE_URL` locally unless you want to point the local frontend at
