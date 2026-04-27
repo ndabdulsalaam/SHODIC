@@ -52,6 +52,8 @@ class ChatPromptTests(TestCase):
 
         self.assertIn("Do not use headings such as \"Safety Disclaimer\"", system_message)
         self.assertIn("normal conversation", system_message)
+        self.assertIn("response budget", system_message)
+        self.assertIn("Follow-up question", system_message)
         self.assertNotIn("explicitly acknowledge that limitation", user_message)
         self.assertIn("Do not announce the missing retrieval context", user_message)
 
@@ -164,6 +166,43 @@ class ChatAiServiceTests(TestCase):
 
         self.assertEqual(response, "Hello from backup")
         self.assertEqual(mock_get_client.call_count, 2)
+        mock_retrieve.assert_called_once()
+
+    @override_settings(
+        OPENROUTER_API_KEY="primary",
+        OPENROUTER_BACKUP_API_KEY="",
+        OPENROUTER_TEXT_MODEL="text-model",
+        OPENROUTER_TEXT_MAX_TOKENS=123,
+        OPENROUTER_REASONING_MAX_TOKENS=456,
+    )
+    @patch("chat.ai_service.retrieve_context", return_value=[])
+    @patch("chat.ai_service._get_client")
+    def test_length_finish_reason_adds_clean_stop_and_uses_budget(self, mock_get_client, mock_retrieve):
+        captured_kwargs = {}
+
+        class Chunk:
+            def __init__(self, text="", finish_reason=None):
+                self.choices = [type("Choice", (), {
+                    "delta": type("Delta", (), {"content": text})(),
+                    "finish_reason": finish_reason,
+                })()]
+
+        client = type("Client", (), {})()
+        client.chat = type("Chat", (), {})()
+        client.chat.completions = type("Completions", (), {})()
+
+        def create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return iter([Chunk("Partial answer"), Chunk(finish_reason="length")])
+
+        client.chat.completions.create = create
+        mock_get_client.return_value = client
+
+        response = "".join(stream_ai_response("What is metformin?", role="patient"))
+
+        self.assertEqual(captured_kwargs["max_tokens"], 123)
+        self.assertIn("stays within RxChat's response limit", response)
+        self.assertIn("Follow-up question:", response)
         mock_retrieve.assert_called_once()
 
 

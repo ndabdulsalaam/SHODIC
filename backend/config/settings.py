@@ -11,11 +11,18 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'rxchat.dev,www.rxchat.dev,.onrender.com').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -109,7 +116,7 @@ WHITENOISE_MANIFEST_STRICT = False
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'https://rxchat.dev,https://www.rxchat.dev').split(',')
 CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 
@@ -136,6 +143,8 @@ OPENROUTER_BASE_URL = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/ap
 OPENROUTER_TEXT_MODEL = os.getenv('OPENROUTER_MODEL', 'openai/gpt-oss-120b:free')
 OPENROUTER_VISION_MODEL = os.getenv('OPENROUTER_VISION_MODEL', 'google/gemma-4-31b-it:free')
 OPENROUTER_VISION_MODEL_FALLBACK = os.getenv('OPENROUTER_VISION_MODEL_FALLBACK', 'baidu/qianfan-ocr-fast:free')
+OPENROUTER_TEXT_MAX_TOKENS = env_int('OPENROUTER_TEXT_MAX_TOKENS', 2048)
+OPENROUTER_REASONING_MAX_TOKENS = env_int('OPENROUTER_REASONING_MAX_TOKENS', 4096)
 
 # Vector DB — Qdrant Cloud (for RAG retrieval)
 QDRANT_URL = os.getenv('QDRANT_URL', '')
@@ -155,10 +164,11 @@ DEFAULT_FROM_EMAIL = f'RxChat <{BREVO_SENDER_EMAIL}>' if BREVO_SENDER_EMAIL else
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
-FRONTEND_URL = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else 'http://localhost:5173'
+FRONTEND_URL = os.getenv('FRONTEND_URL') or (ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else 'https://rxchat.dev')
+BACKEND_EXTERNAL_URL = os.getenv('BACKEND_EXTERNAL_URL') or RENDER_EXTERNAL_URL or 'https://rxchat.dev'
 GOOGLE_REDIRECT_URI = os.getenv(
     'GOOGLE_REDIRECT_URI',
-    'http://localhost:8000/api/auth/google/callback/'
+    f"{BACKEND_EXTERNAL_URL.rstrip('/')}/api/auth/google/callback/"
 )
 
 # Session — 15-day session to match trusted device window

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { HiOutlineXMark, HiOutlineArrowRightOnRectangle, HiOutlineEnvelope, HiOutlineShieldCheck } from 'react-icons/hi2'
 import './SettingsPanel.css'
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+const API = import.meta.env.VITE_API_BASE_URL || '/api'
 
 const ROLES = [
     { value: 'patient', label: 'Patient' },

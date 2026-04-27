@@ -179,6 +179,12 @@
     margin-bottom: 0;
 }
 
+.message__markdown strong,
+.message__markdown b {
+    font-weight: 700;
+    color: inherit;
+}
+
 /* Lists */
 .message__markdown ul,
 .message__markdown ol {

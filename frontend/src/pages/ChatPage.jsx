@@ -75,7 +75,7 @@ function ChatPage() {
     const conversationsRef = useRef([])
     const editVariantsRef = useRef({})
 
-    const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+    const API = import.meta.env.VITE_API_BASE_URL || '/api'
 
     useEffect(() => {
         conversationsRef.current = conversations

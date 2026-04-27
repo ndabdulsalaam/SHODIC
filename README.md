@@ -97,11 +97,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-The backend runs at:
-
-```text
-http://localhost:8000
-```
+Set `BACKEND_EXTERNAL_URL` to the deployed backend origin used by OAuth and callbacks.
 
 ## Frontend Setup
 
@@ -117,23 +113,21 @@ npm install
 npm run dev
 ```
 
-The frontend runs at:
-
-```text
-http://localhost:5173
-```
+Set `VITE_API_BASE_URL` to the deployed backend API origin before building the frontend.
 
 ## Environment Variables
 
 Create `backend/.env` for backend configuration.
 
-Minimum local setup:
+Minimum deployed setup:
 
 ```env
 SECRET_KEY=change-me
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-ALLOWED_ORIGINS=http://localhost:5173
+DEBUG=False
+ALLOWED_HOSTS=rxchat.dev,www.rxchat.dev,rxchat-backend.onrender.com
+ALLOWED_ORIGINS=https://rxchat.dev,https://www.rxchat.dev
+FRONTEND_URL=https://rxchat.dev
+BACKEND_EXTERNAL_URL=https://rxchat-backend.onrender.com
 ```
 
 AI:
@@ -142,6 +136,8 @@ AI:
 OPENROUTER_API_KEY=your_openrouter_api_key
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=openai/gpt-oss-120b:free
+OPENROUTER_TEXT_MAX_TOKENS=2048
+OPENROUTER_REASONING_MAX_TOKENS=4096
 ```
 
 Optional RAG retrieval:
@@ -176,13 +172,13 @@ Google OAuth:
 ```env
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback/
+GOOGLE_REDIRECT_URI=https://rxchat-backend.onrender.com/api/auth/google/callback/
 ```
 
 Frontend environment variables can be added in `frontend/.env`:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000/api
+VITE_API_BASE_URL=https://rxchat-backend.onrender.com/api
 ```
 
 ## API Overview

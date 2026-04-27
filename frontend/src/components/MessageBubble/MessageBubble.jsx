@@ -144,6 +144,15 @@ function SmartMarkdownTable({ children, ...props }) {
     )
 }
 
+function normalizeTableMarkup(markdown = '') {
+    return String(markdown).split('\n').map((line) => {
+        if (!line.includes('|')) return line
+        return line
+            .replace(/<b>(.*?)<\/b>/gi, '<strong>$1</strong>')
+            .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+    }).join('\n')
+}
+
 function MessageBubble({ message, index, onEdit, onResend, onVariantChange, resendMessageId, isLoading }) {
     const isUser = message.role === 'user'
     const attachments = Array.isArray(message.attachments) ? message.attachments : []
@@ -156,6 +165,7 @@ function MessageBubble({ message, index, onEdit, onResend, onVariantChange, rese
     const [isEditing, setIsEditing] = useState(false)
     const [editText, setEditText] = useState(message.content)
     const [copied, setCopied] = useState(false)
+    const renderedContent = useMemo(() => normalizeTableMarkup(message.content), [message.content])
     const time = message.created_at
         ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : ''
@@ -270,7 +280,7 @@ function MessageBubble({ message, index, onEdit, onResend, onVariantChange, rese
                                     },
                                 }}
                             >
-                                {message.content}
+                                {renderedContent}
                             </Markdown>
                         </div>
                     )}
