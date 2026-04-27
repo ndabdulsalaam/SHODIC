@@ -855,13 +855,8 @@ GOOGLE_CALLBACK_PATH = '/api/auth/google/callback/'
 
 
 def _is_local_host(host):
-    host = (host or '').lower()
-    if host.startswith('['):
-        hostname = host.split(']', 1)[0].strip('[]')
-    elif host.count(':') == 1:
-        hostname = host.rsplit(':', 1)[0]
-    else:
-        hostname = host
+    parsed_host = urlparse(f"//{host or ''}").hostname
+    hostname = (parsed_host or host or '').strip('[]').lower()
     return hostname in {'localhost', '127.0.0.1', '::1'}
 
 
@@ -869,28 +864,50 @@ def _is_local_url(url):
     return _is_local_host(urlparse(url or '').netloc)
 
 
+def _origin_from_url(url):
+    parsed = urlparse(url or '')
+    if not parsed.scheme or not parsed.netloc:
+        return ''
+    return f'{parsed.scheme}://{parsed.netloc}'
+
+
+def _allowed_frontend_origins():
+    return [
+        origin.rstrip('/')
+        for origin in getattr(settings, 'ALLOWED_ORIGINS', [])
+        if origin.startswith(('http://', 'https://'))
+    ]
+
+
+def _request_frontend_origin(request):
+    allowed_origins = set(_allowed_frontend_origins())
+    for header in ('HTTP_ORIGIN', 'HTTP_REFERER'):
+        origin = _origin_from_url(request.META.get(header))
+        if origin in allowed_origins:
+            return origin
+    return ''
+
+
 def _google_frontend_url_for_request(request):
-    if _is_local_host(request.get_host()):
-        return settings.LOCAL_FRONTEND_URL.rstrip('/')
-    if settings.FRONTEND_URL:
-        return settings.FRONTEND_URL.rstrip('/')
+    request_origin = _request_frontend_origin(request)
+    if request_origin:
+        return request_origin
+
+    allowed_origins = _allowed_frontend_origins()
+    if settings.DEBUG:
+        local_origin = next((origin for origin in allowed_origins if _is_local_url(origin)), '')
+        if local_origin:
+            return local_origin
+
+    remote_origin = next((origin for origin in allowed_origins if not _is_local_url(origin)), '')
+    if remote_origin:
+        return remote_origin
+
     return request.build_absolute_uri('/').rstrip('/')
 
 
 def _google_redirect_uri_for_request(request):
-    if _is_local_host(request.get_host()):
-        return f"{settings.LOCAL_BACKEND_URL.rstrip('/')}{GOOGLE_CALLBACK_PATH}"
-
-    current_uri = request.build_absolute_uri(GOOGLE_CALLBACK_PATH)
-    allowed_uris = set(getattr(settings, 'GOOGLE_REDIRECT_URIS', []))
-    if current_uri in allowed_uris:
-        return current_uri
-    if (
-        settings.GOOGLE_REDIRECT_URI
-        and not _is_local_url(settings.GOOGLE_REDIRECT_URI)
-    ):
-        return settings.GOOGLE_REDIRECT_URI
-    return current_uri
+    return request.build_absolute_uri(GOOGLE_CALLBACK_PATH)
 
 
 @csrf_exempt
