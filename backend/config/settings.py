@@ -45,7 +45,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     # Local
-    'chat',
+    'fildah',
+    'rxchat',
     'accounts',
 ]
 
@@ -184,11 +185,19 @@ Q_CLUSTER = {
 # Email — Brevo HTTP API (primary), Django console (dev fallback)
 BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
 BREVO_SENDER_EMAIL = os.getenv('BREVO_SENDER_EMAIL', '')
-BREVO_SENDER_NAME = os.getenv('BREVO_SENDER_NAME', 'RxChat')
+BREVO_SENDER_NAME_RXCHAT = os.getenv(
+    'BREVO_SENDER_NAME_RXCHAT',
+    os.getenv('BREVO_SENDER_NAME', 'RxChat'),
+)
+BREVO_SENDER_NAME = os.getenv('BREVO_SENDER_NAME', BREVO_SENDER_NAME_RXCHAT)
 
 # Django email backend (used as fallback when BREVO_API_KEY is not set)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = f'RxChat <{BREVO_SENDER_EMAIL}>' if BREVO_SENDER_EMAIL else 'RxChat <noreply@rxchat.dev>'
+DEFAULT_FROM_EMAIL = (
+    f'{BREVO_SENDER_NAME_RXCHAT} <{BREVO_SENDER_EMAIL}>'
+    if BREVO_SENDER_EMAIL
+    else 'RxChat <noreply@rxchat.dev>'
+)
 
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
