@@ -55,6 +55,11 @@ python manage.py test
 Frontend:
 
 ```bash
+cd fildah_frontend
+npm install
+npm run lint
+npm run build
+cd ..
 cd rxchat_frontend
 npm install
 npm run lint
