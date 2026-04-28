@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: rxchat-backend
+    name: fildah-api
     runtime: python
     rootDir: backend
     buildCommand: "./build.sh"
