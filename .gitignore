@@ -17,6 +17,7 @@ fildah_frontend/.env
 
 # General
 .DS_Store
+.codex
 *.pyc
 *.pyo
 __pycache__/
