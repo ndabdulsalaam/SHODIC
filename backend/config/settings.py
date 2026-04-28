@@ -4,6 +4,7 @@ Django settings for RxChat.
 
 import os
 import importlib.util
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 import dj_database_url
@@ -124,6 +125,14 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+if "test" in sys.argv:
+    STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.StaticFilesStorage"
+    MIDDLEWARE = [
+        middleware
+        for middleware in MIDDLEWARE
+        if middleware != "whitenoise.middleware.WhiteNoiseMiddleware"
+    ]
 
 # WhiteNoise configuration
 WHITENOISE_USE_FINDERS = False
