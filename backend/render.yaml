@@ -4,8 +4,12 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: "./build.sh"
-    startCommand: "python manage.py collectstatic --noinput && python manage.py adopt_chat_migrations_for_rxchat && python manage.py migrate && gunicorn config.wsgi:application"
+    startCommand: "python manage.py collectstatic --noinput && python manage.py migrate && gunicorn config.wsgi:application"
     envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: "config.settings.production"
+      - key: DJANGO_ENV
+        value: "production"
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
@@ -16,6 +20,8 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: DATABASE_SSL_REQUIRE
+        value: "True"
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_BASE_URL
