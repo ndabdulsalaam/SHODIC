@@ -258,3 +258,45 @@ class GoogleOAuthRedirectTests(TestCase):
         )
         session = self.client.session
         self.assertEqual(session["google_frontend_url"], "https://rxchat-preview.fildah.com")
+
+    @override_settings(
+        DEBUG=False,
+        GOOGLE_CLIENT_ID="client-id",
+        ALLOWED_HOSTS=["api.fildah.com"],
+        ALLOWED_ORIGINS=[
+            "https://fildah.com",
+            "https://rxchat.fildah.com",
+        ],
+    )
+    def test_google_login_prefers_allowed_return_origin_param(self):
+        response = self.client.get(
+            "/auth/google/login/?return_origin=https%3A%2F%2Frxchat.fildah.com&auth_mode=signup",
+            secure=True,
+            HTTP_HOST="api.fildah.com",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        session = self.client.session
+        self.assertEqual(session["google_frontend_url"], "https://rxchat.fildah.com")
+        self.assertEqual(session["google_auth_mode"], "signup")
+
+    @override_settings(
+        DEBUG=False,
+        GOOGLE_CLIENT_ID="client-id",
+        ALLOWED_HOSTS=["api.fildah.com"],
+        ALLOWED_ORIGINS=[
+            "https://fildah.com",
+            "https://rxchat.fildah.com",
+        ],
+    )
+    def test_google_login_ignores_unallowed_return_origin_param(self):
+        response = self.client.get(
+            "/auth/google/login/?return_origin=https%3A%2F%2Fevil.example&auth_mode=bad",
+            secure=True,
+            HTTP_HOST="api.fildah.com",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        session = self.client.session
+        self.assertEqual(session["google_frontend_url"], "https://fildah.com")
+        self.assertEqual(session["google_auth_mode"], "login")
