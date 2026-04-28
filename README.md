@@ -1,8 +1,12 @@
-# RxChat
+# Fildah
 
-RxChat is an AI pharmacy chat application for medication questions, drug
-interaction support, OTC guidance, and healthcare decision support, with a
-Nigeria-first product direction.
+Fildah is the parent company and brand platform for focused health technology
+products. It owns the company website, product directory, documentation,
+support intake, account hub, and shared backend API.
+
+RxChat is the first product under Fildah: an AI pharmacy chat application for
+medication questions, drug interaction support, OTC guidance, and healthcare
+decision support, with a Nigeria-first product direction.
 
 The app currently provides a ChatGPT-style pharmacy assistant with streaming
 responses, session-based anonymous conversations, account-based chat history,
@@ -17,6 +21,10 @@ a retrieval pipeline.
 
 ## Current Features
 
+- Fildah parent brand website APIs backed by Django admin-managed content
+- Product catalog with RxChat as the first live product
+- Documentation, blog/update, page, and contact/support models
+- Shared account hub API for product access, organizations, and subscription summary
 - Streaming AI chat over server-sent events
 - Anonymous session chats without registration
 - Registered-user chat history
@@ -62,14 +70,21 @@ work.
 ## Repository Structure
 
 ```text
-rxchat/
+fildah/
   backend/
+    fildah/           # parent brand CMS, products, docs, blog, support, account hub API
     accounts/          # auth, OTPs, profiles, subscriptions, organizations
     rxchat/            # conversations, messages, streaming RxChat API, AI service
     config/            # Django settings, URLs, auth config
     templates/         # error templates
     manage.py
     requirements.txt
+  fildah_frontend/
+    public/            # Fildah parent-site static assets
+    src/
+      components/      # parent-site layout and reusable UI
+      pages/           # home, products, docs, blog, support, account hub
+    package.json
   rxchat_frontend/
     public/            # RxChat frontend static assets
     src/
@@ -77,7 +92,7 @@ rxchat/
       components/      # chat, auth, sidebar, settings UI
       pages/           # ChatPage and AuthPage
     package.json
-  TODO.md              # implementation roadmap and data-source plan
+  plans/               # implementation roadmaps and data-source notes
 ```
 
 ## Backend Setup
@@ -107,7 +122,17 @@ Prerequisites:
 
 - Node.js 18+
 
-Install and run:
+Run the Fildah parent website:
+
+```bash
+cd fildah_frontend
+npm install
+npm run dev
+```
+
+Local Fildah frontend default: `http://localhost:5174`.
+
+Run the RxChat product app:
 
 ```bash
 cd rxchat_frontend
@@ -117,9 +142,10 @@ npm run dev
 
 Local frontend default: `http://localhost:5173`.
 
-The current `rxchat_frontend/` directory is the RxChat product frontend. Future
-Fildah products should use their own frontend app/deployment and call the shared
-API at `https://api.fildah.com`.
+The `fildah_frontend/` directory is the parent brand website. The
+`rxchat_frontend/` directory is the RxChat product frontend. Future Fildah
+products should use their own frontend app/deployment and call the shared API at
+`https://api.fildah.com`.
 
 For local development, `VITE_API_BASE_URL` can be omitted; the app automatically uses
 `http://localhost:8000` when opened on `localhost` or `127.0.0.1`. Set
@@ -139,7 +165,7 @@ DJANGO_ENV=dev
 SECRET_KEY=change-me
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:3000
 ```
 
 AI:
@@ -192,7 +218,8 @@ actual backend callbacks to Google Cloud Console under Authorized redirect URIs,
 for example `http://localhost:8000/auth/google/callback/` and
 `https://api.fildah.com/auth/google/callback/`.
 
-Frontend environment variables can be added in `rxchat_frontend/.env`:
+Frontend environment variables can be added in `fildah_frontend/.env` and
+`rxchat_frontend/.env`:
 
 ```env
 VITE_API_BASE_URL=https://api.fildah.com
@@ -202,6 +229,21 @@ Omit `VITE_API_BASE_URL` locally unless you want to point the local frontend at
 a remote backend.
 
 ## API Overview
+
+Fildah parent endpoints:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/home/` | Parent-site homepage metadata, featured products, trust points, updates |
+| `GET` | `/products/` | Product catalog |
+| `GET` | `/products/<slug>/` | Product detail, starting with RxChat |
+| `GET` | `/pages/<slug>/` | Published company pages such as About |
+| `GET` | `/docs/` | Published documentation sections |
+| `GET` | `/docs/<slug>/` | Documentation detail |
+| `GET` | `/blog/` | Published blog/news posts |
+| `GET` | `/blog/<slug>/` | Blog/news detail |
+| `POST` | `/contact/` | Contact/support intake |
+| `GET` | `/account/products/` | Authenticated account hub summary |
 
 Chat endpoints:
 
@@ -282,11 +324,11 @@ Planned product features:
 
 ## Deployment Notes
 
-Frontend deployment target:
+Frontend deployment targets:
 
-- Vercel
-- Root directory: `rxchat_frontend/`
-- Build command: `npm run build`
+- Fildah parent site: Vercel project with root directory `fildah_frontend/`
+- RxChat product app: Vercel project with root directory `rxchat_frontend/`
+- Build command for both: `npm run build`
 
 Backend deployment target:
 
