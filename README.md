@@ -54,7 +54,7 @@ work.
 | Backend | Django 6, Django REST Framework |
 | Auth | Django sessions, email OTP, trusted-device cookie, Google OAuth |
 | AI | OpenRouter via the OpenAI-compatible SDK |
-| Database | SQLite for local dev, PostgreSQL via `DATABASE_URL` for production |
+| Database | PostgreSQL per environment; SQLite fallback for quick dev only |
 | Email | Brevo HTTP API, Django console fallback for local dev |
 | RAG | Optional Qdrant Cloud retrieval with Qdrant Cloud Inference embeddings |
 | Deployment target | Vercel frontend, Render backend |
@@ -70,7 +70,7 @@ rxchat/
     templates/         # error templates
     manage.py
     requirements.txt
-  frontend/
+  rxchat_frontend/
     public/            # RxChat frontend static assets
     src/
       config/          # RxChat product config for API namespace/domain
@@ -85,7 +85,8 @@ rxchat/
 Prerequisites:
 
 - Python 3.11+
-- PostgreSQL if using `DATABASE_URL`; otherwise SQLite is used locally
+- PostgreSQL for serious dev/staging/production schema work; SQLite fallback is
+  available only when `DATABASE_URL` is omitted in `dev`
 
 Install and run:
 
@@ -109,16 +110,16 @@ Prerequisites:
 Install and run:
 
 ```bash
-cd frontend
+cd rxchat_frontend
 npm install
 npm run dev
 ```
 
 Local frontend default: `http://localhost:5173`.
 
-The current `frontend/` directory is the RxChat product frontend. Future Fildah
-products should use their own frontend app/deployment and call the shared API at
-`https://api.fildah.com`.
+The current `rxchat_frontend/` directory is the RxChat product frontend. Future
+Fildah products should use their own frontend app/deployment and call the shared
+API at `https://api.fildah.com`.
 
 For local development, `VITE_API_BASE_URL` can be omitted; the app automatically uses
 `http://localhost:8000` when opened on `localhost` or `127.0.0.1`. Set
@@ -126,15 +127,19 @@ For local development, `VITE_API_BASE_URL` can be omitted; the app automatically
 
 ## Environment Variables
 
-Create `backend/.env` for backend configuration.
+Create `backend/.env` for local `dev` configuration. Staging and production
+must use their own host-managed environment variables or copies of
+`backend/.env.staging.sample` and `backend/.env.production.sample`.
 
 Minimum setup for local and remote access:
 
 ```env
+DJANGO_SETTINGS_MODULE=config.settings.dev
+DJANGO_ENV=dev
 SECRET_KEY=change-me
-DEBUG=False
-ALLOWED_HOSTS=localhost,127.0.0.1,[::1],api.fildah.com
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,https://rxchat.fildah.com,https://fildah.com
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
 AI:
@@ -158,10 +163,11 @@ QDRANT_COLLECTION=rxchat_drugs
 Database:
 
 ```env
-DATABASE_URL=postgresql://user:password@host:5432/dbname
+DATABASE_URL=postgresql://user:password@host:5432/dev_db
 ```
 
-If `DATABASE_URL` is omitted, Django uses local SQLite.
+If `DATABASE_URL` is omitted in `dev`, Django uses local SQLite. Staging and
+production require `DATABASE_URL`.
 
 Email OTP delivery:
 
@@ -186,7 +192,7 @@ actual backend callbacks to Google Cloud Console under Authorized redirect URIs,
 for example `http://localhost:8000/auth/google/callback/` and
 `https://api.fildah.com/auth/google/callback/`.
 
-Frontend environment variables can be added in `frontend/.env`:
+Frontend environment variables can be added in `rxchat_frontend/.env`:
 
 ```env
 VITE_API_BASE_URL=https://api.fildah.com
@@ -279,17 +285,23 @@ Planned product features:
 Frontend deployment target:
 
 - Vercel
-- Root directory: `frontend/`
+- Root directory: `rxchat_frontend/`
 - Build command: `npm run build`
 
 Backend deployment target:
 
 - Render or another Django-compatible host
 - Root directory: `backend/`
-- Start command: `python manage.py adopt_chat_migrations_for_rxchat && python manage.py migrate && gunicorn config.wsgi:application`
-- Configure `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`,
-  `ALLOWED_ORIGINS`, OpenRouter, optional Qdrant, and email keys in the host
-  environment
+- Build command: `./build.sh`
+- Start command: `python manage.py collectstatic --noinput && python manage.py migrate && gunicorn config.wsgi:application`
+- Configure `DJANGO_SETTINGS_MODULE`, `DJANGO_ENV`, `SECRET_KEY`,
+  `DATABASE_URL`, `ALLOWED_HOSTS`, `ALLOWED_ORIGINS`, OpenRouter, optional
+  Qdrant, and email keys in the host environment.
+- Use `config.settings.staging` for staging and `config.settings.production`
+  for production.
+
+For the full branch, database, migration, and release workflow, see
+[`docs/safe-growth-workflow.md`](docs/safe-growth-workflow.md).
 
 Manual provider connectivity checks can be run from `backend/` with:
 
