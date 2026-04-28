@@ -20,7 +20,7 @@ ALLOWED_HOSTS = env_list(  # noqa: F405
 
 ALLOWED_ORIGINS = env_list(  # noqa: F405
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:3000",
+    "http://localhost:5173,http://localhost:5174",
 )
 CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS
 CSRF_TRUSTED_ORIGINS = ALLOWED_ORIGINS
