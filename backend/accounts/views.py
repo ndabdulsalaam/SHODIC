@@ -881,6 +881,10 @@ def _allowed_frontend_origins():
 
 def _request_frontend_origin(request):
     allowed_origins = set(_allowed_frontend_origins())
+    requested_origin = _origin_from_url(request.query_params.get('return_origin'))
+    if requested_origin in allowed_origins:
+        return requested_origin
+
     for header in ('HTTP_ORIGIN', 'HTTP_REFERER'):
         origin = _origin_from_url(request.META.get(header))
         if origin in allowed_origins:
@@ -906,6 +910,11 @@ def _google_frontend_url_for_request(request):
     return request.build_absolute_uri('/').rstrip('/')
 
 
+def _google_auth_mode_for_request(request):
+    auth_mode = request.query_params.get('auth_mode', '').strip().lower()
+    return auth_mode if auth_mode in {'login', 'signup'} else 'login'
+
+
 def _google_redirect_uri_for_request(request):
     return request.build_absolute_uri(GOOGLE_CALLBACK_PATH)
 
@@ -918,6 +927,7 @@ def google_login(request):
     redirect_uri = _google_redirect_uri_for_request(request)
     request.session['google_redirect_uri'] = redirect_uri
     request.session['google_frontend_url'] = _google_frontend_url_for_request(request)
+    request.session['google_auth_mode'] = _google_auth_mode_for_request(request)
 
     params = urlencode({
         'client_id': settings.GOOGLE_CLIENT_ID,
@@ -992,6 +1002,7 @@ def google_callback(request):
         login(request, user)
         request.session.pop('google_redirect_uri', None)
         request.session.pop('google_frontend_url', None)
+        request.session.pop('google_auth_mode', None)
         resp = redirect(frontend)
         resp = _trust_device(user, request, resp)
         return resp
@@ -1004,6 +1015,7 @@ def google_callback(request):
         }
         request.session.pop('google_redirect_uri', None)
         request.session.pop('google_frontend_url', None)
+        request.session.pop('google_auth_mode', None)
         return redirect(f'{frontend}/auth?step=google_setup')
 
 
