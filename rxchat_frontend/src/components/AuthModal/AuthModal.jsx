@@ -108,7 +108,13 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
     }
 
     const handleGoogleLogin = () => {
-        window.location.href = `${API}/auth/google/login/`
+        const returnOrigin = window.location.origin
+        const authMode = isLogin ? 'login' : 'signup'
+        const params = new URLSearchParams({
+            return_origin: returnOrigin,
+            auth_mode: authMode,
+        })
+        window.location.href = `${API}/auth/google/login/?${params.toString()}`
     }
 
     // ─── Forgot Password View ───
