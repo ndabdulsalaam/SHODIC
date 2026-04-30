@@ -1,6 +1,7 @@
+import { useEffect } from 'react'
+import { FiArrowUpRight, FiInstagram, FiLinkedin, FiMenu, FiTwitter, FiX } from 'react-icons/fi'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { FiArrowUpRight, FiMenu, FiX } from 'react-icons/fi'
-import { NavLink, Outlet } from 'react-router-dom'
 import BrandLogo from './BrandLogo'
 
 const RXCHAT_URL = 'https://rxchat.fildah.com'
@@ -11,6 +12,14 @@ const navItems = [
   { label: 'Blog', path: '/blog' },
   { label: 'Contact', path: '/contact' },
 ]
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
 
 function NavItems({ onNavigate }) {
   return navItems.map((item) => (
@@ -30,6 +39,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      <ScrollToTop />
       <header className="site-header">
         <div className="site-header__inner">
           <BrandLogo />
@@ -68,16 +78,29 @@ export default function Layout() {
         <div className="site-footer__inner">
           <div>
             <BrandLogo />
-            <p>Focused health technology products under one careful parent brand.</p>
+            <p>Health technology products built with care,<br />trust, and practical support.</p>
           </div>
-          <div className="site-footer__links">
-            <NavLink to="/about">About</NavLink>
+          <nav className="site-footer__nav" aria-label="Footer navigation">
             <NavLink to="/products">Products</NavLink>
+            <NavLink to="/about">About</NavLink>
             <NavLink to="/blog">Blog</NavLink>
             <NavLink to="/contact">Contact</NavLink>
             <NavLink to="/docs">Docs</NavLink>
-            <NavLink to="/account">Account</NavLink>
-            <NavLink to="/docs/privacy">Privacy</NavLink>
+            <NavLink to="/docs/privacy">Privacy Policy</NavLink>
+          </nav>
+          <div className="site-footer__bottom">
+            <p className="site-footer__copyright">© {new Date().getFullYear()} Fildah. All rights reserved.</p>
+            <div className="site-footer__social">
+              <a href="https://twitter.com/fildahHQ" target="_blank" rel="noopener noreferrer" aria-label="Fildah on Twitter">
+                <FiTwitter />
+              </a>
+              <a href="https://linkedin.com/company/fildah" target="_blank" rel="noopener noreferrer" aria-label="Fildah on LinkedIn">
+                <FiLinkedin />
+              </a>
+              <a href="https://instagram.com/fildah" target="_blank" rel="noopener noreferrer" aria-label="Fildah on Instagram">
+                <FiInstagram />
+              </a>
+            </div>
           </div>
         </div>
       </footer>
