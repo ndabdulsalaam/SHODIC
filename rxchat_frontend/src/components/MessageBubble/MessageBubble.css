@@ -23,7 +23,16 @@
     max-width: 75%;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0;
+}
+
+.message--ai .message__content {
+    width: 95%;
+    max-width: 95%;
+}
+
+.message--user .message__content {
+    max-width: 75%;
 }
 
 /* Bubble */
@@ -46,7 +55,7 @@
 .message--ai .message__bubble {
     background: transparent;
     color: var(--color-text);
-    padding-left: var(--space-1);
+    padding-left: var(--space-2);
     padding-right: var(--space-1);
 }
 
@@ -54,12 +63,35 @@
 .message__bottom {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 6px;
     padding: 0 var(--space-1);
+    margin-top: 1px;
+    min-height: 24px;
+    transition: opacity var(--transition-fast);
 }
 
 .message--user .message__bottom {
     justify-content: flex-end;
+    min-height: 0;
+    height: 0;
+    margin-top: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.message--user:hover .message__bottom,
+.message--user:focus-within .message__bottom {
+    min-height: 24px;
+    height: auto;
+    margin-top: 1px;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.message--ai .message__bottom {
+    justify-content: flex-start;
+    margin-top: -2px;
 }
 
 .message__time {
@@ -143,7 +175,7 @@
 .message__markdown h4 {
     font-weight: 700;
     color: var(--color-text);
-    margin: var(--space-4) 0 var(--space-2);
+    margin: var(--space-3) 0 0.35rem;
     line-height: 1.3;
 }
 
@@ -188,12 +220,35 @@
 /* Lists */
 .message__markdown ul,
 .message__markdown ol {
-    margin: var(--space-2) 0;
-    padding-left: var(--space-5);
+    margin: 0.25rem 0 var(--space-2);
+    padding-left: 1.25rem;
+}
+
+.message__markdown h1 + ul,
+.message__markdown h1 + ol,
+.message__markdown h2 + ul,
+.message__markdown h2 + ol,
+.message__markdown h3 + ul,
+.message__markdown h3 + ol,
+.message__markdown h4 + ul,
+.message__markdown h4 + ol,
+.message__markdown p + ul,
+.message__markdown p + ol {
+    margin-top: 0.15rem;
 }
 
 .message__markdown li {
-    margin-bottom: var(--space-1);
+    margin-bottom: 0.18rem;
+}
+
+.message__markdown li > ul,
+.message__markdown li > ol {
+    margin: 0.18rem 0;
+    padding-left: 1rem;
+}
+
+.message__markdown li > p {
+    margin-bottom: 0.18rem;
 }
 
 .message__markdown ul li {
@@ -402,12 +457,17 @@
 
 
 @media (max-width: 768px) {
-    .message__content {
+    .message--user .message__content {
         max-width: 90%;
     }
 
+    .message--ai .message__content {
+        width: 95%;
+        max-width: 95%;
+    }
+
     .message--ai .message__bubble {
-        padding-left: 0;
+        padding-left: var(--space-1);
         padding-right: 0;
     }
 }
