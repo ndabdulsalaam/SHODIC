@@ -67,6 +67,19 @@ class ProfileApiTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.role, "patient")
 
+    def test_profile_and_email_mutations_require_authentication(self):
+        checks = [
+            ("patch", "/auth/profile/", {"first_name": "Ada"}),
+            ("post", "/auth/email/add/", {"email": "new@example.com"}),
+            ("post", "/auth/email/verify/", {"email": "new@example.com", "otp": "123456"}),
+            ("post", "/auth/email/remove/", {"email": "old@example.com"}),
+        ]
+
+        for method, path, payload in checks:
+            with self.subTest(path=path):
+                response = getattr(self.client, method)(path, payload, format="json")
+                self.assertEqual(response.status_code, 401)
+
 
 class AuthOtpFlowTests(TestCase):
     def setUp(self):
