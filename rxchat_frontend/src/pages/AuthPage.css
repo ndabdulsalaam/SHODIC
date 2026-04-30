@@ -6,14 +6,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    height: 100dvh;
     min-height: 100vh;
     background: var(--color-bg);
     padding: var(--space-4);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .auth-page__card {
     width: 100%;
     max-width: 420px;
+    max-height: calc(100dvh - (var(--space-4) * 2));
+    overflow-y: auto;
     background: var(--color-surface);
     border-radius: var(--radius-xl);
     border: 1px solid var(--color-border);
@@ -25,6 +30,7 @@
 
 .auth-page__card--wizard {
     max-width: 480px;
+    padding: var(--space-6);
 }
 
 .auth-page__logo {
@@ -33,6 +39,10 @@
     justify-content: center;
     gap: var(--space-3);
     margin-bottom: var(--space-6);
+}
+
+.auth-page__card--wizard .auth-page__logo {
+    margin-bottom: var(--space-3);
 }
 
 .auth-page__logo-text {
@@ -59,7 +69,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: calc(var(--space-2) * -1) 0 var(--space-5);
+    margin: 0 0 var(--space-3);
 }
 
 .auth-page__step-item {
@@ -102,7 +112,7 @@
 }
 
 .auth-page__form--wizard {
-    overflow: hidden;
+    overflow: visible;
 }
 
 .auth-page__wizard-step {
@@ -131,7 +141,7 @@
 .auth-page__subtitle {
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-4);
 }
 
 .auth-page__subtitle strong {
@@ -370,7 +380,7 @@
 }
 
 .auth-page__input-group {
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-3);
 }
 
 .auth-page__input-group label {
@@ -446,7 +456,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    margin-top: var(--space-2);
+    margin-top: 0;
 }
 
 .auth-page__wizard-actions .auth-page__submit {
@@ -603,16 +613,24 @@
     .auth-page {
         align-items: flex-start;
         min-height: 100dvh;
-        overflow-y: auto;
-        padding: var(--space-3);
+        padding: var(--space-2);
     }
 
     .auth-page__card {
-        padding: var(--space-5);
+        max-height: calc(100dvh - (var(--space-2) * 2));
+        padding: var(--space-4);
     }
 
     .auth-page__logo {
-        margin-bottom: var(--space-5);
+        margin-bottom: var(--space-3);
+    }
+
+    .auth-page__logo-text {
+        font-size: var(--font-size-2xl);
+    }
+
+    .auth-page__subtitle {
+        margin-bottom: var(--space-3);
     }
 
     .auth-page__row {
@@ -636,5 +654,25 @@
     .auth-page__secondary-action {
         padding-left: var(--space-3);
         padding-right: var(--space-3);
+    }
+}
+
+@media (max-height: 720px) {
+    .auth-page {
+        align-items: flex-start;
+        padding-top: var(--space-2);
+        padding-bottom: var(--space-2);
+    }
+
+    .auth-page__card {
+        max-height: calc(100dvh - (var(--space-2) * 2));
+    }
+
+    .auth-page__card--wizard {
+        padding: var(--space-4);
+    }
+
+    .auth-page__title {
+        margin-bottom: var(--space-1);
     }
 }
