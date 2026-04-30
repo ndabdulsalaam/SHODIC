@@ -14,10 +14,18 @@ const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
 const ProductsPage = lazy(() => import('./pages/ProductsPage'))
 const SupportPage = lazy(() => import('./pages/SupportPage'))
 
+function LoadingFallback() {
+  return (
+    <div className="loading-fallback">
+      <div className="loading-spinner" aria-label="Loading page" />
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={null}>
+      <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
