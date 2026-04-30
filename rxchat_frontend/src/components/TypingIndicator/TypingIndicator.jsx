@@ -1,12 +1,10 @@
 import './TypingIndicator.css'
 
-function TypingIndicator() {
+function TypingIndicator({ label = 'Thinking' }) {
     return (
         <div className="typing">
             <div className="typing__bubble">
-                <span className="typing__dot" />
-                <span className="typing__dot" />
-                <span className="typing__dot" />
+                <span className="typing__label">{label}</span>
             </div>
         </div>
     )
