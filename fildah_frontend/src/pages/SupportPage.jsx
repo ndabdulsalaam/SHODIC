@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FiCheckCircle, FiSend } from 'react-icons/fi'
+import { FiCheckCircle, FiMessageCircle, FiSend } from 'react-icons/fi'
 import { apiRequest } from '../config/api'
 import { fallbackProduct } from '../data/fallbacks'
 import { useApiResource } from '../hooks/useApiResource'
@@ -70,6 +70,7 @@ export default function SupportPage() {
             <option>Partnership</option>
             <option>Product access</option>
             <option>Support</option>
+            <option>Press</option>
             <option>Documentation</option>
           </select>
         </label>
@@ -97,6 +98,19 @@ export default function SupportPage() {
         <button className="button button--primary support-form__button" type="submit" disabled={submitting}>
           <FiSend aria-hidden="true" /> {submitting ? 'Sending' : 'Send'}
         </button>
+        <div className="contact-alternatives">
+          <a
+            className="whatsapp-cta"
+            href="https://wa.me/2349000000000"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <FiMessageCircle aria-hidden="true" /> Chat on WhatsApp
+          </a>
+          <p className="contact-email">
+            Or email us at <a href="mailto:hello@fildah.com">hello@fildah.com</a>
+          </p>
+        </div>
       </form>
     </section>
   )
