@@ -30,7 +30,10 @@
 
 .auth-page__card--wizard {
     max-width: 480px;
+    max-height: 70dvh;
     padding: var(--space-6);
+    display: flex;
+    flex-direction: column;
 }
 
 .auth-page__logo {
@@ -113,10 +116,20 @@
 
 .auth-page__form--wizard {
     overflow: visible;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .auth-page__wizard-step {
     animation: authWizardStep 0.22s ease;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
 }
 
 @keyframes authWizardStep {
@@ -456,7 +469,9 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    margin-top: 0;
+    margin-top: auto;
+    padding-top: var(--space-3);
+    flex-shrink: 0;
 }
 
 .auth-page__wizard-actions .auth-page__submit {
@@ -621,6 +636,10 @@
         padding: var(--space-4);
     }
 
+    .auth-page__card--wizard {
+        max-height: 65dvh;
+    }
+
     .auth-page__logo {
         margin-bottom: var(--space-3);
     }
@@ -670,6 +689,7 @@
 
     .auth-page__card--wizard {
         padding: var(--space-4);
+        max-height: 60dvh;
     }
 
     .auth-page__title {
