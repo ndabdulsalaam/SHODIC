@@ -2,9 +2,8 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HiOutlineArrowLeft } from 'react-icons/hi2'
 import { API_BASE_URL as API } from '../utils/api'
+import { cacheAuthUser } from '../utils/authCache'
 import './AuthPage.css'
-
-const AUTH_USER_CACHE_KEY = 'rxchat_auth_user'
 
 const ROLE_OPTIONS = [
     { value: '', label: 'Select your role' },
@@ -56,17 +55,16 @@ async function readApiResponse(res) {
     }
 }
 
-function cacheAuthUser(user) {
-    if (!user?.id) return
-    try {
-        sessionStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(user))
-    } catch { /* storage may be unavailable */ }
-}
-
 function normalizeNigeriaPhone(value) {
     const digits = value.replace(/\D/g, '')
     const withoutCountryCode = digits.replace(/^234/, '').replace(/^0/, '')
     return withoutCountryCode ? `+234${withoutCountryCode}` : ''
+}
+
+function nameFromEmail(value = '') {
+    const localPart = value.split('@')[0] || ''
+    const firstToken = localPart.split(/[._-]/).find(Boolean) || localPart
+    return firstToken ? firstToken.charAt(0).toUpperCase() + firstToken.slice(1) : 'User'
 }
 
 function suggestPreferredName(role, firstName, lastName, gender, profession = '') {
@@ -148,6 +146,7 @@ function AuthPage() {
     const [googlePreferredName, setGooglePreferredName] = useState('')
     const [googleFirstName, setGoogleFirstName] = useState('')
     const [googleLastName, setGoogleLastName] = useState('')
+    const [googlePendingEmail, setGooglePendingEmail] = useState('')
     const [googleSetupStep, setGoogleSetupStep] = useState(1)
     const [googleGender, setGoogleGender] = useState('')
     const [googleAgeRange, setGoogleAgeRange] = useState('')
@@ -210,6 +209,41 @@ function AuthPage() {
     useEffect(() => {
         if (!email && step !== 'google_setup' && step !== 'profile_setup') navigate('/')
     }, [email, step, navigate])
+
+    useEffect(() => {
+        if (step !== 'google_setup') return
+
+        let isCurrent = true
+        const loadPendingGoogleProfile = async () => {
+            try {
+                const res = await fetch(`${API}/auth/google/pending-profile/`, {
+                    credentials: 'include',
+                })
+                const data = await readApiResponse(res)
+                if (!isCurrent) return
+
+                if (!res.ok) {
+                    setError(data.error || 'Google sign-up session expired. Please try again.')
+                    return
+                }
+
+                const nextEmail = data.email || ''
+                const nextFirst = (data.first_name || '').trim() || nameFromEmail(nextEmail)
+                const nextLast = (data.last_name || '').trim()
+                setGooglePendingEmail(nextEmail)
+                setGoogleFirstName((current) => current || nextFirst)
+                setGoogleLastName((current) => current || nextLast)
+                setGooglePreferredName((current) => current || nextFirst)
+            } catch {
+                if (isCurrent) setError('Unable to load your Google profile. Please try again.')
+            }
+        }
+
+        loadPendingGoogleProfile()
+        return () => {
+            isCurrent = false
+        }
+    }, [step])
 
     const handleChange = (index, value) => {
         if (!/^\d*$/.test(value)) return // Only digits
@@ -434,11 +468,15 @@ function AuthPage() {
         setError('')
         setSuccess('')
 
-        if (!googlePreferredName) {
+        const effectiveFirstName = googleFirstName.trim() || nameFromEmail(googlePendingEmail)
+        const effectiveLastName = googleLastName.trim()
+        const effectivePreferredName = googlePreferredName.trim() || effectiveFirstName
+
+        if (!effectivePreferredName) {
             setError('Please tell us what Rx should call you')
             return
         }
-        if (!googleFirstName) {
+        if (!effectiveFirstName) {
             setError('First name is required')
             return
         }
@@ -466,9 +504,9 @@ function AuthPage() {
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
-                    preferred_name: googlePreferredName,
-                    first_name: googleFirstName,
-                    last_name: googleLastName,
+                    preferred_name: effectivePreferredName,
+                    first_name: effectiveFirstName,
+                    last_name: effectiveLastName,
                     gender: googleGender,
                     age_range: googleAgeRange,
                     phone_number: normalizeNigeriaPhone(googlePhoneNumber),
@@ -528,8 +566,9 @@ function AuthPage() {
         passwordMatch,
         onSubmit,
         showPasswordId,
+        compactIdentity = false,
     }) => {
-        const canContinueStep1 = Boolean(first.trim() && selectedGender && selectedAgeRange)
+        const canContinueStep1 = Boolean((compactIdentity || first.trim()) && selectedGender && selectedAgeRange)
         const needsProfession = role === 'other_health_professional'
         const canContinueStep2 = Boolean(role && preferred.trim() && (!needsProfession || profession.trim()))
         const preferredNameHint = role === 'patient'
@@ -592,30 +631,32 @@ function AuthPage() {
                         <div key={`${variant}-${currentStep}`} className="auth-page__wizard-step">
                             {currentStep === 1 && (
                                 <>
-                                    <div className="auth-page__row">
-                                        <div className="auth-page__input-group">
-                                            <label htmlFor={`${variant}-first-name`}>First Name</label>
-                                            <input
-                                                id={`${variant}-first-name`}
-                                                type="text"
-                                                value={first}
-                                                onChange={(e) => setFirst(e.target.value)}
-                                                placeholder="First name"
-                                                autoFocus
-                                                required
-                                            />
+                                    {!compactIdentity && (
+                                        <div className="auth-page__row">
+                                            <div className="auth-page__input-group">
+                                                <label htmlFor={`${variant}-first-name`}>First Name</label>
+                                                <input
+                                                    id={`${variant}-first-name`}
+                                                    type="text"
+                                                    value={first}
+                                                    onChange={(e) => setFirst(e.target.value)}
+                                                    placeholder="First name"
+                                                    autoFocus
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="auth-page__input-group">
+                                                <label htmlFor={`${variant}-last-name`}>Last Name</label>
+                                                <input
+                                                    id={`${variant}-last-name`}
+                                                    type="text"
+                                                    value={last}
+                                                    onChange={(e) => setLast(e.target.value)}
+                                                    placeholder="Last name"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="auth-page__input-group">
-                                            <label htmlFor={`${variant}-last-name`}>Last Name</label>
-                                            <input
-                                                id={`${variant}-last-name`}
-                                                type="text"
-                                                value={last}
-                                                onChange={(e) => setLast(e.target.value)}
-                                                placeholder="Last name"
-                                            />
-                                        </div>
-                                    </div>
+                                    )}
 
                                     <div className="auth-page__row">
                                         <div className="auth-page__input-group">
@@ -625,6 +666,7 @@ function AuthPage() {
                                                 className="auth-page__select"
                                                 value={selectedGender}
                                                 onChange={(e) => setSelectedGender(e.target.value)}
+                                                autoFocus={compactIdentity}
                                                 required
                                             >
                                                 {GENDER_OPTIONS.map((opt) => (
@@ -858,7 +900,9 @@ function AuthPage() {
     if (step === 'google_setup') {
         return renderSetupWizard({
             variant: 'google',
-            subtitle: <>You&apos;re signing in with Google. Set up your RxChat profile.</>,
+            subtitle: googlePendingEmail
+                ? <>Complete your RxChat profile for <strong>{googlePendingEmail}</strong></>
+                : <>Complete your RxChat profile.</>,
             currentStep: googleSetupStep,
             setCurrentStep: setGoogleSetupStep,
             first: googleFirstName,
@@ -884,6 +928,7 @@ function AuthPage() {
             passwordMatch: googlePasswordsMatch,
             onSubmit: handleGoogleSetup,
             showPasswordId: 'google-show-pass',
+            compactIdentity: true,
         })
     }
 
