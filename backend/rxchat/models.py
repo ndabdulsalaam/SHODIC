@@ -39,6 +39,10 @@ class Conversation(models.Model):
 
     class Meta:
         ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['user', '-updated_at'], name='rxchat_conv_user_upd_idx'),
+            models.Index(fields=['session_key', '-updated_at'], name='rxchat_conv_sess_upd_idx'),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.id})"
@@ -61,6 +65,9 @@ class Message(models.Model):
 
     class Meta:
         ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['conversation', 'created_at'], name='rxchat_msg_conv_time_idx'),
+        ]
 
     def __str__(self):
         return f"[{self.role}] {self.content[:50]}..."
