@@ -191,7 +191,12 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
     const [isEditing, setIsEditing] = useState(false)
     const [editText, setEditText] = useState(message.content)
     const [copied, setCopied] = useState(false)
-    const renderedContent = useMemo(() => normalizeMarkdownMarkup(message.content), [message.content])
+    const renderedContent = useMemo(() => (
+        isUser || !message.content ? '' : normalizeMarkdownMarkup(message.content)
+    ), [isUser, message.content])
+    const statusLabel = !isUser && message._streaming && !message.content?.trim()
+        ? message._statusLabel
+        : ''
     const time = message.created_at
         ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : ''
@@ -211,8 +216,7 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
 
     const handleEditSave = () => {
         const trimmed = editText.trim()
-        const changed = trimmed !== message.content
-        if (changed && (trimmed || hasEditableAttachments) && onEdit) {
+        if (!isLoading && (trimmed || hasEditableAttachments) && onEdit) {
             onEdit(message.id, trimmed)
         }
         setIsEditing(false)
@@ -261,6 +265,7 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
                                     onClick={handleEditSave}
                                     aria-label="Send edited message"
                                     data-tooltip="Send edit"
+                                    disabled={isLoading}
                                 >
                                     <HiOutlinePaperAirplane size={17} />
                                 </button>
@@ -286,6 +291,10 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
                                 </div>
                             )}
                             {message.content && <p>{message.content}</p>}
+                        </div>
+                    ) : statusLabel ? (
+                        <div className="message__status" aria-live="polite">
+                            <span>{statusLabel}</span>
                         </div>
                     ) : (
                         <div className="message__markdown">
