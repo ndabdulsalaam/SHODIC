@@ -229,6 +229,10 @@ QDRANT_DISTANCE = os.getenv("QDRANT_DISTANCE", "Cosine")
 # Data acquisition
 OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY", "")
 
+# Chat attachments are intentionally paused until the frontend upload flow is
+# ready to ship again. Existing persisted image previews can still be resent.
+RXCHAT_ATTACHMENTS_ENABLED = env_bool("RXCHAT_ATTACHMENTS_ENABLED", False)
+
 Q_CLUSTER = {
     "name": "rxchat",
     "workers": 1,

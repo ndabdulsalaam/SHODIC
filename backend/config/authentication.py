@@ -10,3 +10,6 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
 
     def enforce_csrf(self, request):
         return  # Skip CSRF — our API uses session cookies + CORS instead
+
+    def authenticate_header(self, request):
+        return "Session"
