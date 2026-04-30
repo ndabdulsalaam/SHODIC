@@ -17,7 +17,7 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-xl);
-    padding: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     transition: all var(--transition-fast);
     box-shadow: var(--shadow-sm);
 }
@@ -32,6 +32,7 @@
     align-items: center;
     gap: var(--space-2);
     width: 100%;
+    min-height: 52px;
 }
 
 .chat-input__icon-btn {
@@ -63,11 +64,14 @@
     border: none;
     background: none;
     resize: none;
-    min-height: 24px;
+    box-sizing: border-box;
+    min-height: 44px;
     max-height: 150px;
-    line-height: 1.5;
-    padding: var(--space-2) 0;
+    line-height: 24px;
+    padding: 10px var(--space-3);
     color: var(--color-text);
+    text-align: left;
+    overflow-y: hidden;
 }
 
 .chat-input__textarea::placeholder {
@@ -80,12 +84,20 @@
     gap: var(--space-2);
     width: 100%;
     min-height: 48px;
-    padding: 3px;
+    padding: 3px 0 3px var(--space-1);
+}
+
+.chat-input__dictation-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-1);
 }
 
 .chat-input__dictation-action {
     flex-shrink: 0;
-    width: 40px;
+    width: 36px;
     height: 40px;
     border-radius: 999px;
     background: transparent;
@@ -105,67 +117,45 @@
 }
 
 .chat-input__dictation-action--confirm {
-    background: var(--color-primary);
-    color: var(--color-text-inverse);
+    background: transparent;
+    color: var(--color-text);
 }
 
 .chat-input__dictation-action--confirm:hover {
-    background: var(--color-primary);
+    background: var(--color-surface-hover);
 }
 
 .chat-input__waveform {
     flex: 1;
     min-width: 0;
     height: 42px;
-    border-radius: 999px;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    background: transparent;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 3px;
-    padding: 0 var(--space-4);
+    justify-content: space-between;
+    gap: 1px;
+    padding: 0;
     overflow: hidden;
 }
 
 .chat-input__waveform span {
+    flex: 1 1 1px;
     width: 2px;
-    height: 6px;
+    min-width: 1px;
+    max-width: 2px;
+    height: 19px;
     border-radius: 999px;
-    background: var(--color-text);
+    background: #111111;
     opacity: 0.95;
     transform-origin: center;
-    animation: rxchat-wave 900ms ease-in-out infinite;
-}
-
-.chat-input__waveform span:nth-child(2n) {
-    height: 12px;
-}
-
-.chat-input__waveform span:nth-child(3n) {
-    height: 18px;
-}
-
-.chat-input__waveform span:nth-child(5n) {
-    height: 26px;
-}
-
-.chat-input__waveform span:nth-child(7n) {
-    height: 32px;
+    transform: scaleY(var(--wave-scale, 0.12));
+    transition: transform 42ms linear;
+    will-change: transform;
 }
 
 .chat-input__waveform:not(.chat-input__waveform--active) span {
-    animation-play-state: paused;
     opacity: 0.45;
-}
-
-@keyframes rxchat-wave {
-    0%, 100% {
-        transform: scaleY(0.55);
-    }
-    50% {
-        transform: scaleY(1.45);
-    }
 }
 
 .chat-input__error {
