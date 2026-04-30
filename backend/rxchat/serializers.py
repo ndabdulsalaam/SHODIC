@@ -3,6 +3,7 @@ import binascii
 import re
 from pathlib import Path
 
+from django.conf import settings
 from rest_framework import serializers
 from .models import Conversation, Message
 
@@ -56,7 +57,15 @@ class MessageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
 
-class ConversationSerializer(serializers.ModelSerializer):
+class _MessageCountMixin:
+    def get_message_count(self, obj):
+        annotated_count = getattr(obj, 'message_count', None)
+        if annotated_count is not None:
+            return annotated_count
+        return obj.messages.count()
+
+
+class ConversationSerializer(_MessageCountMixin, serializers.ModelSerializer):
     messages = MessageSerializer(many=True, read_only=True)
     message_count = serializers.SerializerMethodField()
 
@@ -65,26 +74,14 @@ class ConversationSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'created_at', 'updated_at', 'message_count', 'messages']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def get_message_count(self, obj):
-        annotated_count = getattr(obj, 'message_count', None)
-        if annotated_count is not None:
-            return annotated_count
-        return obj.messages.count()
 
-
-class ConversationListSerializer(serializers.ModelSerializer):
+class ConversationListSerializer(_MessageCountMixin, serializers.ModelSerializer):
     """Lightweight serializer for sidebar list (no messages)."""
     message_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = ['id', 'title', 'created_at', 'updated_at', 'message_count']
-
-    def get_message_count(self, obj):
-        annotated_count = getattr(obj, 'message_count', None)
-        if annotated_count is not None:
-            return annotated_count
-        return obj.messages.count()
 
 
 class ChatInputSerializer(serializers.Serializer):
@@ -98,7 +95,7 @@ class ChatInputSerializer(serializers.Serializer):
     )
 
     def validate_attachments(self, attachments):
-        if attachments:
+        if attachments and not getattr(settings, 'RXCHAT_ATTACHMENTS_ENABLED', False):
             raise serializers.ValidationError('Attachments are temporarily unavailable.')
 
         if len(attachments) > MAX_ATTACHMENTS:
