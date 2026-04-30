@@ -2,6 +2,7 @@ import json
 import tempfile
 
 from django.db.models import Count
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -13,7 +14,7 @@ from .serializers import (
     ChatInputSerializer,
     parse_data_url,
 )
-from .ai_service import stream_ai_response
+from .ai_service import stream_ai_events
 
 
 DEFAULT_ATTACHMENT_PROMPT = "Please review the attached files/images."
@@ -65,6 +66,12 @@ def _conversation_history_before(conversation, message, limit=MAX_HISTORY_MESSAG
     return list(reversed(recent))
 
 
+def _touch_conversation(conversation):
+    conversation.updated_at = timezone.now()
+    conversation.save(update_fields=['updated_at'])
+    return conversation.updated_at
+
+
 def _sse_json(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
@@ -72,6 +79,48 @@ def _sse_json(event, payload):
 def _sse_text(chunk):
     escaped = chunk.replace('\r', '').replace('\n', '\\n')
     return f"data: {escaped}\n\n"
+
+
+def _normalize_ai_event(event):
+    if isinstance(event, str):
+        return {"type": "text", "content": event}
+    if not isinstance(event, dict):
+        return None
+
+    event_type = event.get("type")
+    if event_type == "status":
+        return {
+            "type": "status",
+            "phase": event.get("phase"),
+            "label": event.get("label") or event.get("phase") or "Thinking",
+        }
+    if event_type == "text":
+        return {
+            "type": "text",
+            "content": event.get("content", ""),
+        }
+    return None
+
+
+def _save_streamed_assistant(conversation, full_response, stream_state):
+    if stream_state.get("saved"):
+        return stream_state.get("message")
+
+    ai_content = "".join(full_response)
+    if not ai_content:
+        stream_state["saved"] = True
+        return None
+
+    ai_message = Message.objects.create(
+        conversation=conversation,
+        role='assistant',
+        content=ai_content,
+    )
+    updated_at = _touch_conversation(conversation)
+    stream_state["saved"] = True
+    stream_state["message"] = ai_message
+    stream_state["updated_at"] = updated_at
+    return ai_message
 
 
 def _attachment_metadata(attachments):
@@ -228,6 +277,7 @@ def send_message(request):
         content=user_text,
         attachments=safe_attachments,
     )
+    conversation_updated_at = _touch_conversation(conversation)
 
     # Get conversation history for context
     history = _conversation_history_before(conversation, user_message)
@@ -238,35 +288,50 @@ def send_message(request):
     def event_stream():
         """Generator that yields SSE-formatted chunks and saves the full response."""
         full_response = []
+        stream_state = {"saved": False}
 
-        # Send conversation metadata as the first event
-        yield _sse_json("meta", {
-            "conversation_id": str(conversation.id),
-            "conversation_title": conversation.title,
-            "user_message_id": str(user_message.id),
-        })
+        try:
+            # Send conversation metadata as the first event
+            yield _sse_json("meta", {
+                "conversation_id": str(conversation.id),
+                "conversation_title": conversation.title,
+                "conversation_updated_at": conversation_updated_at.isoformat(),
+                "user_message_id": str(user_message.id),
+            })
 
-        for chunk in stream_ai_response(
-            ai_user_text,
-            conversation_history=history,
-            role=effective_role,
-            attachments=ai_attachments,
-            document_sections=document_sections,
-        ):
-            full_response.append(chunk)
-            yield _sse_text(chunk)
+            for raw_event in stream_ai_events(
+                ai_user_text,
+                conversation_history=history,
+                role=effective_role,
+                attachments=ai_attachments,
+                document_sections=document_sections,
+            ):
+                event = _normalize_ai_event(raw_event)
+                if not event:
+                    continue
 
-        # Save the complete AI message to the database
-        ai_content = "".join(full_response)
-        ai_message = Message.objects.create(
-            conversation=conversation,
-            role='assistant',
-            content=ai_content,
-        )
-        conversation.save()
+                if event["type"] == "status":
+                    yield _sse_json("status", {
+                        "phase": event["phase"],
+                        "label": event["label"],
+                    })
+                    continue
 
-        # Send done event with message ID
-        yield _sse_json("done", {"message_id": str(ai_message.id)})
+                chunk = event["content"]
+                if not chunk:
+                    continue
+                full_response.append(chunk)
+                yield _sse_text(chunk)
+
+            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
+            if ai_message:
+                yield _sse_json("done", {
+                    "conversation_id": str(conversation.id),
+                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
+                    "message_id": str(ai_message.id),
+                })
+        finally:
+            _save_streamed_assistant(conversation, full_response, stream_state)
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -284,7 +349,12 @@ def list_conversations(request):
     List all conversations for the current user/session.
     """
     owner = _get_owner_filter(request)
-    conversations = Conversation.objects.filter(**owner).annotate(message_count=Count('messages'))
+    conversations = (
+        Conversation.objects
+        .filter(**owner)
+        .annotate(message_count=Count('messages'))
+        .order_by('-updated_at')
+    )
     serializer = ConversationListSerializer(conversations, many=True)
     return Response(serializer.data)
 
@@ -401,6 +471,7 @@ def edit_message(request, message_id):
     # Update the message content
     message.content = content
     message.save()
+    conversation_updated_at = _touch_conversation(conversation)
 
     # Get conversation history up to the edited message
     history = _conversation_history_before(conversation, message)
@@ -412,30 +483,47 @@ def edit_message(request, message_id):
 
     def event_stream():
         full_response = []
+        stream_state = {"saved": False}
 
-        yield _sse_json("meta", {
-            "conversation_id": str(conversation.id),
-            "edited_message_id": str(message.id),
-        })
+        try:
+            yield _sse_json("meta", {
+                "conversation_id": str(conversation.id),
+                "conversation_updated_at": conversation_updated_at.isoformat(),
+                "edited_message_id": str(message.id),
+            })
 
-        for chunk in stream_ai_response(
-            ai_user_text,
-            conversation_history=history,
-            role=effective_role,
-            attachments=llm_attachments,
-        ):
-            full_response.append(chunk)
-            yield _sse_text(chunk)
+            for raw_event in stream_ai_events(
+                ai_user_text,
+                conversation_history=history,
+                role=effective_role,
+                attachments=llm_attachments,
+            ):
+                event = _normalize_ai_event(raw_event)
+                if not event:
+                    continue
 
-        ai_content = "".join(full_response)
-        ai_message = Message.objects.create(
-            conversation=conversation,
-            role='assistant',
-            content=ai_content,
-        )
-        conversation.save()
+                if event["type"] == "status":
+                    yield _sse_json("status", {
+                        "phase": event["phase"],
+                        "label": event["label"],
+                    })
+                    continue
 
-        yield _sse_json("done", {"message_id": str(ai_message.id)})
+                chunk = event["content"]
+                if not chunk:
+                    continue
+                full_response.append(chunk)
+                yield _sse_text(chunk)
+
+            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
+            if ai_message:
+                yield _sse_json("done", {
+                    "conversation_id": str(conversation.id),
+                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
+                    "message_id": str(ai_message.id),
+                })
+        finally:
+            _save_streamed_assistant(conversation, full_response, stream_state)
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -477,6 +565,7 @@ def resend_message(request, message_id):
         conversation=conversation,
         created_at__gt=message.created_at,
     ).delete()
+    conversation_updated_at = _touch_conversation(conversation)
 
     # Get conversation history up to and including this message
     history = _conversation_history_before(conversation, message)
@@ -488,27 +577,46 @@ def resend_message(request, message_id):
 
     def event_stream():
         full_response = []
+        stream_state = {"saved": False}
 
-        yield _sse_json("meta", {"conversation_id": str(conversation.id)})
+        try:
+            yield _sse_json("meta", {
+                "conversation_id": str(conversation.id),
+                "conversation_updated_at": conversation_updated_at.isoformat(),
+            })
 
-        for chunk in stream_ai_response(
-            ai_user_text,
-            conversation_history=history,
-            role=effective_role,
-            attachments=llm_attachments,
-        ):
-            full_response.append(chunk)
-            yield _sse_text(chunk)
+            for raw_event in stream_ai_events(
+                ai_user_text,
+                conversation_history=history,
+                role=effective_role,
+                attachments=llm_attachments,
+            ):
+                event = _normalize_ai_event(raw_event)
+                if not event:
+                    continue
 
-        ai_content = "".join(full_response)
-        ai_message = Message.objects.create(
-            conversation=conversation,
-            role='assistant',
-            content=ai_content,
-        )
-        conversation.save()
+                if event["type"] == "status":
+                    yield _sse_json("status", {
+                        "phase": event["phase"],
+                        "label": event["label"],
+                    })
+                    continue
 
-        yield _sse_json("done", {"message_id": str(ai_message.id)})
+                chunk = event["content"]
+                if not chunk:
+                    continue
+                full_response.append(chunk)
+                yield _sse_text(chunk)
+
+            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
+            if ai_message:
+                yield _sse_json("done", {
+                    "conversation_id": str(conversation.id),
+                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
+                    "message_id": str(ai_message.id),
+                })
+        finally:
+            _save_streamed_assistant(conversation, full_response, stream_state)
 
     response = StreamingHttpResponse(
         event_stream(),
