@@ -259,8 +259,8 @@ DEFAULT_FROM_EMAIL = (
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
-# Session - 15-day session to match trusted device window
-SESSION_COOKIE_AGE = 15 * 24 * 60 * 60
+# Session - 30-day sliding session to match trusted device window
+SESSION_COOKIE_AGE = 30 * 24 * 60 * 60
 SESSION_COOKIE_SECURE = False
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = False
