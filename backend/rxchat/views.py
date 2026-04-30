@@ -123,6 +123,68 @@ def _save_streamed_assistant(conversation, full_response, stream_state):
     return ai_message
 
 
+def _stream_chat_completion(
+    *,
+    conversation,
+    ai_user_text,
+    history,
+    role,
+    meta,
+    attachments=None,
+    document_sections=None,
+):
+    """Return an SSE response that streams and persists one assistant reply."""
+
+    def event_stream():
+        full_response = []
+        stream_state = {"saved": False}
+
+        try:
+            yield _sse_json("meta", meta)
+
+            for raw_event in stream_ai_events(
+                ai_user_text,
+                conversation_history=history,
+                role=role,
+                attachments=attachments,
+                document_sections=document_sections,
+            ):
+                event = _normalize_ai_event(raw_event)
+                if not event:
+                    continue
+
+                if event["type"] == "status":
+                    yield _sse_json("status", {
+                        "phase": event["phase"],
+                        "label": event["label"],
+                    })
+                    continue
+
+                chunk = event["content"]
+                if not chunk:
+                    continue
+                full_response.append(chunk)
+                yield _sse_text(chunk)
+
+            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
+            if ai_message:
+                yield _sse_json("done", {
+                    "conversation_id": str(conversation.id),
+                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
+                    "message_id": str(ai_message.id),
+                })
+        finally:
+            _save_streamed_assistant(conversation, full_response, stream_state)
+
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream',
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
+
+
 def _attachment_metadata(attachments):
     """Return safe-to-persist metadata without original uploaded data."""
     metadata = []
@@ -285,61 +347,20 @@ def send_message(request):
     # Check for role override on the conversation
     effective_role = getattr(conversation, 'role_override', None) or role
 
-    def event_stream():
-        """Generator that yields SSE-formatted chunks and saves the full response."""
-        full_response = []
-        stream_state = {"saved": False}
-
-        try:
-            # Send conversation metadata as the first event
-            yield _sse_json("meta", {
-                "conversation_id": str(conversation.id),
-                "conversation_title": conversation.title,
-                "conversation_updated_at": conversation_updated_at.isoformat(),
-                "user_message_id": str(user_message.id),
-            })
-
-            for raw_event in stream_ai_events(
-                ai_user_text,
-                conversation_history=history,
-                role=effective_role,
-                attachments=ai_attachments,
-                document_sections=document_sections,
-            ):
-                event = _normalize_ai_event(raw_event)
-                if not event:
-                    continue
-
-                if event["type"] == "status":
-                    yield _sse_json("status", {
-                        "phase": event["phase"],
-                        "label": event["label"],
-                    })
-                    continue
-
-                chunk = event["content"]
-                if not chunk:
-                    continue
-                full_response.append(chunk)
-                yield _sse_text(chunk)
-
-            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
-            if ai_message:
-                yield _sse_json("done", {
-                    "conversation_id": str(conversation.id),
-                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
-                    "message_id": str(ai_message.id),
-                })
-        finally:
-            _save_streamed_assistant(conversation, full_response, stream_state)
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream',
+    return _stream_chat_completion(
+        conversation=conversation,
+        ai_user_text=ai_user_text,
+        history=history,
+        role=effective_role,
+        attachments=ai_attachments,
+        document_sections=document_sections,
+        meta={
+            "conversation_id": str(conversation.id),
+            "conversation_title": conversation.title,
+            "conversation_updated_at": conversation_updated_at.isoformat(),
+            "user_message_id": str(user_message.id),
+        },
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
 
 
 @api_view(['GET'])
@@ -478,60 +499,18 @@ def edit_message(request, message_id):
 
     role = _get_user_role(request)
     effective_role = getattr(conversation, 'role_override', None) or role
-    ai_user_text = content or DEFAULT_ATTACHMENT_PROMPT
-
-
-    def event_stream():
-        full_response = []
-        stream_state = {"saved": False}
-
-        try:
-            yield _sse_json("meta", {
-                "conversation_id": str(conversation.id),
-                "conversation_updated_at": conversation_updated_at.isoformat(),
-                "edited_message_id": str(message.id),
-            })
-
-            for raw_event in stream_ai_events(
-                ai_user_text,
-                conversation_history=history,
-                role=effective_role,
-                attachments=llm_attachments,
-            ):
-                event = _normalize_ai_event(raw_event)
-                if not event:
-                    continue
-
-                if event["type"] == "status":
-                    yield _sse_json("status", {
-                        "phase": event["phase"],
-                        "label": event["label"],
-                    })
-                    continue
-
-                chunk = event["content"]
-                if not chunk:
-                    continue
-                full_response.append(chunk)
-                yield _sse_text(chunk)
-
-            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
-            if ai_message:
-                yield _sse_json("done", {
-                    "conversation_id": str(conversation.id),
-                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
-                    "message_id": str(ai_message.id),
-                })
-        finally:
-            _save_streamed_assistant(conversation, full_response, stream_state)
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream',
+    return _stream_chat_completion(
+        conversation=conversation,
+        ai_user_text=content or DEFAULT_ATTACHMENT_PROMPT,
+        history=history,
+        role=effective_role,
+        attachments=llm_attachments,
+        meta={
+            "conversation_id": str(conversation.id),
+            "conversation_updated_at": conversation_updated_at.isoformat(),
+            "edited_message_id": str(message.id),
+        },
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
 
 
 @api_view(['POST'])
@@ -572,56 +551,14 @@ def resend_message(request, message_id):
 
     role = _get_user_role(request)
     effective_role = getattr(conversation, 'role_override', None) or role
-    ai_user_text = message.content or DEFAULT_ATTACHMENT_PROMPT
-
-
-    def event_stream():
-        full_response = []
-        stream_state = {"saved": False}
-
-        try:
-            yield _sse_json("meta", {
-                "conversation_id": str(conversation.id),
-                "conversation_updated_at": conversation_updated_at.isoformat(),
-            })
-
-            for raw_event in stream_ai_events(
-                ai_user_text,
-                conversation_history=history,
-                role=effective_role,
-                attachments=llm_attachments,
-            ):
-                event = _normalize_ai_event(raw_event)
-                if not event:
-                    continue
-
-                if event["type"] == "status":
-                    yield _sse_json("status", {
-                        "phase": event["phase"],
-                        "label": event["label"],
-                    })
-                    continue
-
-                chunk = event["content"]
-                if not chunk:
-                    continue
-                full_response.append(chunk)
-                yield _sse_text(chunk)
-
-            ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
-            if ai_message:
-                yield _sse_json("done", {
-                    "conversation_id": str(conversation.id),
-                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
-                    "message_id": str(ai_message.id),
-                })
-        finally:
-            _save_streamed_assistant(conversation, full_response, stream_state)
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream',
+    return _stream_chat_completion(
+        conversation=conversation,
+        ai_user_text=message.content or DEFAULT_ATTACHMENT_PROMPT,
+        history=history,
+        role=effective_role,
+        attachments=llm_attachments,
+        meta={
+            "conversation_id": str(conversation.id),
+            "conversation_updated_at": conversation_updated_at.isoformat(),
+        },
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
