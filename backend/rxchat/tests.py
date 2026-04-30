@@ -1,9 +1,11 @@
 import base64
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .ai_service import (
@@ -12,6 +14,7 @@ from .ai_service import (
     _select_model,
     build_system_message,
     build_user_message,
+    stream_ai_events,
     stream_ai_response,
 )
 from .models import Conversation, Message
@@ -227,6 +230,38 @@ class ChatAiServiceTests(TestCase):
         self.assertNotIn("Follow-up question:", response)
         mock_retrieve.assert_called_once()
 
+    @override_settings(
+        OPENROUTER_API_KEY="primary",
+        OPENROUTER_BACKUP_API_KEY="",
+        OPENROUTER_TEXT_MODEL="text-model",
+    )
+    @patch("rxchat.ai_service.retrieve_context", return_value=[])
+    @patch("rxchat.ai_service._get_client")
+    def test_stream_ai_events_emits_statuses_before_text(self, mock_get_client, mock_retrieve):
+        class Chunk:
+            def __init__(self, text):
+                self.choices = [type("Choice", (), {
+                    "delta": type("Delta", (), {"content": text})(),
+                    "finish_reason": None,
+                })()]
+
+        client = type("Client", (), {})()
+        client.chat = type("Chat", (), {})()
+        client.chat.completions = type("Completions", (), {})()
+        client.chat.completions.create = lambda **kwargs: iter([Chunk("Answer")])
+        mock_get_client.return_value = client
+
+        events = list(stream_ai_events("What is amlodipine?", role="patient"))
+        status_labels = [event["label"] for event in events if event["type"] == "status"]
+        text = "".join(event["content"] for event in events if event["type"] == "text")
+        first_text_index = next(index for index, event in enumerate(events) if event["type"] == "text")
+        last_status_index = max(index for index, event in enumerate(events) if event["type"] == "status")
+
+        self.assertEqual(status_labels, ["Checking sources", "Thinking", "Generating"])
+        self.assertLess(last_status_index, first_text_index)
+        self.assertEqual(text, "Answer")
+        mock_retrieve.assert_called_once()
+
 
 class ChatApiTests(TestCase):
     def setUp(self):
@@ -235,9 +270,18 @@ class ChatApiTests(TestCase):
     def _consume_stream(self, response):
         return b"".join(response.streaming_content).decode("utf-8")
 
-    @patch("rxchat.views.stream_ai_response")
+    def _set_conversation_updated_at(self, conversation, updated_at):
+        Conversation.objects.filter(id=conversation.id).update(updated_at=updated_at)
+        conversation.refresh_from_db()
+        return conversation.updated_at
+
+    @patch("rxchat.views.stream_ai_events")
     def test_send_message_stream_includes_user_and_assistant_message_ids(self, mock_stream):
-        mock_stream.return_value = iter(["Hello", " from RxChat"])
+        mock_stream.return_value = iter([
+            {"type": "status", "phase": "checking_sources", "label": "Checking sources"},
+            "Hello",
+            " from RxChat",
+        ])
 
         response = self.client.post(
             "/rxchat/send/",
@@ -253,13 +297,123 @@ class ChatApiTests(TestCase):
         assistant_message = conversation.messages.get(role="assistant")
 
         self.assertIn("event: meta", body)
+        self.assertIn("event: status", body)
+        self.assertLess(body.index("event: status"), body.index("data: Hello"))
         self.assertIn(f'"conversation_id": "{conversation.id}"', body)
         self.assertIn(f'"user_message_id": "{user_message.id}"', body)
         self.assertIn("event: done", body)
         self.assertIn(f'"message_id": "{assistant_message.id}"', body)
         self.assertEqual(assistant_message.content, "Hello from RxChat")
 
-    @patch("rxchat.views.stream_ai_response")
+    @patch("rxchat.views.stream_ai_events")
+    def test_send_message_saves_partial_assistant_when_stream_closes(self, mock_stream):
+        mock_stream.return_value = iter(["Partial answer", " should not be consumed"])
+
+        response = self.client.post(
+            "/rxchat/send/",
+            {"message": "What is amlodipine?"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        iterator = iter(response.streaming_content)
+        next(iterator)
+        first_text_chunk = next(iterator).decode("utf-8")
+        self.assertIn("Partial answer", first_text_chunk)
+
+        if hasattr(iterator, "close"):
+            iterator.close()
+        response.close()
+
+        conversation = Conversation.objects.get()
+        assistant_message = conversation.messages.get(role="assistant")
+        self.assertEqual(assistant_message.content, "Partial answer")
+
+    def test_list_conversations_orders_newest_updated_first(self):
+        user = User.objects.create_user(username="history@example.com", email="history@example.com", password="password123")
+        older = Conversation.objects.create(user=user, title="Older")
+        newer = Conversation.objects.create(user=user, title="Newer")
+        now = timezone.now()
+        self._set_conversation_updated_at(older, now - timedelta(days=3))
+        self._set_conversation_updated_at(newer, now - timedelta(hours=1))
+
+        self.client.force_authenticate(user=user)
+        response = self.client.get("/rxchat/conversations/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([str(item["id"]) for item in response.data], [str(newer.id), str(older.id)])
+
+    @patch("rxchat.views.stream_ai_events")
+    def test_send_message_touches_existing_conversation_before_stream_is_consumed(self, mock_stream):
+        mock_stream.return_value = iter(["Later answer"])
+        user = User.objects.create_user(username="send-touch@example.com", email="send-touch@example.com", password="password123")
+        conversation = Conversation.objects.create(user=user, title="Existing chat")
+        stale_time = self._set_conversation_updated_at(conversation, timezone.now() - timedelta(days=2))
+
+        self.client.force_authenticate(user=user)
+        response = self.client.post(
+            "/rxchat/send/",
+            {"message": "Follow up", "conversation_id": str(conversation.id)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        conversation.refresh_from_db()
+        self.assertGreater(conversation.updated_at, stale_time)
+        self.assertTrue(conversation.messages.filter(role="user", content="Follow up").exists())
+        mock_stream.assert_not_called()
+
+        body = self._consume_stream(response)
+        self.assertIn('"conversation_updated_at"', body)
+
+    @patch("rxchat.views.stream_ai_events")
+    def test_edit_message_touches_conversation_before_stream_is_consumed(self, mock_stream):
+        mock_stream.return_value = iter(["Edited answer"])
+        user = User.objects.create_user(username="edit-touch@example.com", email="edit-touch@example.com", password="password123")
+        conversation = Conversation.objects.create(user=user, title="Edit touch")
+        user_message = Message.objects.create(conversation=conversation, role="user", content="Original")
+        Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
+        stale_time = self._set_conversation_updated_at(conversation, timezone.now() - timedelta(days=2))
+
+        self.client.force_authenticate(user=user)
+        response = self.client.put(
+            f"/rxchat/messages/{user_message.id}/",
+            {"content": "Updated question"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        conversation.refresh_from_db()
+        user_message.refresh_from_db()
+        self.assertGreater(conversation.updated_at, stale_time)
+        self.assertEqual(user_message.content, "Updated question")
+        mock_stream.assert_not_called()
+
+        body = self._consume_stream(response)
+        self.assertIn('"conversation_updated_at"', body)
+
+    @patch("rxchat.views.stream_ai_events")
+    def test_resend_message_touches_conversation_before_stream_is_consumed(self, mock_stream):
+        mock_stream.return_value = iter(["Regenerated answer"])
+        user = User.objects.create_user(username="resend-touch@example.com", email="resend-touch@example.com", password="password123")
+        conversation = Conversation.objects.create(user=user, title="Resend touch")
+        user_message = Message.objects.create(conversation=conversation, role="user", content="Question")
+        old_assistant = Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
+        stale_time = self._set_conversation_updated_at(conversation, timezone.now() - timedelta(days=2))
+
+        self.client.force_authenticate(user=user)
+        response = self.client.post(f"/rxchat/messages/{user_message.id}/resend/")
+
+        self.assertEqual(response.status_code, 200)
+        conversation.refresh_from_db()
+        self.assertGreater(conversation.updated_at, stale_time)
+        self.assertFalse(Message.objects.filter(id=old_assistant.id).exists())
+        mock_stream.assert_not_called()
+
+        body = self._consume_stream(response)
+        self.assertIn('"conversation_updated_at"', body)
+
+    @patch("rxchat.views.stream_ai_events")
     def test_send_message_meta_event_escapes_json_title(self, mock_stream):
         mock_stream.return_value = iter(["Safe answer"])
 
@@ -279,7 +433,7 @@ class ChatApiTests(TestCase):
 
         self.assertEqual(meta["conversation_title"], 'What about "quoted" dosing?')
 
-    @patch("rxchat.views.stream_ai_response")
+    @patch("rxchat.views.stream_ai_events")
     def test_send_message_rejects_new_attachments_while_paused(self, mock_stream):
         mock_stream.return_value = iter(["Attachment answer"])
 
@@ -307,7 +461,7 @@ class ChatApiTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    @patch("rxchat.views.stream_ai_response")
+    @patch("rxchat.views.stream_ai_events")
     def test_edit_message_replaces_following_messages_and_streams_new_assistant_id(self, mock_stream):
         mock_stream.return_value = iter(["Edited answer"])
         user = User.objects.create_user(username="editor@example.com", email="editor@example.com", password="password123")
@@ -334,7 +488,7 @@ class ChatApiTests(TestCase):
         self.assertIn(f'"edited_message_id": "{user_message.id}"', body)
         self.assertIn(f'"message_id": "{assistant_message.id}"', body)
 
-    @patch("rxchat.views.stream_ai_response")
+    @patch("rxchat.views.stream_ai_events")
     def test_resend_message_uses_user_message_and_replaces_old_assistant_response(self, mock_stream):
         mock_stream.return_value = iter(["Regenerated answer"])
         user = User.objects.create_user(username="resend@example.com", email="resend@example.com", password="password123")
@@ -364,7 +518,7 @@ class ChatApiTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    @patch("rxchat.views.stream_ai_response")
+    @patch("rxchat.views.stream_ai_events")
     def test_edit_allows_image_attachment_message_with_saved_preview(self, mock_stream):
         mock_stream.return_value = iter(["Updated image answer"])
         user = User.objects.create_user(username="attachment-edit@example.com", email="attachment-edit@example.com", password="password123")
@@ -401,7 +555,7 @@ class ChatApiTests(TestCase):
         self.assertEqual(kwargs["attachments"][0]["name"], "rx.jpg")
         self.assertEqual(kwargs["attachments"][0]["data_url"], data_url("image/jpeg", b"preview"))
 
-    @patch("rxchat.views.stream_ai_response")
+    @patch("rxchat.views.stream_ai_events")
     def test_resend_allows_image_attachment_message_with_saved_preview(self, mock_stream):
         mock_stream.return_value = iter(["Regenerated image answer"])
         user = User.objects.create_user(username="attachment-resend-image@example.com", email="attachment-resend-image@example.com", password="password123")
