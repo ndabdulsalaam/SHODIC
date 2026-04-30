@@ -515,18 +515,41 @@ def _is_complex_query(query: str, role: str) -> bool:
 # 8. STREAMING ENTRYPOINT
 # ──────────────────────────────────────────────────────────────────────
 
-def stream_ai_response(
+AI_STATUS_EVENTS = {
+    "checking_sources": "Checking sources",
+    "thinking": "Thinking",
+    "generating": "Generating",
+}
+
+
+def _status_event(phase):
+    return {
+        "type": "status",
+        "phase": phase,
+        "label": AI_STATUS_EVENTS[phase],
+    }
+
+
+def _text_event(content):
+    return {
+        "type": "text",
+        "content": content,
+    }
+
+
+def stream_ai_events(
     user_message,
     conversation_history=None,
     role="patient",
     attachments=None,
     document_sections=None,
 ):
-    """Stream an AI response for a pharmacy-related query.
+    """Stream typed AI events for a pharmacy-related query.
 
     Uses OpenRouter as the LLM provider.
 
-    Yields text chunks as they arrive from the LLM.
+    Yields status events before the first text chunk, then text events as
+    chunks arrive from the LLM.
 
     Args:
         user_message:  The user's question.
@@ -537,7 +560,7 @@ def stream_ai_response(
         document_sections:  Extracted Office document text blocks.
 
     Yields:
-        str: Text chunks as they are generated.
+        dict: ``{"type": "status", ...}`` or ``{"type": "text", ...}``.
     """
     attachments = attachments or []
     document_sections = document_sections or []
@@ -550,7 +573,7 @@ def stream_ai_response(
 
     if not primary_key and not backup_key:
         logger.error("No OpenRouter API key is configured")
-        yield _get_fallback_response()
+        yield _text_event(_get_fallback_response())
         return
 
     models_to_try = _select_models(attachments)
@@ -574,6 +597,8 @@ def stream_ai_response(
                 "content": msg["content"],
             })
 
+    yield _status_event("checking_sources")
+
     # Retrieve relevant drug-knowledge chunks from Qdrant
     # Qdrant Cloud Inference handles embedding server-side — no external API call
     chunks = retrieve_context(user_message, top_k=10)
@@ -596,6 +621,8 @@ def stream_ai_response(
     })
 
     pdf_plugin = _build_pdf_plugin(attachments)
+
+    yield _status_event("thinking")
 
     last_error = None
     for model_index, model in enumerate(models_to_try):
@@ -623,6 +650,7 @@ def stream_ai_response(
             emitted_any = False
             try:
                 stream = client.chat.completions.create(**create_kwargs)
+                yield _status_event("generating")
                 finish_reason = None
                 for chunk in stream:
                     choice = chunk.choices[0]
@@ -630,9 +658,9 @@ def stream_ai_response(
                     delta = choice.delta
                     if delta.content:
                         emitted_any = True
-                        yield delta.content
+                        yield _text_event(delta.content)
                 if finish_reason == "length":
-                    yield _length_limit_message()
+                    yield _text_event(_length_limit_message())
                 return
             except Exception as e:
                 last_error = e
@@ -646,10 +674,6 @@ def stream_ai_response(
                     continue
 
                 if emitted_any:
-                    yield (
-                        "\n\nThe response was interrupted before I could finish cleanly. "
-                        "Which section should I continue with first?"
-                    )
                     return
                 break  # break key loop, try next model
 
@@ -661,7 +685,32 @@ def stream_ai_response(
             continue
 
     logger.error(f"All model/key attempts failed: {last_error}")
-    yield _get_fallback_response()
+    yield _text_event(_get_fallback_response())
+
+
+def stream_ai_response(
+    user_message,
+    conversation_history=None,
+    role="patient",
+    attachments=None,
+    document_sections=None,
+):
+    """Stream only text chunks.
+
+    Kept for backward compatibility with callers/tests that consume the
+    historical text-only generator.
+    """
+    for event in stream_ai_events(
+        user_message,
+        conversation_history=conversation_history,
+        role=role,
+        attachments=attachments,
+        document_sections=document_sections,
+    ):
+        if isinstance(event, str):
+            yield event
+        elif event.get("type") == "text":
+            yield event.get("content", "")
 
 
 def get_ai_response(user_message, conversation_history=None, role="patient", attachments=None, document_sections=None):
