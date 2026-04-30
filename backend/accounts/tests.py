@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 from rest_framework.test import APIClient
 
-from .models import PendingLoginOTP, PendingRegistration
+from .models import PendingLoginOTP, PendingRegistration, TrustedDevice
 from .otp import generate_otp
 
 
@@ -119,6 +119,28 @@ class AuthOtpFlowTests(TestCase):
         self.assertEqual(third_login.status_code, 200)
         self.assertNotIn("otp_required", third_login.data)
         self.assertEqual(send_otp_email.call_count, 1)
+
+    def test_me_refreshes_session_and_trusted_device_window(self):
+        self.client.login(username=self.user.username, password="password123")
+        device = TrustedDevice.objects.create(
+            user=self.user,
+            user_agent="trusted-browser",
+        )
+        old_last_used = timezone.now() - timedelta(days=29)
+        TrustedDevice.objects.filter(id=device.id).update(last_used=old_last_used)
+        self.client.cookies["device_token"] = str(device.device_token)
+
+        response = self.client.get("/auth/me/", HTTP_USER_AGENT="trusted-browser")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], self.user.id)
+        device.refresh_from_db()
+        self.assertGreater(device.last_used, old_last_used)
+        self.assertEqual(TrustedDevice.TRUST_DAYS, 30)
+        self.assertGreaterEqual(
+            self.client.session.get_expiry_age(),
+            (30 * 24 * 60 * 60) - 5,
+        )
 
     @patch("accounts.views.send_otp_email")
     @patch("accounts.views.generate_otp", return_value="123456")
@@ -300,3 +322,47 @@ class GoogleOAuthRedirectTests(TestCase):
         session = self.client.session
         self.assertEqual(session["google_frontend_url"], "https://fildah.com")
         self.assertEqual(session["google_auth_mode"], "login")
+
+    def test_google_pending_profile_returns_session_profile(self):
+        session = self.client.session
+        session["google_pending"] = {
+            "email": "google-user@example.com",
+            "first_name": "Ada",
+            "last_name": "Okafor",
+        }
+        session.save()
+
+        response = self.client.get("/auth/google/pending-profile/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["email"], "google-user@example.com")
+        self.assertEqual(response.data["first_name"], "Ada")
+        self.assertEqual(response.data["last_name"], "Okafor")
+
+    def test_google_complete_setup_uses_pending_name_fallback_and_trusts_device(self):
+        session = self.client.session
+        session["google_pending"] = {
+            "email": "new-google@example.com",
+            "first_name": "Ada",
+            "last_name": "Okafor",
+        }
+        session.save()
+
+        response = self.client.post(
+            "/auth/google/complete-setup/",
+            {
+                "preferred_name": "Ada",
+                "gender": "female",
+                "age_range": "25_34",
+                "role": "patient",
+                "password": "password123",
+            },
+            format="json",
+            HTTP_USER_AGENT="google-browser",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("device_token", self.client.cookies)
+        user = User.objects.get(email="new-google@example.com")
+        self.assertEqual(user.profile.first_name, "Ada")
+        self.assertEqual(user.profile.last_name, "Okafor")
