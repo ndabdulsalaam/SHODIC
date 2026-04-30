@@ -66,3 +66,39 @@ export const fallbackDocs = [
     body: 'Fildah products should collect only the information needed to provide the service, support the user, and keep the platform reliable.\n\nFormal privacy policy text should be reviewed before launch. Until then, product pages should avoid asking users to share sensitive health details unless the product experience clearly needs that context.',
   },
 ]
+
+export const fallbackTestimonials = [
+  {
+    quote: 'RxChat helped me understand my mother\'s prescription in a way I could explain to her. It felt safer than random search results.',
+    name: 'Amina K.',
+    role: 'Caregiver',
+    initials: 'AK',
+  },
+  {
+    quote: 'I used to worry about mixing my medicines. Now I get a clearer starting point before speaking with my pharmacist.',
+    name: 'David O.',
+    role: 'Patient',
+    initials: 'DO',
+  },
+  {
+    quote: 'As a community pharmacist, I appreciate tools that encourage patients to ask better questions instead of self-diagnosing.',
+    name: 'Dr. Ngozi E.',
+    role: 'Pharmacist',
+    initials: 'NE',
+  },
+]
+
+export const fallbackDifferentiators = [
+  {
+    title: 'Designed by practitioners',
+    summary: 'Fildah products are shaped by healthcare professionals who understand clinical workflows and patient realities.',
+  },
+  {
+    title: 'Built for African healthcare contexts',
+    summary: 'Products reflect local pharmacy practices, medicine availability, and communication styles found across Nigeria and beyond.',
+  },
+  {
+    title: 'Focused on real outcomes',
+    summary: 'Every feature exists to improve a specific health decision, not to chase engagement metrics.',
+  },
+]
