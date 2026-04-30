@@ -7,7 +7,6 @@ def product_dict(product):
         "slug": product.slug,
         "name": product.name,
         "tagline": product.tagline,
-        "summary": product.short_description,
         "short_description": product.short_description,
         "long_description": product.long_description,
         "category": product.category,
