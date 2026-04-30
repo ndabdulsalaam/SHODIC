@@ -144,10 +144,36 @@ function SmartMarkdownTable({ children, ...props }) {
     )
 }
 
-function normalizeTableMarkup(markdown = '') {
-    return String(markdown).split('\n').map((line) => {
-        if (!line.includes('|')) return line
-        return line
+function isMalformedBulletLine(line = '') {
+    return /^\s{0,6}[*+-](?=\S)/.test(line) && !/^\s{0,6}\*\*/.test(line)
+}
+
+function shouldNormalizeBulletLine(line, index, lines) {
+    if (!isMalformedBulletLine(line)) return false
+
+    const previousLine = lines[index - 1] || ''
+    const nextLine = lines[index + 1] || ''
+    const trimmed = line.trimStart()
+
+    if (isMalformedBulletLine(previousLine) || isMalformedBulletLine(nextLine)) return true
+    if (!trimmed.slice(1).includes('*')) return true
+
+    return !/^\*[^*\s][^*]{0,80}\*[:\s]/.test(trimmed)
+}
+
+function normalizeMarkdownMarkup(markdown = '') {
+    const lines = String(markdown).split('\n')
+
+    return lines.map((line, index) => {
+        let normalizedLine = line
+
+        if (shouldNormalizeBulletLine(normalizedLine, index, lines)) {
+            normalizedLine = normalizedLine.replace(/^(\s{0,6})([*+-])(?=\S)/, '$1$2 ')
+        }
+
+        if (!normalizedLine.includes('|')) return normalizedLine
+
+        return normalizedLine
             .replace(/<b>(.*?)<\/b>/gi, '<strong>$1</strong>')
             .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
     }).join('\n')
@@ -165,7 +191,7 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
     const [isEditing, setIsEditing] = useState(false)
     const [editText, setEditText] = useState(message.content)
     const [copied, setCopied] = useState(false)
-    const renderedContent = useMemo(() => normalizeTableMarkup(message.content), [message.content])
+    const renderedContent = useMemo(() => normalizeMarkdownMarkup(message.content), [message.content])
     const time = message.created_at
         ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : ''
@@ -284,7 +310,7 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
                 </div>
 
                 {/* Bottom row: time + actions */}
-                {!isEditing && (
+                {!isEditing && !message._streaming && (
                     <div className="message__bottom">
                         {time && <span className="message__time">{time}</span>}
 
