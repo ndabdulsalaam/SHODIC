@@ -11,11 +11,10 @@ from rest_framework.test import APIClient
 from .ai_service import (
     _build_pdf_plugin,
     _build_user_content,
-    _select_model,
+    _select_models,
     build_system_message,
     build_user_message,
     stream_ai_events,
-    stream_ai_response,
 )
 from .models import Conversation, Message
 from .serializers import ChatInputSerializer
@@ -85,11 +84,11 @@ class ChatPromptTests(TestCase):
         OPENROUTER_VISION_MODEL="vision-model",
     )
     def test_model_selection_uses_vision_when_any_image_is_present(self):
-        self.assertEqual(_select_model([]), "text-model")
-        self.assertEqual(_select_model([pdf_attachment()]), "text-model")
-        self.assertEqual(
-            _select_model([pdf_attachment(), image_attachment()]),
+        self.assertEqual(_select_models([]), ["text-model"])
+        self.assertEqual(_select_models([pdf_attachment()]), ["text-model"])
+        self.assertIn(
             "vision-model",
+            _select_models([pdf_attachment(), image_attachment()]),
         )
 
     def test_multimodal_content_includes_multiple_images_and_pdf(self):
@@ -152,6 +151,16 @@ class ChatInputSerializerTests(TestCase):
 
         self.assertFalse(serializer.is_valid())
 
+    @override_settings(RXCHAT_ATTACHMENTS_ENABLED=True)
+    def test_accepts_supported_attachment_when_enabled(self):
+        serializer = ChatInputSerializer(data={
+            "message": "",
+            "attachments": [image_attachment()],
+        })
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["attachments"][0]["extension"], ".jpg")
+
 
 class ChatAiServiceTests(TestCase):
     @override_settings(
@@ -186,7 +195,8 @@ class ChatAiServiceTests(TestCase):
         backup_client.chat.completions.create = backup_create
         mock_get_client.side_effect = [primary_client, backup_client]
 
-        response = "".join(stream_ai_response("What is metformin?", role="pharmacist"))
+        events = list(stream_ai_events("What is metformin?", role="pharmacist"))
+        response = "".join(e["content"] for e in events if isinstance(e, dict) and e.get("type") == "text")
 
         self.assertEqual(response, "Hello from backup")
         self.assertEqual(mock_get_client.call_count, 2)
@@ -222,7 +232,8 @@ class ChatAiServiceTests(TestCase):
         client.chat.completions.create = create
         mock_get_client.return_value = client
 
-        response = "".join(stream_ai_response("What is metformin?", role="patient"))
+        events = list(stream_ai_events("What is metformin?", role="patient"))
+        response = "".join(e["content"] for e in events if isinstance(e, dict) and e.get("type") == "text")
 
         self.assertEqual(captured_kwargs["max_tokens"], 123)
         self.assertIn("I'll pause there so the answer stays readable", response)
@@ -342,6 +353,18 @@ class ChatApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([str(item["id"]) for item in response.data], [str(newer.id), str(older.id)])
+
+    def test_list_conversations_is_limited_to_owner(self):
+        owner = User.objects.create_user(username="list-owner@example.com", email="list-owner@example.com", password="password123")
+        other = User.objects.create_user(username="list-other@example.com", email="list-other@example.com", password="password123")
+        owned = Conversation.objects.create(user=owner, title="Visible")
+        Conversation.objects.create(user=other, title="Hidden")
+
+        self.client.force_authenticate(user=owner)
+        response = self.client.get("/rxchat/conversations/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([str(item["id"]) for item in response.data], [str(owned.id)])
 
     @patch("rxchat.views.stream_ai_events")
     def test_send_message_touches_existing_conversation_before_stream_is_consumed(self, mock_stream):
