@@ -59,6 +59,40 @@
     padding-right: var(--space-1);
 }
 
+.message__status {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    padding: var(--space-1) 0;
+}
+
+.message__status span {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    background: linear-gradient(90deg,
+            var(--color-text-muted) 0%,
+            var(--color-text-secondary) 32%,
+            var(--color-secondary-dark) 50%,
+            var(--color-text-secondary) 68%,
+            var(--color-text-muted) 100%);
+    background-size: 220% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: statusShimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes statusShimmer {
+    0% {
+        background-position: 120% 50%;
+    }
+
+    100% {
+        background-position: -120% 50%;
+    }
+}
+
 /* Bottom row: time + action icons inline */
 .message__bottom {
     display: flex;
