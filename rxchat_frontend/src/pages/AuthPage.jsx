@@ -558,7 +558,7 @@ function AuthPage() {
                     <SetupProgress step={currentStep} />
 
                     <h1 className="auth-page__title">{SETUP_STEP_TITLES[currentStep]}</h1>
-                    <p className="auth-page__subtitle">{subtitle}</p>
+                    {subtitle && <p className="auth-page__subtitle">{subtitle}</p>}
 
                     <form className="auth-page__form auth-page__form--wizard" onSubmit={handleWizardSubmit}>
                         <div key={`${variant}-${currentStep}`} className="auth-page__wizard-step">
@@ -800,7 +800,7 @@ function AuthPage() {
     if (step === 'profile_setup') {
         return renderSetupWizard({
             variant: 'setup',
-            subtitle: <>Email verified! Set up your profile for <strong>{email}</strong></>,
+            subtitle: null,
             currentStep: setupStep,
             setCurrentStep: setSetupStep,
             first: firstName,
@@ -833,9 +833,7 @@ function AuthPage() {
     if (step === 'google_setup') {
         return renderSetupWizard({
             variant: 'google',
-            subtitle: googlePendingEmail
-                ? <>Complete your RxChat profile for <strong>{googlePendingEmail}</strong></>
-                : <>Complete your RxChat profile.</>,
+            subtitle: null,
             currentStep: googleSetupStep,
             setCurrentStep: setGoogleSetupStep,
             first: googleFirstName,
