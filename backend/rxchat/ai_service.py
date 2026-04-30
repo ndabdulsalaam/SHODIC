@@ -412,10 +412,6 @@ def _select_models(attachments: list | None) -> list[str]:
     return [settings.OPENROUTER_TEXT_MODEL]
 
 
-def _select_model(attachments: list | None) -> str:
-    """Backward-compatible single-model selector used by older tests."""
-    return _select_models(attachments)[0]
-
 
 def _response_token_budget(is_complex: bool) -> int:
     if is_complex:
@@ -687,47 +683,6 @@ def stream_ai_events(
     logger.error(f"All model/key attempts failed: {last_error}")
     yield _text_event(_get_fallback_response())
 
-
-def stream_ai_response(
-    user_message,
-    conversation_history=None,
-    role="patient",
-    attachments=None,
-    document_sections=None,
-):
-    """Stream only text chunks.
-
-    Kept for backward compatibility with callers/tests that consume the
-    historical text-only generator.
-    """
-    for event in stream_ai_events(
-        user_message,
-        conversation_history=conversation_history,
-        role=role,
-        attachments=attachments,
-        document_sections=document_sections,
-    ):
-        if isinstance(event, str):
-            yield event
-        elif event.get("type") == "text":
-            yield event.get("content", "")
-
-
-def get_ai_response(user_message, conversation_history=None, role="patient", attachments=None, document_sections=None):
-    """Non-streaming wrapper — collects the full response.
-
-    Kept for backward compatibility and non-streaming endpoints.
-    """
-    parts = []
-    for chunk in stream_ai_response(
-        user_message,
-        conversation_history,
-        role,
-        attachments=attachments,
-        document_sections=document_sections,
-    ):
-        parts.append(chunk)
-    return "".join(parts)
 
 
 def _get_fallback_response():
