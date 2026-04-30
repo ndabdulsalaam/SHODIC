@@ -6,6 +6,7 @@ import {
     HiOutlineStopCircle,
     HiOutlineXMark,
 } from 'react-icons/hi2'
+import useAudioWaveform from '../../hooks/useAudioWaveform'
 import useSpeechRecognition from '../../hooks/useSpeechRecognition'
 import './ChatInput.css'
 
@@ -24,6 +25,12 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
     const textareaRef = useRef(null)
     const dictationBaseRef = useRef('')
     const {
+        levels: waveformLevels,
+        isActive: waveformActive,
+        start: startWaveform,
+        stop: stopWaveform,
+    } = useAudioWaveform(128)
+    const {
         isSupported: speechSupported,
         isListening,
         startListening,
@@ -38,8 +45,12 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
 
     useEffect(() => {
         if (textareaRef.current) {
+            const baseHeight = 44
+            const maxHeight = 150
             textareaRef.current.style.height = 'auto'
-            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'
+            const nextHeight = Math.min(Math.max(textareaRef.current.scrollHeight, baseHeight), maxHeight)
+            textareaRef.current.style.height = `${nextHeight}px`
+            textareaRef.current.style.overflowY = textareaRef.current.scrollHeight > maxHeight ? 'auto' : 'hidden'
         }
     }, [text])
 
@@ -52,6 +63,7 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
         setText('')
         setError('')
         if (isListening) stopListening()
+        stopWaveform()
         setIsDictating(false)
         setDictationTranscript('')
     }
@@ -67,12 +79,14 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
         if (!speechSupported || isLoading) return
         if (isListening) {
             stopListening()
+            stopWaveform()
             return
         }
         dictationBaseRef.current = text
         setDictationTranscript('')
         setIsDictating(true)
         setError('')
+        startWaveform()
         startListening((nextTranscript) => {
             setDictationTranscript(nextTranscript)
         })
@@ -80,6 +94,7 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
 
     const handleCancelDictation = () => {
         stopListening()
+        stopWaveform()
         setText(dictationBaseRef.current)
         setDictationTranscript('')
         setIsDictating(false)
@@ -88,6 +103,7 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
 
     const handleConfirmDictation = () => {
         stopListening()
+        stopWaveform()
         setText((current) => appendTranscript(current || dictationBaseRef.current, dictationTranscript))
         setDictationTranscript('')
         setIsDictating(false)
@@ -103,31 +119,39 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
 
                 {isDictating ? (
                     <div className="chat-input__dictation" role="group" aria-label="Voice dictation">
-                        <button
-                            type="button"
-                            className="chat-input__dictation-action"
-                            onClick={handleCancelDictation}
-                            aria-label="Cancel dictation"
-                            title="Cancel dictation"
-                        >
-                            <HiOutlineXMark size={20} />
-                        </button>
-
-                        <div className={`chat-input__waveform ${isListening ? 'chat-input__waveform--active' : ''}`} aria-hidden="true">
-                            {Array.from({ length: 36 }, (_, index) => (
-                                <span key={index} style={{ animationDelay: `${index * -45}ms` }} />
+                        <div className={`chat-input__waveform ${waveformActive || isListening ? 'chat-input__waveform--active' : ''}`} aria-hidden="true">
+                            {waveformLevels.map((level, index) => (
+                                <span
+                                    key={index}
+                                    style={{
+                                        '--wave-scale': level.toFixed(3),
+                                        animationDelay: `${index * -45}ms`,
+                                    }}
+                                />
                             ))}
                         </div>
 
-                        <button
-                            type="button"
-                            className="chat-input__dictation-action chat-input__dictation-action--confirm"
-                            onClick={handleConfirmDictation}
-                            aria-label="Use dictation"
-                            title="Use dictation"
-                        >
-                            <HiOutlineCheck size={22} />
-                        </button>
+                        <div className="chat-input__dictation-actions">
+                            <button
+                                type="button"
+                                className="chat-input__dictation-action"
+                                onClick={handleCancelDictation}
+                                aria-label="Cancel dictation"
+                                title="Cancel dictation"
+                            >
+                                <HiOutlineXMark size={20} />
+                            </button>
+
+                            <button
+                                type="button"
+                                className="chat-input__dictation-action chat-input__dictation-action--confirm"
+                                onClick={handleConfirmDictation}
+                                aria-label="Use dictation"
+                                title="Use dictation"
+                            >
+                                <HiOutlineCheck size={22} />
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div className="chat-input__composer">
