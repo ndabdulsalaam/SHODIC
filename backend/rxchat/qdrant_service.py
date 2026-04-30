@@ -36,28 +36,14 @@ logger = logging.getLogger(__name__)
 _client = None
 
 
-def _dense_model() -> str:
-    return getattr(settings, "QDRANT_INFERENCE_MODEL", "")
-
-
-def _sparse_model() -> str:
-    return getattr(settings, "QDRANT_SPARSE_MODEL", "qdrant/bm25")
-
-
-def _dense_vector_name() -> str:
-    return getattr(settings, "QDRANT_DENSE_VECTOR_NAME", "dense")
-
-
-def _sparse_vector_name() -> str:
-    return getattr(settings, "QDRANT_SPARSE_VECTOR_NAME", "sparse")
 
 
 def _collection_setup_hint() -> str:
     return (
         f"Create collection '{settings.QDRANT_COLLECTION}' with dense vector "
-        f"'{_dense_vector_name()}' size {getattr(settings, 'QDRANT_VECTOR_SIZE', 384)} "
-        f"distance {getattr(settings, 'QDRANT_DISTANCE', 'Cosine')} and sparse vector "
-        f"'{_sparse_vector_name()}' for {_sparse_model()}."
+        f"'{settings.QDRANT_DENSE_VECTOR_NAME}' size {settings.QDRANT_VECTOR_SIZE} "
+        f"distance {settings.QDRANT_DISTANCE} and sparse vector "
+        f"'{settings.QDRANT_SPARSE_VECTOR_NAME}' for {settings.QDRANT_SPARSE_MODEL}."
     )
 
 
@@ -65,15 +51,15 @@ def _chunk_vectors(text: str) -> dict:
     from qdrant_client.models import Document  # noqa: PLC0415
 
     return {
-        _dense_vector_name(): Document(text=text, model=_dense_model()),
-        _sparse_vector_name(): Document(text=text, model=_sparse_model()),
+        settings.QDRANT_DENSE_VECTOR_NAME: Document(text=text, model=settings.QDRANT_INFERENCE_MODEL),
+        settings.QDRANT_SPARSE_VECTOR_NAME: Document(text=text, model=settings.QDRANT_SPARSE_MODEL),
     }
 
 
 def _require_qdrant_settings() -> None:
-    if not _dense_model():
+    if not settings.QDRANT_INFERENCE_MODEL:
         raise RuntimeError("QDRANT_INFERENCE_MODEL is not set.")
-    if not _sparse_model():
+    if not settings.QDRANT_SPARSE_MODEL:
         raise RuntimeError("QDRANT_SPARSE_MODEL is not set.")
 
 
@@ -158,13 +144,13 @@ def retrieve_context(query: str, top_k: int = 10) -> list[dict]:
             Prefetch,
         )
 
-        if not _dense_model():
+        if not settings.QDRANT_INFERENCE_MODEL:
             logger.warning(
                 "QDRANT_INFERENCE_MODEL is not set. "
                 "RAG context will be skipped for this request."
             )
             return []
-        if not _sparse_model():
+        if not settings.QDRANT_SPARSE_MODEL:
             logger.warning(
                 "QDRANT_SPARSE_MODEL is not set. "
                 "Keyword retrieval will be skipped for this request."
@@ -172,13 +158,13 @@ def retrieve_context(query: str, top_k: int = 10) -> list[dict]:
             return []
 
         vector_prefetch = Prefetch(
-            query=Document(text=query, model=_dense_model()),
-            using=_dense_vector_name(),
+            query=Document(text=query, model=settings.QDRANT_INFERENCE_MODEL),
+            using=settings.QDRANT_DENSE_VECTOR_NAME,
             limit=max(top_k * 2, 10),
         )
         keyword_prefetch = Prefetch(
-            query=Document(text=query, model=_sparse_model()),
-            using=_sparse_vector_name(),
+            query=Document(text=query, model=settings.QDRANT_SPARSE_MODEL),
+            using=settings.QDRANT_SPARSE_VECTOR_NAME,
             limit=max(top_k * 2, 10),
         )
         results = client.query_points(
