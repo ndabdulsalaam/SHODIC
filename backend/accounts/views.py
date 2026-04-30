@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from .models import (
     PendingRegistration, TrustedDevice, PendingLoginOTP, PasswordResetOTP,
@@ -80,7 +80,6 @@ def _refresh_authenticated_session(request):
 
 def _trust_device(user, request, response):
     """Create a trusted device entry and set the cookie."""
-    from django.utils import timezone
     user_agent = _get_user_agent(request)
     device, _created = TrustedDevice.objects.get_or_create(
         user=user,
@@ -104,6 +103,64 @@ def _trust_device(user, request, response):
         path='/',
     )
     return response
+
+
+def _validate_setup_fields(data, fallback_first_name='', fallback_last_name=''):
+    """Validate and extract common profile-setup fields.
+
+    Returns (fields_dict, error_response).  Exactly one will be None.
+    """
+    preferred_name = data.get('preferred_name', '').strip()
+    first_name = data.get('first_name', '').strip() or fallback_first_name
+    last_name = data.get('last_name', '').strip() or fallback_last_name
+    gender = data.get('gender', '').strip().lower()
+    age_range = data.get('age_range', '').strip()
+    phone_number = data.get('phone_number', '').strip()
+    role = data.get('role', '').strip().lower()
+    password = data.get('password', '')
+
+    if not preferred_name:
+        return None, Response({'error': 'Please tell us what Rx should call you'}, status=status.HTTP_400_BAD_REQUEST)
+    if not first_name:
+        return None, Response({'error': 'First name is required'}, status=status.HTTP_400_BAD_REQUEST)
+    if role not in VALID_ROLES:
+        return None, Response({'error': 'Please select a valid role'}, status=status.HTTP_400_BAD_REQUEST)
+    if gender not in VALID_GENDERS:
+        return None, Response({'error': 'Please select a valid gender'}, status=status.HTTP_400_BAD_REQUEST)
+    if age_range not in VALID_AGE_RANGES:
+        return None, Response({'error': 'Please select a valid age range'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(password) < 8:
+        return None, Response({'error': 'Password must be at least 8 characters'}, status=status.HTTP_400_BAD_REQUEST)
+
+    return {
+        'preferred_name': preferred_name,
+        'first_name': first_name,
+        'last_name': last_name,
+        'gender': gender,
+        'age_range': age_range,
+        'phone_number': phone_number,
+        'role': role,
+        'password': password,
+    }, None
+
+
+def _create_user_with_profile(email, fields):
+    """Create a User and populate their auto-created profile."""
+    user = User.objects.create_user(
+        username=email,
+        email=email,
+        password=fields['password'],
+    )
+    profile = user.profile
+    profile.preferred_name = fields['preferred_name']
+    profile.first_name = fields['first_name']
+    profile.last_name = fields['last_name']
+    profile.role = fields['role']
+    profile.gender = fields['gender']
+    profile.age_range = fields['age_range']
+    profile.phone_number = fields['phone_number']
+    profile.save()
+    return user
 
 
 def _user_response(user):
@@ -246,52 +303,10 @@ def complete_setup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    preferred_name = request.data.get('preferred_name', '').strip()
-    first_name = request.data.get('first_name', '').strip()
-    last_name = request.data.get('last_name', '').strip()
-    gender = request.data.get('gender', '').strip().lower()
-    age_range = request.data.get('age_range', '').strip()
-    phone_number = request.data.get('phone_number', '').strip()
-    role = request.data.get('role', '').strip().lower()
-    password = request.data.get('password', '')
+    fields, error = _validate_setup_fields(request.data)
+    if error:
+        return error
 
-    if not preferred_name:
-        return Response(
-            {'error': 'Please tell us what Rx should call you'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not first_name:
-        return Response(
-            {'error': 'First name is required'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if role not in VALID_ROLES:
-        return Response(
-            {'error': 'Please select a valid role'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if gender not in VALID_GENDERS:
-        return Response(
-            {'error': 'Please select a valid gender'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if age_range not in VALID_AGE_RANGES:
-        return Response(
-            {'error': 'Please select a valid age range'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if len(password) < 8:
-        return Response(
-            {'error': 'Password must be at least 8 characters'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Check email not already taken (edge case: someone registered between OTP and setup)
     if User.objects.filter(email__iexact=verified_email).exists():
         del request.session['verified_email']
         return Response(
@@ -299,26 +314,9 @@ def complete_setup(request):
             status=status.HTTP_409_CONFLICT,
         )
 
-    # Create user — username auto-set to email
-    user = User.objects.create_user(
-        username=verified_email,
-        email=verified_email,
-        password=password,
-    )
-    # Update profile (auto-created via signal)
-    profile = user.profile
-    profile.preferred_name = preferred_name
-    profile.first_name = first_name
-    profile.last_name = last_name
-    profile.role = role
-    profile.gender = gender
-    profile.age_range = age_range
-    profile.phone_number = phone_number
-    profile.save()
+    user = _create_user_with_profile(verified_email, fields)
 
-    # Clean up session
     del request.session['verified_email']
-
     login(request, user)
 
     response = Response({
@@ -660,6 +658,7 @@ def me(request):
 
 @csrf_exempt
 @api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
 def update_profile(request):
     """
     PATCH /auth/profile/
@@ -710,13 +709,13 @@ def update_profile(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def add_email(request):
     """
     POST /auth/email/add/
     Body: { "email": "new@example.com" }
     Sends OTP to the new email for verification.
     """
-    from django.contrib.auth.models import User as UserModel
 
     new_email = request.data.get('email', '').strip().lower()
 
@@ -727,7 +726,7 @@ def add_email(request):
         )
 
     # Check if email is already in use by another user
-    if UserModel.objects.filter(email__iexact=new_email).exclude(pk=request.user.pk).exists():
+    if User.objects.filter(email__iexact=new_email).exclude(pk=request.user.pk).exists():
         return Response(
             {'error': 'This email is already in use'},
             status=status.HTTP_409_CONFLICT,
@@ -758,6 +757,7 @@ def add_email(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def verify_email(request):
     """
     POST /auth/email/verify/
@@ -794,7 +794,6 @@ def verify_email(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    from django.utils import timezone as tz
 
     # Unset current primary
     UserEmail.objects.filter(user=request.user, is_primary=True).update(is_primary=False)
@@ -803,12 +802,12 @@ def verify_email(request):
     user_email, _created = UserEmail.objects.get_or_create(
         user=request.user,
         email=new_email,
-        defaults={'is_verified': True, 'is_primary': True, 'verified_at': tz.now()},
+        defaults={'is_verified': True, 'is_primary': True, 'verified_at': timezone.now()},
     )
     if not _created:
         user_email.is_verified = True
         user_email.is_primary = True
-        user_email.verified_at = tz.now()
+        user_email.verified_at = timezone.now()
         user_email.save()
 
     # Update the Django User.email to the new primary
@@ -826,6 +825,7 @@ def verify_email(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def remove_email(request):
     """
     POST /auth/email/remove/
@@ -1081,76 +1081,24 @@ def google_complete_setup(request):
         )
 
     google_email = pending.get('email', '')
-    fallback_first_name = pending.get('first_name') or google_email.split('@')[0]
-    preferred_name = request.data.get('preferred_name', '').strip()
-    first_name = request.data.get('first_name', '').strip() or fallback_first_name
-    last_name = request.data.get('last_name', '').strip() or pending.get('last_name', '')
-    gender = request.data.get('gender', '').strip().lower()
-    age_range = request.data.get('age_range', '').strip()
-    phone_number = request.data.get('phone_number', '').strip()
-    role = request.data.get('role', '').strip().lower()
-    password = request.data.get('password', '')
+    fallback_first = pending.get('first_name') or google_email.split('@')[0]
+    fallback_last = pending.get('last_name', '')
 
-    if not preferred_name:
-        return Response(
-            {'error': 'Please tell us what Rx should call you'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not first_name:
-        return Response(
-            {'error': 'First name is required'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if role not in VALID_ROLES:
-        return Response(
-            {'error': 'Please select a valid role'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if gender not in VALID_GENDERS:
-        return Response(
-            {'error': 'Please select a valid gender'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if age_range not in VALID_AGE_RANGES:
-        return Response(
-            {'error': 'Please select a valid age range'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if len(password) < 8:
-        return Response(
-            {'error': 'Password must be at least 8 characters'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Create user — username auto-set to email
-    user = User.objects.create_user(
-        username=google_email,
-        email=google_email,
-        password=password,
+    fields, error = _validate_setup_fields(
+        request.data,
+        fallback_first_name=fallback_first,
+        fallback_last_name=fallback_last,
     )
-    # Update profile (auto-created via signal)
-    profile = user.profile
-    profile.preferred_name = preferred_name
-    profile.first_name = first_name
-    profile.last_name = last_name
-    profile.role = role
-    profile.gender = gender
-    profile.age_range = age_range
-    profile.phone_number = phone_number
-    profile.save()
+    if error:
+        return error
 
-    # Clean up session
+    user = _create_user_with_profile(google_email, fields)
+
     del request.session['google_pending']
-
     login(request, user)
-    resp_data = {
+
+    response = Response({
         **_user_response(user),
         'message': 'Account created successfully',
-    }
-    response = Response(resp_data, status=status.HTTP_201_CREATED)
+    }, status=status.HTTP_201_CREATED)
     return _trust_device(user, request, response)
