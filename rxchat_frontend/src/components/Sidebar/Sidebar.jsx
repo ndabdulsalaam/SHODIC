@@ -1,11 +1,58 @@
-import { useState, useRef, useEffect } from 'react'
-import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import './Sidebar.css'
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function getConversationTimestamp(conversation) {
+    const rawDate = conversation?.updated_at || conversation?.created_at || ''
+    const timestamp = Date.parse(rawDate)
+    return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+function getStartOfLocalDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+function groupConversations(conversations) {
+    const now = new Date()
+    const todayStart = getStartOfLocalDay(now)
+    const sevenDaysAgo = now.getTime() - (7 * DAY_MS)
+    const groups = {
+        today: [],
+        sevenDays: [],
+        older: [],
+    }
+
+    conversations.forEach((conversation) => {
+        const timestamp = getConversationTimestamp(conversation)
+        if (timestamp >= todayStart) {
+            groups.today.push(conversation)
+            return
+        }
+
+        if (timestamp >= sevenDaysAgo) {
+            groups.sevenDays.push(conversation)
+            return
+        }
+
+        groups.older.push(conversation)
+    })
+
+    const sortNewestFirst = (items) => [...items].sort((a, b) => getConversationTimestamp(b) - getConversationTimestamp(a))
+
+    return [
+        { label: 'Today', items: sortNewestFirst(groups.today) },
+        { label: 'Recent', items: sortNewestFirst(groups.sevenDays) },
+        { label: 'Older', items: sortNewestFirst(groups.older) },
+    ].filter((group) => group.items.length > 0)
+}
 
 function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onOpenSettings }) {
     const [editingId, setEditingId] = useState(null)
     const [editTitle, setEditTitle] = useState('')
     const editInputRef = useRef(null)
+    const groupedConversations = useMemo(() => groupConversations(conversations), [conversations])
 
     useEffect(() => {
         if (editingId && editInputRef.current) {
@@ -86,71 +133,73 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
 
                 {/* Conversations List */}
                 <nav className="sidebar__conversations">
-                    {conversations.length > 0 && (
-                        <div className="sidebar__section-label">Recent</div>
-                    )}
-                    {conversations.map((chat) => (
-                        <div
-                            key={chat.id}
-                            className={`sidebar__chat-item ${activeId === chat.id ? 'sidebar__chat-item--active' : ''}`}
-                            onClick={() => editingId !== chat.id && onSelectChat(chat.id)}
-                        >
-                            <HiOutlineChatBubbleLeftRight className="sidebar__chat-item-icon" />
+                    {groupedConversations.map((group) => (
+                        <div className="sidebar__conversation-group" key={group.label}>
+                            <div className="sidebar__section-label">{group.label}</div>
+                            {group.items.map((chat) => (
+                                <div
+                                    key={chat.id}
+                                    className={`sidebar__chat-item ${activeId === chat.id ? 'sidebar__chat-item--active' : ''}`}
+                                    onClick={() => editingId !== chat.id && onSelectChat(chat.id)}
+                                >
+                                    <HiOutlineChatBubbleLeftRight className="sidebar__chat-item-icon" />
 
-                            {editingId === chat.id ? (
-                                <input
-                                    ref={editInputRef}
-                                    className="sidebar__chat-item-input"
-                                    value={editTitle}
-                                    onChange={(e) => setEditTitle(e.target.value)}
-                                    onKeyDown={handleRenameKeyDown}
-                                    onBlur={handleRenameSave}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
-                            ) : (
-                                <span className="sidebar__chat-item-text">{chat.title}</span>
-                            )}
+                                    {editingId === chat.id ? (
+                                        <input
+                                            ref={editInputRef}
+                                            className="sidebar__chat-item-input"
+                                            value={editTitle}
+                                            onChange={(e) => setEditTitle(e.target.value)}
+                                            onKeyDown={handleRenameKeyDown}
+                                            onBlur={handleRenameSave}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <span className="sidebar__chat-item-text">{chat.title}</span>
+                                    )}
 
-                            <div className="sidebar__chat-item-actions">
-                                {editingId === chat.id ? (
-                                    <>
-                                        <button
-                                            className="sidebar__chat-item-action"
-                                            onClick={(e) => { e.stopPropagation(); handleRenameSave() }}
-                                            aria-label="Save title"
-                                        >
-                                            <HiOutlineCheck size={14} />
-                                        </button>
-                                        <button
-                                            className="sidebar__chat-item-action"
-                                            onClick={(e) => { e.stopPropagation(); handleRenameCancel() }}
-                                            aria-label="Cancel rename"
-                                        >
-                                            <HiOutlineXMark size={14} />
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button
-                                            className="sidebar__chat-item-action"
-                                            onClick={(e) => { e.stopPropagation(); handleRenameStart(chat) }}
-                                            aria-label="Rename conversation"
-                                        >
-                                            <HiOutlinePencil size={14} />
-                                        </button>
-                                        <button
-                                            className="sidebar__chat-item-action sidebar__chat-item-action--delete"
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                onDeleteChat(chat.id)
-                                            }}
-                                            aria-label="Delete conversation"
-                                        >
-                                            <HiOutlineTrash size={14} />
-                                        </button>
-                                    </>
-                                )}
-                            </div>
+                                    <div className="sidebar__chat-item-actions">
+                                        {editingId === chat.id ? (
+                                            <>
+                                                <button
+                                                    className="sidebar__chat-item-action"
+                                                    onClick={(e) => { e.stopPropagation(); handleRenameSave() }}
+                                                    aria-label="Save title"
+                                                >
+                                                    <HiOutlineCheck size={14} />
+                                                </button>
+                                                <button
+                                                    className="sidebar__chat-item-action"
+                                                    onClick={(e) => { e.stopPropagation(); handleRenameCancel() }}
+                                                    aria-label="Cancel rename"
+                                                >
+                                                    <HiOutlineXMark size={14} />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    className="sidebar__chat-item-action"
+                                                    onClick={(e) => { e.stopPropagation(); handleRenameStart(chat) }}
+                                                    aria-label="Rename conversation"
+                                                >
+                                                    <HiOutlinePencil size={14} />
+                                                </button>
+                                                <button
+                                                    className="sidebar__chat-item-action sidebar__chat-item-action--delete"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        onDeleteChat(chat.id)
+                                                    }}
+                                                    aria-label="Delete conversation"
+                                                >
+                                                    <HiOutlineTrash size={14} />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ))}
                 </nav>
