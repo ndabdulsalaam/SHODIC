@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
+from django.conf import settings
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -30,7 +31,7 @@ def _get_device_token(request):
 
 
 def _is_trusted_device(user, request):
-    """Check if the current device is trusted and active (used within 15 days)."""
+    """Check if the current device is trusted and active."""
     device_token = _get_device_token(request)
     if not device_token:
         logger.debug("No trusted-device cookie found for user_id=%s", user.id)
@@ -51,10 +52,35 @@ def _is_trusted_device(user, request):
     return device
 
 
+def _refresh_authenticated_session(request):
+    """Keep active authenticated browser sessions and trusted devices alive."""
+    if not request.user.is_authenticated:
+        return
+
+    request.session.set_expiry(settings.SESSION_COOKIE_AGE)
+    request.session.modified = True
+
+    device_token = _get_device_token(request)
+    if not device_token:
+        return
+
+    try:
+        device = TrustedDevice.objects.get(
+            user=request.user,
+            device_token=device_token,
+        )
+    except TrustedDevice.DoesNotExist:
+        return
+
+    if device.is_active():
+        device.touch()
+    else:
+        device.delete()
+
+
 def _trust_device(user, request, response):
     """Create a trusted device entry and set the cookie."""
     from django.utils import timezone
-    from django.conf import settings
     user_agent = _get_user_agent(request)
     device, _created = TrustedDevice.objects.get_or_create(
         user=user,
@@ -625,6 +651,7 @@ def logout_view(request):
 def me(request):
     """GET /auth/me/"""
     if request.user.is_authenticated:
+        _refresh_authenticated_session(request)
         return Response(_user_response(request.user))
     return Response({'user': None})
 
@@ -848,7 +875,6 @@ def remove_email(request):
 import requests as http_requests
 from urllib.parse import urlencode, urlparse
 from django.shortcuts import redirect
-from django.conf import settings
 
 
 GOOGLE_CALLBACK_PATH = '/auth/google/callback/'
@@ -1020,6 +1046,25 @@ def google_callback(request):
 
 
 @csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def google_pending_profile(request):
+    """GET /auth/google/pending-profile/ — return pending Google signup data."""
+    pending = request.session.get('google_pending')
+    if not pending:
+        return Response(
+            {'error': 'No pending Google sign-up. Please try again.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response({
+        'email': pending.get('email', ''),
+        'first_name': pending.get('first_name', ''),
+        'last_name': pending.get('last_name', ''),
+    })
+
+
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def google_complete_setup(request):
@@ -1035,9 +1080,11 @@ def google_complete_setup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    google_email = pending.get('email', '')
+    fallback_first_name = pending.get('first_name') or google_email.split('@')[0]
     preferred_name = request.data.get('preferred_name', '').strip()
-    first_name = request.data.get('first_name', '').strip()
-    last_name = request.data.get('last_name', '').strip()
+    first_name = request.data.get('first_name', '').strip() or fallback_first_name
+    last_name = request.data.get('last_name', '').strip() or pending.get('last_name', '')
     gender = request.data.get('gender', '').strip().lower()
     age_range = request.data.get('age_range', '').strip()
     phone_number = request.data.get('phone_number', '').strip()
@@ -1080,8 +1127,6 @@ def google_complete_setup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    google_email = pending['email']
-
     # Create user — username auto-set to email
     user = User.objects.create_user(
         username=google_email,
@@ -1091,8 +1136,8 @@ def google_complete_setup(request):
     # Update profile (auto-created via signal)
     profile = user.profile
     profile.preferred_name = preferred_name
-    profile.first_name = first_name or pending.get('first_name', '')
-    profile.last_name = last_name or pending.get('last_name', '')
+    profile.first_name = first_name
+    profile.last_name = last_name
     profile.role = role
     profile.gender = gender
     profile.age_range = age_range
@@ -1108,4 +1153,4 @@ def google_complete_setup(request):
         'message': 'Account created successfully',
     }
     response = Response(resp_data, status=status.HTTP_201_CREATED)
-    return response
+    return _trust_device(user, request, response)
