@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { FiMenu, FiUser, FiX } from 'react-icons/fi'
+import { FiArrowUpRight, FiMenu, FiX } from 'react-icons/fi'
 import { NavLink, Outlet } from 'react-router-dom'
 import BrandLogo from './BrandLogo'
 
+const RXCHAT_URL = 'https://rxchat.fildah.com'
+
 const navItems = [
   { label: 'Products', path: '/products' },
-  { label: 'Docs', path: '/docs' },
-  { label: 'Blog', path: '/blog' },
   { label: 'About', path: '/about' },
-  { label: 'Support', path: '/support' },
+  { label: 'Blog', path: '/blog' },
+  { label: 'Contact', path: '/contact' },
 ]
 
 function NavItems({ onNavigate }) {
@@ -36,9 +37,9 @@ export default function Layout() {
             <NavItems />
           </nav>
           <div className="site-header__actions">
-            <NavLink className="icon-link" to="/account" aria-label="Account">
-              <FiUser />
-            </NavLink>
+            <a className="button button--header" href={RXCHAT_URL}>
+              RxChat <FiArrowUpRight aria-hidden="true" />
+            </a>
             <button
               className="icon-button site-header__menu"
               type="button"
@@ -51,10 +52,10 @@ export default function Layout() {
         </div>
         {menuOpen && (
           <nav className="mobile-nav" aria-label="Mobile navigation">
+            <a className="mobile-nav__rxchat" href={RXCHAT_URL}>
+              Open RxChat <FiArrowUpRight aria-hidden="true" />
+            </a>
             <NavItems onNavigate={() => setMenuOpen(false)} />
-            <NavLink className="mobile-nav__account" to="/account" onClick={() => setMenuOpen(false)}>
-              Account
-            </NavLink>
           </nav>
         )}
       </header>
@@ -70,10 +71,13 @@ export default function Layout() {
             <p>Focused health technology products under one careful parent brand.</p>
           </div>
           <div className="site-footer__links">
+            <NavLink to="/about">About</NavLink>
             <NavLink to="/products">Products</NavLink>
-            <NavLink to="/docs">Docs</NavLink>
             <NavLink to="/blog">Blog</NavLink>
-            <NavLink to="/support">Support</NavLink>
+            <NavLink to="/contact">Contact</NavLink>
+            <NavLink to="/docs">Docs</NavLink>
+            <NavLink to="/account">Account</NavLink>
+            <NavLink to="/docs/privacy">Privacy</NavLink>
           </div>
         </div>
       </footer>

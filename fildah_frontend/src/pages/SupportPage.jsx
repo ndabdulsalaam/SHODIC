@@ -8,7 +8,7 @@ const initialForm = {
   name: '',
   email: '',
   company: '',
-  topic: 'Support',
+  topic: 'General enquiry',
   product: '',
   message: '',
 }
@@ -45,9 +45,9 @@ export default function SupportPage() {
   return (
     <section className="page-section">
       <div className="page-hero">
-        <p className="eyebrow">Support</p>
+        <p className="eyebrow">Contact</p>
         <h1>Reach the Fildah team.</h1>
-        <p>Send product questions, partnership notes, support requests, or documentation feedback.</p>
+        <p>Ask a product question, share a partnership note, or tell us what would help you feel ready to use RxChat.</p>
       </div>
 
       <form className="support-form" onSubmit={submitForm}>
@@ -66,9 +66,10 @@ export default function SupportPage() {
         <label>
           Topic
           <select name="topic" value={form.topic} onChange={updateField}>
-            <option>Support</option>
+            <option>General enquiry</option>
             <option>Partnership</option>
             <option>Product access</option>
+            <option>Support</option>
             <option>Documentation</option>
           </select>
         </label>

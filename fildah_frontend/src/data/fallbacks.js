@@ -39,6 +39,10 @@ export const fallbackHome = {
       title: 'Built for local realities',
       summary: 'Fildah products can reflect Nigeria-first workflows while remaining globally usable.',
     },
+    {
+      title: 'Care before scale',
+      summary: 'Products are shaped around practical support, clear boundaries, and patient confidence.',
+    },
   ],
 }
 
@@ -54,5 +58,11 @@ export const fallbackDocs = [
     title: 'RxChat',
     summary: 'Product notes for the RxChat pharmacy assistant.',
     body: 'RxChat lives at rxchat.fildah.com and uses the /rxchat/ API namespace.',
+  },
+  {
+    slug: 'privacy',
+    title: 'Privacy policy',
+    summary: 'How Fildah thinks about privacy, account data, and product support information.',
+    body: 'Fildah products should collect only the information needed to provide the service, support the user, and keep the platform reliable.\n\nFormal privacy policy text should be reviewed before launch. Until then, product pages should avoid asking users to share sensitive health details unless the product experience clearly needs that context.',
   },
 ]
