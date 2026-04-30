@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HiOutlineArrowLeft } from 'react-icons/hi2'
-import { API_BASE_URL as API } from '../utils/api'
+import { apiRequest } from '../utils/api'
 import { cacheAuthUser } from '../utils/authCache'
 import './AuthPage.css'
 
@@ -40,20 +40,6 @@ const SETUP_STEP_TITLES = {
 }
 
 const EMPTY_OTP = ['', '', '', '', '', '']
-
-async function readApiResponse(res) {
-    const contentType = res.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-        return res.json()
-    }
-
-    const text = await res.text()
-    return {
-        error: res.status >= 500
-            ? 'Server error while verifying code. Please try again.'
-            : text || 'Unexpected server response. Please try again.',
-    }
-}
 
 function normalizeNigeriaPhone(value) {
     const digits = value.replace(/\D/g, '')
@@ -216,16 +202,8 @@ function AuthPage() {
         let isCurrent = true
         const loadPendingGoogleProfile = async () => {
             try {
-                const res = await fetch(`${API}/auth/google/pending-profile/`, {
-                    credentials: 'include',
-                })
-                const data = await readApiResponse(res)
+                const data = await apiRequest('/auth/google/pending-profile/')
                 if (!isCurrent) return
-
-                if (!res.ok) {
-                    setError(data.error || 'Google sign-up session expired. Please try again.')
-                    return
-                }
 
                 const nextEmail = data.email || ''
                 const nextFirst = (data.first_name || '').trim() || nameFromEmail(nextEmail)
@@ -234,8 +212,8 @@ function AuthPage() {
                 setGoogleFirstName((current) => current || nextFirst)
                 setGoogleLastName((current) => current || nextLast)
                 setGooglePreferredName((current) => current || nextFirst)
-            } catch {
-                if (isCurrent) setError('Unable to load your Google profile. Please try again.')
+            } catch (error) {
+                if (isCurrent) setError(error.message || 'Unable to load your Google profile. Please try again.')
             }
         }
 
@@ -294,19 +272,10 @@ function AuthPage() {
                 endpoint = '/auth/verify-device/'
             }
 
-            const res = await fetch(`${API}${endpoint}`, {
+            const data = await apiRequest(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email, otp: code }),
             })
-
-            const data = await readApiResponse(res)
-
-            if (!res.ok) {
-                setError(data.error || 'Verification failed')
-                return
-            }
 
             if (purpose === 'password_reset') {
                 // Show new password form
@@ -323,8 +292,8 @@ function AuthPage() {
 
             cacheAuthUser(data)
             navigate('/', { replace: true })
-        } catch {
-            setError('Unable to reach the server. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Unable to reach the server. Please try again.')
         } finally {
             setLoading(false)
         }
@@ -345,24 +314,15 @@ function AuthPage() {
         setError('')
 
         try {
-            const res = await fetch(`${API}/auth/reset-password/`, {
+            await apiRequest('/auth/reset-password/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email, password: newPassword }),
             })
 
-            const data = await res.json()
-
-            if (!res.ok) {
-                setError(data.error || 'Failed to reset password')
-                return
-            }
-
             setSuccess('Password updated! Redirecting to login...')
             setTimeout(() => navigate('/'), 2000)
-        } catch {
-            setError('Network error. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Network error. Please try again.')
         } finally {
             setLoading(false)
         }
@@ -372,27 +332,18 @@ function AuthPage() {
         setError('')
 
         try {
-            const res = await fetch(`${API}/auth/resend-otp/`, {
+            const data = await apiRequest('/auth/resend-otp/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email, purpose }),
             })
-
-            const data = await readApiResponse(res)
-
-            if (!res.ok) {
-                setError(data.error || 'Failed to resend')
-                return
-            }
 
             resetOtpInputs()
             setResendCooldown(60)
             setExpiryCountdown(5 * 60) // Reset to 5 minutes
             setSuccess(data.message || 'New code sent! Check your email.')
             setTimeout(() => setSuccess(''), 6000)
-        } catch {
-            setError('Unable to reach the server. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Unable to reach the server. Please try again.')
         }
     }
 
@@ -429,10 +380,8 @@ function AuthPage() {
 
         setLoading(true)
         try {
-            const res = await fetch(`${API}/auth/complete-setup/`, {
+            const data = await apiRequest('/auth/complete-setup/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({
                     preferred_name: preferredName,
                     first_name: firstName,
@@ -445,18 +394,11 @@ function AuthPage() {
                 }),
             })
 
-            const data = await res.json()
-
-            if (!res.ok) {
-                setError(data.error || 'Failed to create account')
-                return
-            }
-
             setSuccess('Account created! Redirecting...')
             cacheAuthUser(data)
             navigate('/', { replace: true })
-        } catch {
-            setError('Network error. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Network error. Please try again.')
         } finally {
             setLoading(false)
         }
@@ -499,10 +441,8 @@ function AuthPage() {
 
         setLoading(true)
         try {
-            const res = await fetch(`${API}/auth/google/complete-setup/`, {
+            const data = await apiRequest('/auth/google/complete-setup/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({
                     preferred_name: effectivePreferredName,
                     first_name: effectiveFirstName,
@@ -515,18 +455,11 @@ function AuthPage() {
                 }),
             })
 
-            const data = await res.json()
-
-            if (!res.ok) {
-                setError(data.error || 'Failed to create account')
-                return
-            }
-
             setSuccess('Account created! Redirecting...')
             cacheAuthUser(data)
             navigate('/', { replace: true })
-        } catch {
-            setError('Network error. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Network error. Please try again.')
         } finally {
             setLoading(false)
         }

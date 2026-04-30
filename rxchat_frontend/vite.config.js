@@ -5,6 +5,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
+    modulePreload: {
+      resolveDependencies(_filename, deps) {
+        return deps.filter((dep) => !dep.includes('markdown-'))
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -13,8 +18,6 @@ export default defineConfig({
           if (
             id.includes('/react-markdown/')
             || id.includes('/remark-gfm/')
-            || id.includes('/rehype-raw/')
-            || id.includes('/rehype-sanitize/')
           ) {
             return 'markdown'
           }

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HiOutlineXMark } from 'react-icons/hi2'
-import { API_BASE_URL as API } from '../../utils/api'
+import { apiRequest, apiUrl } from '../../utils/api'
 import './AuthModal.css'
 
 function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
@@ -43,23 +43,16 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
         setLoading(true)
         setError('')
         try {
-            const res = await fetch(`${API}/auth/forgot-password/`, {
+            const data = await apiRequest('/auth/forgot-password/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email: forgotEmail }),
             })
-            const data = await res.json()
-            if (!res.ok) {
-                setError(data.error || 'Something went wrong')
-                return
-            }
             if (data.otp_required) {
                 navigate(`/auth?step=otp&email=${encodeURIComponent(data.email)}&purpose=password_reset`)
                 onClose()
             }
-        } catch {
-            setError('Network error. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Network error. Please try again.')
         } finally {
             setLoading(false)
         }
@@ -76,19 +69,10 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
                 ? { email, password }
                 : { email }
 
-            const res = await fetch(`${API}${endpoint}`, {
+            const data = await apiRequest(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify(body),
             })
-
-            const data = await res.json()
-
-            if (!res.ok) {
-                setError(data.error || 'Something went wrong')
-                return
-            }
 
             if (data.otp_required) {
                 const purpose = isLogin ? 'login' : 'registration'
@@ -100,8 +84,8 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
             // Login successful (trusted device)
             if (onLogin) onLogin(data)
             onClose()
-        } catch {
-            setError('Network error. Please try again.')
+        } catch (error) {
+            setError(error.message || 'Network error. Please try again.')
         } finally {
             setLoading(false)
         }
@@ -114,7 +98,7 @@ function AuthModal({ onClose, onLogin, initialMode = 'login' }) {
             return_origin: returnOrigin,
             auth_mode: authMode,
         })
-        window.location.href = `${API}/auth/google/login/?${params.toString()}`
+        window.location.href = apiUrl(`/auth/google/login/?${params.toString()}`)
     }
 
     // ─── Forgot Password View ───

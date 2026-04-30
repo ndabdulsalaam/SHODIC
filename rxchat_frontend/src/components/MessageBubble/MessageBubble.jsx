@@ -1,8 +1,4 @@
-import { Children, isValidElement, memo, useMemo, useState } from 'react'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import { Children, isValidElement, lazy, memo, Suspense, useMemo, useState } from 'react'
 import {
     HiOutlineArrowPath,
     HiOutlineCheck,
@@ -16,26 +12,7 @@ import {
 } from 'react-icons/hi2'
 import './MessageBubble.css'
 
-const sanitizedHtmlSchema = {
-    ...defaultSchema,
-    clobberPrefix: 'rxchat-user-content-',
-    tagNames: [
-        'a', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2',
-        'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'li', 'ol', 'p', 'pre', 'span',
-        'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr',
-        'ul',
-    ],
-    attributes: {
-        '*': ['ariaLabel', 'ariaLabelledBy', 'title'],
-        a: ['href', 'title'],
-        code: ['className'],
-        td: ['align'],
-        th: ['align'],
-    },
-    protocols: {
-        href: ['http', 'https', 'mailto', 'tel'],
-    },
-}
+const MarkdownContent = lazy(() => import('./MarkdownContent'))
 
 function extractText(node) {
     if (node === null || node === undefined || typeof node === 'boolean') return ''
@@ -174,8 +151,7 @@ function normalizeMarkdownMarkup(markdown = '') {
         if (!normalizedLine.includes('|')) return normalizedLine
 
         return normalizedLine
-            .replace(/<b>(.*?)<\/b>/gi, '<strong>$1</strong>')
-            .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
     }).join('\n')
 }
 
@@ -298,22 +274,12 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
                         </div>
                     ) : (
                         <div className="message__markdown">
-                            <Markdown
-                                remarkPlugins={[remarkGfm]}
-                                rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizedHtmlSchema]]}
-                                components={{
-                                    a: ({ node, ...props }) => {
-                                        void node
-                                        return <a {...props} target="_blank" rel="noopener noreferrer" />
-                                    },
-                                    table: ({ node, ...props }) => {
-                                        void node
-                                        return <SmartMarkdownTable {...props} />
-                                    },
-                                }}
-                            >
-                                {renderedContent}
-                            </Markdown>
+                            <Suspense fallback={null}>
+                                <MarkdownContent
+                                    content={renderedContent}
+                                    TableComponent={SmartMarkdownTable}
+                                />
+                            </Suspense>
                         </div>
                     )}
                 </div>

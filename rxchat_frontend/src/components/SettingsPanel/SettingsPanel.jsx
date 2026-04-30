@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { HiOutlineXMark, HiOutlineArrowRightOnRectangle, HiOutlineEnvelope, HiOutlineShieldCheck } from 'react-icons/hi2'
-import { API_BASE_URL as API } from '../../utils/api'
+import { apiRequest } from '../../utils/api'
 import './SettingsPanel.css'
 
 const ROLES = [
@@ -97,10 +97,8 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         setSaving(true)
         setSaveMsg('')
         try {
-            const resp = await fetch(`${API}/auth/profile/`, {
+            const data = await apiRequest('/auth/profile/', {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({
                     first_name: firstName,
                     last_name: lastName,
@@ -111,16 +109,11 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
                     phone_number: normalizeNigeriaPhone(phoneNumber),
                 }),
             })
-            const data = await resp.json()
-            if (resp.ok) {
-                setSaveMsg('Changes saved')
-                if (onUserUpdate) onUserUpdate(data)
-                setTimeout(() => setSaveMsg(''), 3000)
-            } else {
-                setSaveMsg(data.error || 'Failed to update')
-            }
-        } catch {
-            setSaveMsg('Network error')
+            setSaveMsg('Changes saved')
+            if (onUserUpdate) onUserUpdate(data)
+            setTimeout(() => setSaveMsg(''), 3000)
+        } catch (error) {
+            setSaveMsg(error.message || 'Network error')
         } finally {
             setSaving(false)
         }
@@ -130,21 +123,14 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         setEmailSaving(true)
         setEmailMsg('')
         try {
-            const resp = await fetch(`${API}/auth/email/add/`, {
+            await apiRequest('/auth/email/add/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email: newEmail }),
             })
-            const data = await resp.json()
-            if (resp.ok) {
-                setEmailStep('verify')
-                setEmailMsg('Code sent! Check your new email.')
-            } else {
-                setEmailMsg(data.error || 'Failed to send code')
-            }
-        } catch {
-            setEmailMsg('Network error')
+            setEmailStep('verify')
+            setEmailMsg('Code sent! Check your new email.')
+        } catch (error) {
+            setEmailMsg(error.message || 'Network error')
         } finally {
             setEmailSaving(false)
         }
@@ -154,25 +140,18 @@ function SettingsPanel({ isOpen, onClose, user, onLogout, onUserUpdate }) {
         setEmailSaving(true)
         setEmailMsg('')
         try {
-            const resp = await fetch(`${API}/auth/email/verify/`, {
+            const data = await apiRequest('/auth/email/verify/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email: newEmail, otp: emailOtp }),
             })
-            const data = await resp.json()
-            if (resp.ok) {
-                setEmailMsg('Email updated successfully!')
-                setShowEmailChange(false)
-                setNewEmail('')
-                setEmailOtp('')
-                setEmailStep('input')
-                if (onUserUpdate) onUserUpdate(data)
-            } else {
-                setEmailMsg(data.error || 'Verification failed')
-            }
-        } catch {
-            setEmailMsg('Network error')
+            setEmailMsg('Email updated successfully!')
+            setShowEmailChange(false)
+            setNewEmail('')
+            setEmailOtp('')
+            setEmailStep('input')
+            if (onUserUpdate) onUserUpdate(data)
+        } catch (error) {
+            setEmailMsg(error.message || 'Network error')
         } finally {
             setEmailSaving(false)
         }
