@@ -43,6 +43,7 @@ function ChatWindow({
     messages,
     onSendMessage,
     isLoading,
+    generationStatus,
     isLoadingMessages,
     onToggleSidebar,
     onShowAuth,
@@ -63,6 +64,10 @@ function ChatWindow({
     const [showScrollButton, setShowScrollButton] = useState(false)
 
     const isWelcome = !isLoadingMessages && messages.length === 0
+    const hasStreamingAssistantContent = messages.some((msg) => (
+        msg.role === 'assistant' && msg._streaming && msg.content?.trim()
+    ))
+    const showGenerationStatus = Boolean(isLoading && generationStatus && !hasStreamingAssistantContent)
 
     const userMessageNavItems = useMemo(() => (
         messages
@@ -120,7 +125,23 @@ function ChatWindow({
         if (messageIndex === -1) return
         const messageDomId = getMessageDomId(message, messageIndex)
         const scroll = (behavior = 'smooth') => {
-            document.getElementById(messageDomId)?.scrollIntoView({ behavior, block: 'start' })
+            const container = messagesContainerRef.current
+            const element = document.getElementById(messageDomId)
+            if (!container || !element) return
+
+            const containerRect = container.getBoundingClientRect()
+            const elementRect = element.getBoundingClientRect()
+            const targetTop = (
+                container.scrollTop
+                + elementRect.top
+                - containerRect.top
+                - (container.clientHeight * 0.25)
+            )
+
+            container.scrollTo({
+                top: Math.max(0, targetTop),
+                behavior,
+            })
         }
         scroll()
         requestAnimationFrame(() => scroll())
@@ -215,8 +236,8 @@ function ChatWindow({
                         </Fragment>
                     )
                 })}
-                {isLoading && <TypingIndicator />}
-                {isLoading && <div className="chat-window__stream-spacer" aria-hidden="true" />}
+                {showGenerationStatus && <TypingIndicator label={generationStatus.label} />}
+                {isLoading && !hasStreamingAssistantContent && <div className="chat-window__stream-spacer" aria-hidden="true" />}
             </>
         )
     }
