@@ -132,7 +132,7 @@ class PendingEmailChange(models.Model):
 
 class TrustedDevice(models.Model):
     """Tracks devices that have been verified via OTP — no repeat OTP on login."""
-    TRUST_DAYS = 15  # Re-require OTP after 15 days of inactivity
+    TRUST_DAYS = 30  # Re-require OTP after 30 days of inactivity
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trusted_devices')
     device_token = models.UUIDField(default=uuid.uuid4, unique=True)
