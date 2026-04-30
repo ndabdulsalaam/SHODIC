@@ -4,10 +4,12 @@ import ChatWindow from '../components/ChatWindow/ChatWindow'
 import AuthModal from '../components/AuthModal/AuthModal'
 import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
 import { API_BASE_URL as API } from '../utils/api'
+import { cacheAuthUser, readCachedAuthUser } from '../utils/authCache'
 import { productApiPath } from '../config/product'
 import './ChatPage.css'
 
-const AUTH_USER_CACHE_KEY = 'rxchat_auth_user'
+const DEFAULT_STREAM_STATUS_LABEL = 'Checking sources'
+
 function normalizeSendPayload(payload) {
     if (typeof payload === 'string') {
         return { text: payload }
@@ -119,30 +121,37 @@ function createSseParser({ onMeta, onStatus, onDone, onText }) {
     }
 }
 
-function readCachedAuthUser() {
-    try {
-        const cached = sessionStorage.getItem(AUTH_USER_CACHE_KEY)
-        return cached ? JSON.parse(cached) : null
-    } catch {
-        return null
+async function readSseStream(response, handlers) {
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    const streamParser = createSseParser(handlers)
+
+    while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        streamParser.push(decoder.decode(value, { stream: true }))
     }
+
+    streamParser.push(decoder.decode())
+    streamParser.flush()
 }
 
-function cacheAuthUser(user) {
-    try {
-        if (user?.id) {
-            sessionStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(user))
-        } else {
-            sessionStorage.removeItem(AUTH_USER_CACHE_KEY)
-        }
-    } catch { /* storage may be unavailable */ }
+function createAssistantPlaceholder(id) {
+    return {
+        id,
+        _clientKey: id,
+        role: 'assistant',
+        content: '',
+        created_at: new Date().toISOString(),
+        _streaming: true,
+        _statusLabel: DEFAULT_STREAM_STATUS_LABEL,
+    }
 }
 
 function ChatPage() {
     const [conversations, setConversations] = useState([])
     const [activeConversationId, setActiveConversationId] = useState(null)
     const [isLoading, setIsLoading] = useState(false)
-    const [generationStatus, setGenerationStatus] = useState(null)
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [showAuthModal, setShowAuthModal] = useState(false)
@@ -172,7 +181,7 @@ function ChatPage() {
         })))
     }, [])
 
-    const updateStreamingMessage = useCallback((conversationId, aiMsg, content, messageId, markComplete = false) => {
+    const updateStreamingMessage = useCallback((conversationId, aiMsg, content, messageId, markComplete = false, statusLabel) => {
         if (!conversationId) return
 
         const targetKey = aiMsg._clientKey || aiMsg.id
@@ -191,6 +200,7 @@ function ChatPage() {
                         ...m,
                         id: messageId || m.id,
                         content,
+                        ...(statusLabel !== undefined ? { _statusLabel: statusLabel } : {}),
                         _streaming: markComplete ? false : m._streaming,
                     }
                 })
@@ -200,6 +210,7 @@ function ChatPage() {
                         ...aiMsg,
                         id: messageId || aiMsg.id,
                         content,
+                        ...(statusLabel !== undefined ? { _statusLabel: statusLabel } : {}),
                         _streaming: !markComplete,
                     })
                 }
@@ -294,6 +305,7 @@ function ChatPage() {
         const checkAuth = async () => {
             try {
                 const res = await fetch(`${API}/auth/me/`, { credentials: 'include' })
+                if (!res.ok) return
                 const data = await res.json()
                 if (data.id) {
                     setUser(data)
@@ -383,8 +395,11 @@ function ChatPage() {
         if (!trimmedText) return
         const localTitleSource = trimmedText || 'New Conversation'
 
-        let convId = activeConversationId
+        const requestConversationId = activeConversationId
+        let actualConvId = requestConversationId || `pending-conversation-${Date.now()}`
+        const messageCreatedAt = new Date().toISOString()
         const tempUserMessageId = `pending-user-${Date.now()}`
+        const tempAssistantMessageId = `pending-assistant-${Date.now()}`
 
         const userMsg = {
             id: tempUserMessageId,
@@ -392,35 +407,49 @@ function ChatPage() {
             role: 'user',
             content: trimmedText,
             attachments: [],
-            created_at: new Date().toISOString(),
+            created_at: messageCreatedAt,
             _pending: true,
         }
+        const aiMsg = createAssistantPlaceholder(tempAssistantMessageId)
 
-        // Optimistically add user message
-        if (convId) {
+        if (requestConversationId) {
             setConversations((prev) =>
-                sortConversationsByUpdated(prev.map((c) =>
-                    c.id === convId
+                sortConversationsByUpdated(prev.map((conversation) =>
+                    conversation.id === requestConversationId
                         ? {
-                            ...c,
-                            messages: [...c.messages, userMsg],
+                            ...conversation,
+                            messages: [...conversation.messages, userMsg, aiMsg],
                             updated_at: userMsg.created_at,
-                            message_count: (c.message_count ?? c.messages.length) + 1,
+                            message_count: (conversation.message_count ?? conversation.messages.length) + 1,
                         }
-                        : c
+                        : conversation
                 ))
             )
+        } else {
+            const optimisticTitle = localTitleSource.length > 35
+                ? `${localTitleSource.slice(0, 35)}...`
+                : localTitleSource
+            setActiveConversationId(actualConvId)
+            setConversations((prev) => sortConversationsByUpdated([
+                preserveConversationFields({
+                    id: actualConvId,
+                    title: optimisticTitle,
+                    created_at: messageCreatedAt,
+                    updated_at: messageCreatedAt,
+                    message_count: 1,
+                    messages: [userMsg, aiMsg],
+                    _loaded: true,
+                }),
+                ...prev,
+            ]))
         }
 
         setIsLoading(true)
-        setGenerationStatus(null)
         const controller = new AbortController()
         abortControllerRef.current = controller
         let streamingFlusher = null
         let aiContent = ''
-        let actualConvId = convId
         let aiMessageId = null
-        let aiMsg = null
         let hasReceivedText = false
 
         try {
@@ -430,7 +459,7 @@ function ChatPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: trimmedText,
-                    ...(convId ? { conversation_id: convId } : {}),
+                    ...(requestConversationId ? { conversation_id: requestConversationId } : {}),
                 }),
                 signal: controller.signal,
             })
@@ -439,108 +468,88 @@ function ChatPage() {
                 throw new Error(`API error: ${res.status}`)
             }
 
-            const reader = res.body.getReader()
-            const decoder = new TextDecoder()
-
-            // Create a placeholder AI message
-            const tempAssistantMessageId = `pending-assistant-${Date.now()}`
-            aiMsg = {
-                id: tempAssistantMessageId,
-                _clientKey: tempAssistantMessageId,
-                role: 'assistant',
-                content: '',
-                created_at: new Date().toISOString(),
-                _streaming: true,
-            }
             streamingFlusher = createStreamingFrameFlusher((markComplete) => {
-                updateStreamingMessage(actualConvId, aiMsg, aiContent, aiMessageId, markComplete)
+                updateStreamingMessage(
+                    actualConvId,
+                    aiMsg,
+                    aiContent,
+                    aiMessageId,
+                    markComplete,
+                    aiContent ? null : undefined,
+                )
             })
 
             const handleStreamMetadata = (parsed) => {
-                if (parsed.conversation_id) {
-                    actualConvId = parsed.conversation_id
-                    const conversationUpdatedAt = parsed.conversation_updated_at || new Date().toISOString()
-
-                    // If this is a new conversation, add it
-                    if (!convId) {
-                        setConversations((prev) => {
-                            const existing = prev.find((conversation) => conversation.id === actualConvId)
-                            if (existing) {
-                                return sortConversationsByUpdated(prev.map((conversation) => (
-                                    conversation.id === actualConvId
-                                        ? {
-                                            ...conversation,
-                                            title: parsed.conversation_title || conversation.title,
-                                            updated_at: conversationUpdatedAt,
-                                        }
-                                        : conversation
-                                )))
-                            }
-
-                            const newConv = preserveConversationFields({
-                                id: actualConvId,
-                                title: parsed.conversation_title || `${localTitleSource.slice(0, 35)}...`,
-                                created_at: conversationUpdatedAt,
-                                updated_at: conversationUpdatedAt,
-                                message_count: 1,
-                                messages: [userMsg, aiMsg],
-                                _loaded: true,
-                            })
-                            return sortConversationsByUpdated([newConv, ...prev])
-                        })
-                        setActiveConversationId(actualConvId)
-                    } else {
-                        applyConversationMetadata(actualConvId, {
-                            title: parsed.conversation_title,
-                            updated_at: conversationUpdatedAt,
-                        })
-                    }
-                }
-
-                if (parsed.user_message_id) {
-                    setConversations((prev) =>
-                        sortConversationsByUpdated(prev.map((c) => {
-                            if (c.id !== actualConvId) return c
-                            const msgs = c.messages.map((m) =>
-                                m.id === tempUserMessageId
-                                    ? { ...m, id: parsed.user_message_id, _pending: false }
-                                    : m
-                            )
-                            return { ...c, messages: msgs }
-                        }))
-                    )
-                }
-
+                const previousConvId = actualConvId
                 if (parsed.message_id) {
                     aiMessageId = parsed.message_id
                 }
+                if (parsed.conversation_id) {
+                    actualConvId = parsed.conversation_id
+                }
+
+                const nextConvId = actualConvId
+                const conversationUpdatedAt = parsed.conversation_updated_at || new Date().toISOString()
+                const assistantKey = aiMsg._clientKey || aiMsg.id
+
+                setConversations((prev) =>
+                    sortConversationsByUpdated(prev.map((conversation) => {
+                        if (conversation.id !== previousConvId && conversation.id !== nextConvId) {
+                            return conversation
+                        }
+
+                        const msgs = conversation.messages.map((message) => {
+                            const messageKey = message._clientKey || message.id
+                            if (messageKey === tempUserMessageId) {
+                                return {
+                                    ...message,
+                                    id: parsed.user_message_id || message.id,
+                                    _pending: parsed.user_message_id ? false : message._pending,
+                                }
+                            }
+
+                            if (messageKey === assistantKey && parsed.message_id) {
+                                return { ...message, id: parsed.message_id }
+                            }
+
+                            return message
+                        })
+
+                        return {
+                            ...conversation,
+                            id: nextConvId,
+                            title: parsed.conversation_title ?? conversation.title,
+                            created_at: parsed.conversation_created_at ?? conversation.created_at,
+                            updated_at: conversationUpdatedAt,
+                            messages: msgs,
+                            _loaded: true,
+                        }
+                    }))
+                )
+
+                if (previousConvId !== nextConvId) {
+                    setActiveConversationId((current) => (
+                        current === previousConvId ? nextConvId : current
+                    ))
+                }
             }
 
-            const streamParser = createSseParser({
+            await readSseStream(res, {
                 onMeta: handleStreamMetadata,
                 onDone: handleStreamMetadata,
                 onStatus: (status) => {
-                    if (!hasReceivedText) setGenerationStatus(status)
+                    if (!hasReceivedText) {
+                        updateStreamingMessage(actualConvId, aiMsg, aiContent, aiMessageId, false, status.label)
+                    }
                 },
                 onText: (textChunk) => {
                     if (!textChunk) return
                     hasReceivedText = true
-                    setGenerationStatus(null)
                     aiContent += textChunk
                     streamingFlusher.schedule()
                 },
             })
 
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-
-                streamParser.push(decoder.decode(value, { stream: true }))
-            }
-
-            streamParser.push(decoder.decode())
-            streamParser.flush()
-            // Final update: mark streaming complete
             streamingFlusher.finalize()
         } catch (err) {
             if (isAbortError(err)) {
@@ -557,18 +566,17 @@ function ChatPage() {
                 _error: true,
             }
             setConversations((prev) =>
-                prev.map((c) =>
-                    c.id === (activeConversationId || convId)
-                        ? { ...c, messages: [...c.messages.filter(m => !m._streaming), errorMsg] }
-                        : c
+                prev.map((conversation) =>
+                    conversation.id === actualConvId
+                        ? { ...conversation, messages: [...conversation.messages.filter(message => !message._streaming), errorMsg] }
+                        : conversation
                 )
             )
         } finally {
             abortControllerRef.current = null
             setIsLoading(false)
-            setGenerationStatus(null)
         }
-    }, [activeConversationId, applyConversationMetadata, createStreamingFrameFlusher, finishInterruptedStream, updateStreamingMessage])
+    }, [activeConversationId, createStreamingFrameFlusher, finishInterruptedStream, updateStreamingMessage])
 
     const handleNewChat = useCallback(() => {
         setActiveConversationId(null)
@@ -631,29 +639,45 @@ function ChatPage() {
             ...existingTail[0],
             content: newContent,
             updated_at: new Date().toISOString(),
+            _pendingEdit: `pending-edit-${Date.now()}`,
         }
         const tempAssistantMessageId = `pending-assistant-${Date.now()}`
-        const aiMsg = {
-            id: tempAssistantMessageId,
-            _clientKey: tempAssistantMessageId,
-            role: 'assistant',
-            content: '',
-            created_at: new Date().toISOString(),
-            _streaming: true,
-        }
+        const aiMsg = createAssistantPlaceholder(tempAssistantMessageId)
 
         variantGroup.variants.push([editedUserMessage, aiMsg])
         variantGroup.activeIndex = newVariantIndex
         editVariantsRef.current[messageId] = variantGroup
 
         setIsLoading(true)
-        setGenerationStatus(null)
         const controller = new AbortController()
         abortControllerRef.current = controller
         let streamingFlusher = null
         let aiContent = ''
         let aiMessageId = null
         let hasReceivedText = false
+
+        const clearEditedMessagePending = () => {
+            setConversations((prev) =>
+                prev.map((conversation) => {
+                    if (conversation.id !== activeConversationId) return conversation
+                    return {
+                        ...conversation,
+                        messages: conversation.messages.map((message) => (
+                            message.id === messageId
+                                ? { ...message, _pendingEdit: false }
+                                : message
+                        )),
+                    }
+                })
+            )
+            syncActiveVariantMessages(messageId, (messagesForVariant) => (
+                messagesForVariant.map((message) => (
+                    message.id === messageId
+                        ? { ...message, _pendingEdit: false }
+                        : message
+                ))
+            ))
+        }
 
         // Optimistically switch to the new edit variant and stream the replacement response.
         setConversations((prev) =>
@@ -683,15 +707,25 @@ function ChatPage() {
 
             if (!res.ok) throw new Error(`API error: ${res.status}`)
 
-            const reader = res.body.getReader()
-            const decoder = new TextDecoder()
-
             streamingFlusher = createStreamingFrameFlusher((markComplete) => {
-                updateStreamingMessage(activeConversationId, aiMsg, aiContent, aiMessageId, markComplete)
+                updateStreamingMessage(
+                    activeConversationId,
+                    aiMsg,
+                    aiContent,
+                    aiMessageId,
+                    markComplete,
+                    aiContent ? null : undefined,
+                )
                 syncActiveVariantMessages(messageId, (messagesForVariant) => (
                     messagesForVariant.map((m) => (
                         m._streaming
-                            ? { ...m, id: aiMessageId || m.id, content: aiContent, _streaming: markComplete ? false : m._streaming }
+                            ? {
+                                ...m,
+                                id: aiMessageId || m.id,
+                                content: aiContent,
+                                _statusLabel: aiContent ? null : m._statusLabel,
+                                _streaming: markComplete ? false : m._streaming,
+                            }
                             : m
                     ))
                 ))
@@ -703,32 +737,30 @@ function ChatPage() {
                         updated_at: parsed.conversation_updated_at,
                     })
                 }
+                if (parsed.edited_message_id) clearEditedMessagePending()
                 if (parsed.message_id) aiMessageId = parsed.message_id
             }
 
-            const streamParser = createSseParser({
+            await readSseStream(res, {
                 onMeta: handleStreamMetadata,
                 onDone: handleStreamMetadata,
                 onStatus: (status) => {
-                    if (!hasReceivedText) setGenerationStatus(status)
+                    if (!hasReceivedText) {
+                        updateStreamingMessage(activeConversationId, aiMsg, aiContent, aiMessageId, false, status.label)
+                        syncActiveVariantMessages(messageId, (messagesForVariant) => (
+                            messagesForVariant.map((m) => (
+                                m._streaming ? { ...m, _statusLabel: status.label } : m
+                            ))
+                        ))
+                    }
                 },
                 onText: (textChunk) => {
                     if (!textChunk) return
                     hasReceivedText = true
-                    setGenerationStatus(null)
                     aiContent += textChunk
                     streamingFlusher.schedule()
                 },
             })
-
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                streamParser.push(decoder.decode(value, { stream: true }))
-            }
-
-            streamParser.push(decoder.decode())
-            streamParser.flush()
             streamingFlusher.finalize()
         } catch (err) {
             if (isAbortError(err)) {
@@ -743,34 +775,39 @@ function ChatPage() {
             }
 
             streamingFlusher?.cancel()
+            removeStreamingMessage(activeConversationId, aiMsg)
+            const targetKey = aiMsg._clientKey || aiMsg.id
+            syncActiveVariantMessages(messageId, (messagesForVariant) => (
+                messagesForVariant.filter((m) => (m._clientKey || m.id) !== targetKey)
+            ))
             console.error('Edit message error:', err)
         } finally {
+            clearEditedMessagePending()
             abortControllerRef.current = null
             setIsLoading(false)
-            setGenerationStatus(null)
         }
-    }, [activeConversationId, applyConversationMetadata, createStreamingFrameFlusher, decorateVariantMessages, finishInterruptedStream, syncActiveVariantMessages, updateStreamingMessage])
+    }, [activeConversationId, applyConversationMetadata, createStreamingFrameFlusher, decorateVariantMessages, finishInterruptedStream, removeStreamingMessage, syncActiveVariantMessages, updateStreamingMessage])
 
     const handleResendMessage = useCallback(async (messageId) => {
         if (!activeConversationId) return
         setIsLoading(true)
-        setGenerationStatus(null)
         const controller = new AbortController()
         abortControllerRef.current = controller
         let streamingFlusher = null
         let aiContent = ''
         let aiMessageId = null
-        let aiMsg = null
+        const tempAssistantMessageId = `pending-assistant-${Date.now()}`
+        const aiMsg = createAssistantPlaceholder(tempAssistantMessageId)
         let hasReceivedText = false
         const resendUpdatedAt = new Date().toISOString()
 
-        // Remove messages after the target message
+        // Remove messages after the target message and show the assistant status slot immediately.
         setConversations((prev) =>
             sortConversationsByUpdated(prev.map((c) => {
                 if (c.id !== activeConversationId) return c
                 const idx = c.messages.findIndex(m => m.id === messageId)
                 if (idx === -1) return c
-                return { ...c, messages: c.messages.slice(0, idx + 1), updated_at: resendUpdatedAt }
+                return { ...c, messages: [...c.messages.slice(0, idx + 1), aiMsg], updated_at: resendUpdatedAt }
             }))
         )
 
@@ -783,20 +820,15 @@ function ChatPage() {
 
             if (!res.ok) throw new Error(`API error: ${res.status}`)
 
-            const reader = res.body.getReader()
-            const decoder = new TextDecoder()
-
-            const tempAssistantMessageId = `pending-assistant-${Date.now()}`
-            aiMsg = {
-                id: tempAssistantMessageId,
-                _clientKey: tempAssistantMessageId,
-                role: 'assistant',
-                content: '',
-                created_at: new Date().toISOString(),
-                _streaming: true,
-            }
             streamingFlusher = createStreamingFrameFlusher((markComplete) => {
-                updateStreamingMessage(activeConversationId, aiMsg, aiContent, aiMessageId, markComplete)
+                updateStreamingMessage(
+                    activeConversationId,
+                    aiMsg,
+                    aiContent,
+                    aiMessageId,
+                    markComplete,
+                    aiContent ? null : undefined,
+                )
             })
 
             const handleStreamMetadata = (parsed) => {
@@ -808,33 +840,21 @@ function ChatPage() {
                 if (parsed.message_id) aiMessageId = parsed.message_id
             }
 
-            const streamParser = createSseParser({
+            await readSseStream(res, {
                 onMeta: handleStreamMetadata,
                 onDone: handleStreamMetadata,
                 onStatus: (status) => {
-                    if (!hasReceivedText) setGenerationStatus(status)
+                    if (!hasReceivedText) {
+                        updateStreamingMessage(activeConversationId, aiMsg, aiContent, aiMessageId, false, status.label)
+                    }
                 },
                 onText: (textChunk) => {
                     if (!textChunk) return
                     hasReceivedText = true
-                    setGenerationStatus(null)
                     aiContent += textChunk
                     streamingFlusher.schedule()
                 },
             })
-
-            setConversations((prev) =>
-                prev.map((c) => c.id === activeConversationId ? { ...c, messages: [...c.messages, aiMsg] } : c)
-            )
-
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                streamParser.push(decoder.decode(value, { stream: true }))
-            }
-
-            streamParser.push(decoder.decode())
-            streamParser.flush()
             streamingFlusher.finalize()
         } catch (err) {
             if (isAbortError(err)) {
@@ -843,13 +863,13 @@ function ChatPage() {
             }
 
             streamingFlusher?.cancel()
+            removeStreamingMessage(activeConversationId, aiMsg)
             console.error('Resend message error:', err)
         } finally {
             abortControllerRef.current = null
             setIsLoading(false)
-            setGenerationStatus(null)
         }
-    }, [activeConversationId, applyConversationMetadata, createStreamingFrameFlusher, finishInterruptedStream, updateStreamingMessage])
+    }, [activeConversationId, applyConversationMetadata, createStreamingFrameFlusher, finishInterruptedStream, removeStreamingMessage, updateStreamingMessage])
 
     const handleMessageVariantChange = useCallback((groupId, nextIndex) => {
         const group = editVariantsRef.current[groupId]
@@ -876,7 +896,6 @@ function ChatPage() {
     }, [decorateVariantMessages])
 
     const handleStopGeneration = useCallback(() => {
-        setGenerationStatus(null)
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
             abortControllerRef.current = null
@@ -902,10 +921,10 @@ function ChatPage() {
                 onOpenSettings={() => setSettingsOpen(true)}
             />
             <ChatWindow
+                conversationId={activeConversationId}
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
-                generationStatus={generationStatus}
                 isLoadingMessages={loadingConversationId === activeConversationId && loadingConversationId !== null}
                 onToggleSidebar={() => sidebarCollapsed ? setSidebarCollapsed(false) : setSidebarOpen((prev) => !prev)}
                 onShowAuth={handleShowAuth}
