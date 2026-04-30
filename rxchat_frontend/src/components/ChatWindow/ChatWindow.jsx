@@ -4,7 +4,6 @@ import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
 import DateSeparator from '../DateSeparator/DateSeparator'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
-import TypingIndicator from '../TypingIndicator/TypingIndicator'
 import './ChatWindow.css'
 
 function getMessageDomId(message, index) {
@@ -39,11 +38,21 @@ function hasRegeneratableAttachments(message) {
         && attachments.every((attachment) => attachment.kind === 'image' && attachment.preview_data_url)
 }
 
+function getSubmittedUserMessageToken(message) {
+    if (message?.role !== 'user') return ''
+    const id = String(message.id || '')
+    if (message._pendingEdit) return `edit-${message._pendingEdit}`
+    if (message._pending || id.startsWith('pending-user-')) {
+        return String(message._clientKey || message.id || '')
+    }
+    return ''
+}
+
 function ChatWindow({
+    conversationId,
     messages,
     onSendMessage,
     isLoading,
-    generationStatus,
     isLoadingMessages,
     onToggleSidebar,
     onShowAuth,
@@ -59,16 +68,21 @@ function ChatWindow({
     const isNearBottomRef = useRef(true)
     const prevMessagesLenRef = useRef(0)
     const lastAutoScrolledUserIdRef = useRef(null)
+    const pendingConversationScrollRef = useRef(null)
+    const hasActiveStreamRef = useRef(false)
+    const hasPendingUserMessageRef = useRef(false)
     const [prefillText, setPrefillText] = useState('')
     const [prefillKey, setPrefillKey] = useState(0)
     const [showScrollButton, setShowScrollButton] = useState(false)
 
     const isWelcome = !isLoadingMessages && messages.length === 0
-    const hasStreamingAssistantContent = messages.some((msg) => (
-        msg.role === 'assistant' && msg._streaming && msg.content?.trim()
-    ))
-    const showGenerationStatus = Boolean(isLoading && generationStatus && !hasStreamingAssistantContent)
+    const hasActiveStream = messages.some((msg) => msg.role === 'assistant' && msg._streaming)
+    const hasPendingUserMessage = messages.some((msg) => Boolean(getSubmittedUserMessageToken(msg)))
 
+    useEffect(() => {
+        hasActiveStreamRef.current = hasActiveStream
+        hasPendingUserMessageRef.current = hasPendingUserMessage
+    }, [hasActiveStream, hasPendingUserMessage])
     const userMessageNavItems = useMemo(() => (
         messages
             .map((msg, index) => ({
@@ -135,7 +149,7 @@ function ChatWindow({
                 container.scrollTop
                 + elementRect.top
                 - containerRect.top
-                - (container.clientHeight * 0.25)
+                - (container.clientHeight * 0.22)
             )
 
             container.scrollTo({
@@ -151,22 +165,48 @@ function ChatWindow({
 
     // New sent user messages move near the top of the pane; streamed assistant text does not auto-follow.
     useEffect(() => {
-        const newLen = messages.length
-        const prevLen = prevMessagesLenRef.current
-        const newMessages = newLen > prevLen ? messages.slice(prevLen) : []
-        const sentUserMessage = newMessages.find((msg) => {
-            if (msg?.role !== 'user') return false
-            const id = String(msg.id || '')
-            return msg._pending || id.startsWith('pending-user-')
-        })
+        const sentUserMessage = [...messages].reverse().find((msg) => getSubmittedUserMessageToken(msg))
+        const sentToken = getSubmittedUserMessageToken(sentUserMessage)
 
-        if (sentUserMessage && sentUserMessage.id !== lastAutoScrolledUserIdRef.current) {
-            lastAutoScrolledUserIdRef.current = sentUserMessage.id
+        if (sentUserMessage && sentToken && sentToken !== lastAutoScrolledUserIdRef.current) {
+            lastAutoScrolledUserIdRef.current = sentToken
             scrollSentMessageToTop(sentUserMessage)
         }
 
-        prevMessagesLenRef.current = newLen
+        prevMessagesLenRef.current = messages.length
     }, [messages, scrollSentMessageToTop])
+
+    useEffect(() => {
+        lastAutoScrolledUserIdRef.current = null
+        prevMessagesLenRef.current = messages.length
+        pendingConversationScrollRef.current = conversationId
+            && !hasActiveStreamRef.current
+            && !hasPendingUserMessageRef.current
+            ? conversationId
+            : null
+    }, [conversationId, messages.length])
+
+    useEffect(() => {
+        if (!conversationId || pendingConversationScrollRef.current !== conversationId) return
+        if (isLoadingMessages || !messages.length || hasActiveStream || hasPendingUserMessage) return
+
+        const scroll = () => {
+            scrollToBottom('auto')
+            setShowScrollButton(false)
+        }
+
+        requestAnimationFrame(scroll)
+        window.setTimeout(scroll, 80)
+        pendingConversationScrollRef.current = null
+        prevMessagesLenRef.current = messages.length
+    }, [
+        conversationId,
+        hasActiveStream,
+        hasPendingUserMessage,
+        isLoadingMessages,
+        messages.length,
+        scrollToBottom,
+    ])
 
     const findResendMessageId = (messageIndex) => {
         for (let i = messageIndex - 1; i >= 0; i -= 1) {
@@ -236,8 +276,6 @@ function ChatWindow({
                         </Fragment>
                     )
                 })}
-                {showGenerationStatus && <TypingIndicator label={generationStatus.label} />}
-                {isLoading && !hasStreamingAssistantContent && <div className="chat-window__stream-spacer" aria-hidden="true" />}
             </>
         )
     }
@@ -279,7 +317,7 @@ function ChatWindow({
                     ref={messagesContainerRef}
                     onScroll={handleScroll}
                 >
-                    <div className="chat-window__messages-inner">
+                    <div className={`chat-window__messages-inner ${hasActiveStream ? 'chat-window__messages-inner--active-stream' : ''}`}>
                         {renderContent()}
                         <div ref={messagesEndRef} />
                     </div>
