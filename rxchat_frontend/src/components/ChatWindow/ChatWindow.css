@@ -155,11 +155,6 @@
     scroll-margin-top: var(--space-3);
 }
 
-.chat-window__stream-spacer {
-    flex: 0 0 clamp(180px, 32vh, 360px);
-    pointer-events: none;
-}
-
 .chat-window__scroll-bottom {
     position: absolute;
     left: 50%;
@@ -254,6 +249,10 @@
     gap: var(--space-3);
 }
 
+.chat-window__messages-inner--active-stream {
+    padding-bottom: clamp(280px, 56vh, 560px);
+}
+
 /* Loading skeleton when switching chats */
 .chat-window__loading-messages {
     display: flex;
@@ -345,8 +344,8 @@
         padding: var(--space-4) var(--space-3);
     }
 
-    .chat-window__stream-spacer {
-        flex-basis: clamp(140px, 28dvh, 260px);
+    .chat-window__messages-inner--active-stream {
+        padding-bottom: clamp(220px, 52dvh, 420px);
     }
 
     .chat-window__scroll-bottom {
