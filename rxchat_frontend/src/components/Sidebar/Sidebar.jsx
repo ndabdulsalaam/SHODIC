@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { memo, useState, useRef, useEffect, useMemo } from 'react'
 import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import './Sidebar.css'
 
@@ -234,4 +234,32 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
     )
 }
 
-export default Sidebar
+function sameUserSummary(prevUser, nextUser) {
+    return (prevUser?.id || null) === (nextUser?.id || null)
+        && (prevUser?.email || '') === (nextUser?.email || '')
+        && (prevUser?.first_name || '') === (nextUser?.first_name || '')
+        && (prevUser?.last_name || '') === (nextUser?.last_name || '')
+}
+
+function sameConversationSummaries(prevConversations = [], nextConversations = []) {
+    if (prevConversations.length !== nextConversations.length) return false
+
+    return prevConversations.every((conversation, index) => {
+        const nextConversation = nextConversations[index]
+        return conversation.id === nextConversation.id
+            && conversation.title === nextConversation.title
+            && conversation.created_at === nextConversation.created_at
+            && conversation.updated_at === nextConversation.updated_at
+            && conversation.message_count === nextConversation.message_count
+    })
+}
+
+function areSidebarPropsEqual(prevProps, nextProps) {
+    return prevProps.activeId === nextProps.activeId
+        && prevProps.isOpen === nextProps.isOpen
+        && prevProps.collapsed === nextProps.collapsed
+        && sameUserSummary(prevProps.user, nextProps.user)
+        && sameConversationSummaries(prevProps.conversations, nextProps.conversations)
+}
+
+export default memo(Sidebar, areSidebarPropsEqual)
