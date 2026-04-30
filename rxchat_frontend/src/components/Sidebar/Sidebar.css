@@ -120,9 +120,13 @@
     font-size: var(--font-size-xs);
     font-weight: 600;
     color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    text-transform: none;
+    letter-spacing: 0;
     padding: var(--space-3) var(--space-2) var(--space-2);
+}
+
+.sidebar__conversation-group + .sidebar__conversation-group {
+    margin-top: var(--space-2);
 }
 
 .sidebar__chat-item {
