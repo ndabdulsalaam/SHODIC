@@ -39,7 +39,7 @@ def _active_products():
 
 
 def _published_posts():
-    return BlogPost.objects.published().filter(status=BlogPost.STATUS_PUBLISHED)
+    return BlogPost.objects.published()
 
 
 @api_view(["GET"])
