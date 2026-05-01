@@ -24,6 +24,8 @@ __pycache__/
 .env
 *.docx
 *.pdf
+*.xlsx
+*.csv
 
 # Planning docs (tracked locally only)
 plans/
