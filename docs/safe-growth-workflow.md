@@ -12,30 +12,64 @@ database, frontend API URL, and external-service configuration.
 | `staging` | `config.settings.staging` | Pre-production release testing | Staging Postgres or Neon/Postgres branch |
 | `production` | `config.settings.production` | Live users | Production Postgres only |
 
-Use the sample files in `backend/` as templates:
+Use the env files in `backend/` for local/private configuration:
 
-- `.env.sample` for `dev`
-- `.env.staging.sample` for `staging`
-- `.env.production.sample` for `production`
+- `.env.dev` for `dev`
+- `.env.staging` for `staging`
+- `.env.prod` as a local reference mirror of Render production variables
+- `.env.old` as a private recycle bin that Django must never load
+- `.env.sample` as the only tracked env template
 
 Do not reuse the production `DATABASE_URL` in `dev` or `staging`.
+The backend selects env files from the current branch: `dev` uses `.env.dev`,
+`staging` uses `.env.staging`, and feature branches use `.env.dev`. The `main`
+branch refuses to run locally. Run local commands with `ENV_FILE=.env.dev` or
+`ENV_FILE=.env.staging` only when you want an explicit debugging override.
 
 ## Branch Flow
 
-Use `main` as the production branch, `staging` as the pre-production branch, and
-short-lived `feature/...` branches for new work.
+Use `main` as the production branch, `staging` as the pre-production branch,
+`dev` as the local integration branch, and short-lived feature branches for new
+work.
 
 Recommended flow:
 
 ```bash
-git checkout main
+git checkout dev
 git pull
 git checkout -b feature/my-change
 ```
 
-Develop locally, commit code and migrations together, then open a pull request
-into `staging`. After staging passes testing, merge the same approved work into
-`main` for production.
+Develop locally, commit code and migrations together, then merge through
+`dev -> staging -> main`. Do not push work directly to `main`.
+
+## Neon Branch Commands
+
+```bash
+PROJECT_ID=your-neon-project-id
+DB_NAME=your_database_name
+ROLE_NAME=your_role_name
+
+neon auth
+neon branches list --project-id "$PROJECT_ID"
+
+# One-time setup
+neon branches create --name staging --parent main --project-id "$PROJECT_ID"
+neon branches create --name dev --parent staging --project-id "$PROJECT_ID"
+
+# Put these into backend/.env.staging and backend/.env.dev.
+neon connection-string staging --project-id "$PROJECT_ID" --database-name "$DB_NAME" --role-name "$ROLE_NAME"
+neon connection-string dev --project-id "$PROJECT_ID" --database-name "$DB_NAME" --role-name "$ROLE_NAME"
+
+# Before a staging test cycle
+neon branches reset staging --parent --project-id "$PROJECT_ID"
+
+# At the start of a feature
+neon branches reset dev --parent --project-id "$PROJECT_ID"
+
+# Optional schema review before production
+neon branches schema-diff main staging --project-id "$PROJECT_ID" --database "$DB_NAME"
+```
 
 ## Local Dev Checklist
 
@@ -43,12 +77,14 @@ Backend:
 
 ```bash
 cd backend
-cp .env.sample .env
+# Fill .env.dev with the dev Neon and Qdrant values first.
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python manage.py makemigrations --check --dry-run
 python manage.py migrate
+python manage.py setup_qdrant
+python manage.py seed_dev
 python manage.py test
 ```
 
@@ -68,11 +104,14 @@ npm run build
 
 For schema work, use a dev Postgres database or Neon/Postgres branch instead of
 SQLite so migrations are tested against the same database family as production.
+When the dev branch has just been reset from staging and you want fake-only
+data, run `ENV_FILE=.env.dev python manage.py seed_dev --flush --reset-qdrant`
+after migrations.
 
 ## Staging Release Checklist
 
 1. Merge or deploy the feature branch to `staging`.
-2. Use `DJANGO_SETTINGS_MODULE=config.settings.staging`.
+2. Use the `staging` branch or run explicit checks with `ENV_FILE=.env.staging`.
 3. Use a staging database, never production.
 4. Let startup run:
 
@@ -82,9 +121,15 @@ SQLite so migrations are tested against the same database family as production.
    gunicorn config.wsgi:application
    ```
 
-5. Smoke-test login, registration, chat send/edit/resend/delete, admin access,
+5. Rebuild the staging vector sample after migrations:
+
+   ```bash
+   ENV_FILE=.env.staging python manage.py reseed_staging --limit 250
+   ```
+
+6. Smoke-test login, registration, chat send/edit/resend/delete, admin access,
    static files, and frontend/backend session cookies.
-6. Check logs and confirm migrations are applied.
+7. Check logs and confirm migrations are applied.
 
 Staging must catch migration and deployment issues before production.
 
