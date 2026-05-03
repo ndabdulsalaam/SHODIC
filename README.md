@@ -153,11 +153,21 @@ For local development, `VITE_API_BASE_URL` can be omitted; the app automatically
 
 ## Environment Variables
 
-Create `backend/.env` for local `dev` configuration. Staging and production
-must use their own host-managed environment variables or copies of
-`backend/.env.staging.sample` and `backend/.env.production.sample`.
+The backend does not use a plain `backend/.env` file. Local env selection is
+branch-aware:
 
-Minimum setup for local and remote access:
+- `dev` branch loads `backend/.env.dev`
+- `staging` branch loads `backend/.env.staging`
+- other local branches load `backend/.env.dev`
+- `main` refuses to run locally
+
+Use `ENV_FILE=.env.dev` or `ENV_FILE=.env.staging` only when you need an
+explicit debugging override. `backend/.env.old` is a private recycle bin and is
+never loaded. Production on Render is controlled by host-managed variables with
+`DJANGO_ENV=production`; `backend/.env.prod` is only a local reference copy.
+
+Every backend env file should carry the same key list as `backend/.env.sample`.
+Example local setup:
 
 ```env
 DJANGO_SETTINGS_MODULE=config.settings.dev
@@ -166,14 +176,19 @@ SECRET_KEY=change-me
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:3000
+DATABASE_URL=
+DATABASE_SSL_REQUIRE=False
 ```
 
 AI:
 
 ```env
 OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_BACKUP_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=openai/gpt-oss-120b:free
+OPENROUTER_VISION_MODEL=google/gemma-4-31b-it:free
+OPENROUTER_VISION_MODEL_FALLBACK=baidu/qianfan-ocr-fast:free
 OPENROUTER_TEXT_MAX_TOKENS=2048
 OPENROUTER_REASONING_MAX_TOKENS=4096
 ```
@@ -183,7 +198,13 @@ Optional RAG retrieval:
 ```env
 QDRANT_URL=https://your-cluster-id.region.cloud.qdrant.io
 QDRANT_API_KEY=your_qdrant_api_key
-QDRANT_COLLECTION=rxchat_drugs
+QDRANT_COLLECTION=rxchat_dev
+QDRANT_INFERENCE_MODEL=intfloat/multilingual-e5-small
+QDRANT_SPARSE_MODEL=qdrant/bm25
+QDRANT_DENSE_VECTOR_NAME=dense
+QDRANT_SPARSE_VECTOR_NAME=sparse
+QDRANT_VECTOR_SIZE=384
+QDRANT_DISTANCE=Cosine
 ```
 
 Database:
@@ -201,6 +222,8 @@ Email OTP delivery:
 BREVO_API_KEY=your_brevo_api_key
 BREVO_SENDER_EMAIL=verified-sender@example.com
 BREVO_SENDER_NAME_RXCHAT=RxChat
+BREVO_SENDER_NAME=RxChat
+DEFAULT_FROM_EMAIL=RxChat <noreply@rxchat.dev>
 ```
 
 If Brevo is not configured, OTP emails are sent through Django's console email
