@@ -2,88 +2,77 @@
 Base Django settings shared by dev, staging, and production.
 """
 
-import importlib.util
 import os
 import sys
 from pathlib import Path
 
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
-from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# Load backend/.env when present. Host-provided environment variables still win.
-load_dotenv(BASE_DIR / ".env")
 
-
-def env_bool(name, default):
+def env_value(name, allow_blank=False):
     value = os.getenv(name)
     if value is None:
-        return default
-    return value.strip().lower() in ("true", "1", "yes", "on")
-
-
-def env_int(name, default):
-    try:
-        return int(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
-        return default
-
-
-def env_list(name, default):
-    return [
-        item.strip()
-        for item in os.getenv(name, default).split(",")
-        if item.strip()
-    ]
-
-
-def env_required(name):
-    value = os.getenv(name, "").strip()
-    if not value:
+        raise ImproperlyConfigured(f"{name} must be declared in the environment.")
+    value = value.strip()
+    if not allow_blank and not value:
         raise ImproperlyConfigured(f"{name} must be set for this environment.")
     return value
 
 
-def env_required_list(name):
-    values = env_list(name, "")
-    if not values:
-        raise ImproperlyConfigured(
-            f"{name} must contain at least one comma-separated value."
-        )
-    return values
+def env_bool(name):
+    value = os.getenv(name)
+    if value is None:
+        raise ImproperlyConfigured(f"{name} must be declared in the environment.")
+    return value.strip().lower() in ("true", "1", "yes", "on")
 
 
-def database_config(required=False, conn_max_age=0, ssl_require=False):
-    database_url = os.getenv("DATABASE_URL", "").strip()
-    if database_url:
+def env_int(name):
+    value = env_value(name)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ImproperlyConfigured(f"{name} must be an integer.") from None
+
+
+def env_list(name):
+    return [
+        item.strip()
+        for item in env_value(name).split(",")
+        if item.strip()
+    ]
+
+
+
+
+def database_config(required=False):
+    database_url = os.getenv("DATABASE_URL")
+    if not required:
         return {
-            "default": dj_database_url.parse(
-                database_url,
-                conn_max_age=conn_max_age,
-                ssl_require=ssl_require,
-            )
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": BASE_DIR / "db.sqlite3",
+            }
         }
-
-    if required:
-        raise ImproperlyConfigured("DATABASE_URL must be set for this environment.")
-
+    if not database_url or not database_url.strip():
+        raise ImproperlyConfigured("DATABASE_URL must be declared in the environment.")
     return {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
+        "default": dj_database_url.parse(
+            database_url.strip(),
+            conn_max_age=env_int("DATABASE_CONN_MAX_AGE"),
+            ssl_require=env_bool("DATABASE_SSL_REQUIRE"),
+        )
     }
 
+DJANGO_ENV = env_value("DJANGO_ENV")
 
-DJANGO_ENV = os.getenv("DJANGO_ENV", "dev")
+SECRET_KEY = env_value("SECRET_KEY")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-dev-key-change-before-shared-use")
+DEBUG = env_bool("DEBUG")
 
-DEBUG = env_bool("DEBUG", False)
-
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "")
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -95,14 +84,12 @@ INSTALLED_APPS = [
     # Third party
     "rest_framework",
     "corsheaders",
+    "django_q",
     # Local
     "fildah",
     "rxchat",
     "accounts",
 ]
-
-if importlib.util.find_spec("django_q"):
-    INSTALLED_APPS.append("django_q")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -135,8 +122,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
-
-DATABASES = database_config(required=False)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -179,7 +164,7 @@ WHITENOISE_MANIFEST_STRICT = False
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Browser origins allowed to call the API with session cookies.
-ALLOWED_ORIGINS = env_list("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = env_list("ALLOWED_ORIGINS")
 CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 
@@ -197,75 +182,64 @@ REST_FRAMEWORK = {
 }
 
 # LLM Configuration (OpenRouter)
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_BACKUP_API_KEY = os.getenv("OPENROUTER_BACKUP_API_KEY", "")
-OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-OPENROUTER_TEXT_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free")
-OPENROUTER_VISION_MODEL = os.getenv(
-    "OPENROUTER_VISION_MODEL",
-    "google/gemma-4-31b-it:free",
-)
-OPENROUTER_VISION_MODEL_FALLBACK = os.getenv(
-    "OPENROUTER_VISION_MODEL_FALLBACK",
-    "baidu/qianfan-ocr-fast:free",
-)
-OPENROUTER_TEXT_MAX_TOKENS = env_int("OPENROUTER_TEXT_MAX_TOKENS", 2048)
-OPENROUTER_REASONING_MAX_TOKENS = env_int("OPENROUTER_REASONING_MAX_TOKENS", 4096)
+OPENROUTER_API_KEY = env_value("OPENROUTER_API_KEY", allow_blank=True)
+OPENROUTER_BACKUP_API_KEY = env_value("OPENROUTER_BACKUP_API_KEY", allow_blank=True)
+OPENROUTER_BASE_URL = env_value("OPENROUTER_BASE_URL")
+OPENROUTER_TEXT_MODEL = env_value("OPENROUTER_MODEL")
+OPENROUTER_VISION_MODEL = env_value("OPENROUTER_VISION_MODEL")
+OPENROUTER_VISION_MODEL_FALLBACK = env_value("OPENROUTER_VISION_MODEL_FALLBACK")
+OPENROUTER_TEXT_MAX_TOKENS = env_int("OPENROUTER_TEXT_MAX_TOKENS")
+OPENROUTER_REASONING_MAX_TOKENS = env_int("OPENROUTER_REASONING_MAX_TOKENS")
 
 # Vector DB - Qdrant Cloud (for RAG retrieval)
-QDRANT_URL = os.getenv("QDRANT_URL", "")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rxchat")
-QDRANT_INFERENCE_MODEL = os.getenv(
-    "QDRANT_INFERENCE_MODEL",
-    "intfloat/multilingual-e5-small",
-)
-QDRANT_SPARSE_MODEL = os.getenv("QDRANT_SPARSE_MODEL", "qdrant/bm25")
-QDRANT_DENSE_VECTOR_NAME = os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense")
-QDRANT_SPARSE_VECTOR_NAME = os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse")
-QDRANT_VECTOR_SIZE = int(os.getenv("QDRANT_VECTOR_SIZE", "384"))
-QDRANT_DISTANCE = os.getenv("QDRANT_DISTANCE", "Cosine")
+QDRANT_URL = env_value("QDRANT_URL", allow_blank=True)
+QDRANT_API_KEY = env_value("QDRANT_API_KEY", allow_blank=True)
+QDRANT_COLLECTION = env_value("QDRANT_COLLECTION")
+QDRANT_INFERENCE_MODEL = env_value("QDRANT_INFERENCE_MODEL")
+QDRANT_SPARSE_MODEL = env_value("QDRANT_SPARSE_MODEL")
+QDRANT_DENSE_VECTOR_NAME = env_value("QDRANT_DENSE_VECTOR_NAME")
+QDRANT_SPARSE_VECTOR_NAME = env_value("QDRANT_SPARSE_VECTOR_NAME")
+QDRANT_VECTOR_SIZE = env_int("QDRANT_VECTOR_SIZE")
+QDRANT_DISTANCE = env_value("QDRANT_DISTANCE")
 
 # Data acquisition
-OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY", "")
+OPENFDA_API_KEY = env_value("OPENFDA_API_KEY", allow_blank=True)
 
 # Chat attachments are intentionally paused until the frontend upload flow is
 # ready to ship again. Existing persisted image previews can still be resent.
-RXCHAT_ATTACHMENTS_ENABLED = env_bool("RXCHAT_ATTACHMENTS_ENABLED", False)
+RXCHAT_ATTACHMENTS_ENABLED = env_bool("RXCHAT_ATTACHMENTS_ENABLED")
 
 Q_CLUSTER = {
     "name": "rxchat",
-    "workers": 1,
-    "timeout": 14400,
-    "retry": 14500,
+    "workers": env_int("Q_CLUSTER_WORKERS"),
+    "timeout": env_int("Q_CLUSTER_TIMEOUT"),
+    "retry": env_int("Q_CLUSTER_RETRY"),
     "orm": "default",
     "save_limit": 50,
 }
 
 # Email - Brevo HTTP API (primary), Django console (dev fallback)
-BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
-BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "")
-BREVO_SENDER_NAME_RXCHAT = os.getenv(
-    "BREVO_SENDER_NAME_RXCHAT",
-    os.getenv("BREVO_SENDER_NAME", "RxChat"),
-)
-BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", BREVO_SENDER_NAME_RXCHAT)
+BREVO_API_KEY = env_value("BREVO_API_KEY", allow_blank=True)
+BREVO_SENDER_EMAIL = env_value("BREVO_SENDER_EMAIL", allow_blank=True)
+BREVO_SENDER_NAME_DEFAULT = env_value("BREVO_SENDER_NAME_DEFAULT")
+BREVO_SENDER_NAME_RXCHAT = env_value("BREVO_SENDER_NAME_RXCHAT")
+
 
 # Django email backend (used as fallback when BREVO_API_KEY is not set)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = (
     f"{BREVO_SENDER_NAME_RXCHAT} <{BREVO_SENDER_EMAIL}>"
     if BREVO_SENDER_EMAIL
-    else "RxChat <noreply@rxchat.dev>"
+    else env_value("DEFAULT_FROM_EMAIL")
 )
 
 # Google OAuth
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_CLIENT_ID = env_value("GOOGLE_CLIENT_ID", allow_blank=True)
+GOOGLE_CLIENT_SECRET = env_value("GOOGLE_CLIENT_SECRET", allow_blank=True)
 
 # Session - 30-day sliding session to match trusted device window
 SESSION_COOKIE_AGE = 30 * 24 * 60 * 60
-SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = "Lax"
