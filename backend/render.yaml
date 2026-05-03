@@ -22,18 +22,50 @@ services:
         sync: false
       - key: DATABASE_SSL_REQUIRE
         value: "True"
+      - key: DATABASE_CONN_MAX_AGE
+        value: "600"
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_BASE_URL
         value: "https://openrouter.ai/api/v1"
       - key: OPENROUTER_MODEL
         value: "openai/gpt-oss-120b:free"
+      - key: OPENROUTER_VISION_MODEL
+        value: "google/gemma-4-31b-it:free"
+      - key: OPENROUTER_VISION_MODEL_FALLBACK
+        value: "baidu/qianfan-ocr-fast:free"
+      - key: OPENROUTER_TEXT_MAX_TOKENS
+        value: "2048"
+      - key: OPENROUTER_REASONING_MAX_TOKENS
+        value: "4096"
       - key: QDRANT_URL
         sync: false
       - key: QDRANT_API_KEY
         sync: false
       - key: QDRANT_COLLECTION
-        value: "rxchat"
+        value: "rxchat_prod"
+      - key: QDRANT_INFERENCE_MODEL
+        value: "intfloat/multilingual-e5-small"
+      - key: QDRANT_SPARSE_MODEL
+        value: "qdrant/bm25"
+      - key: QDRANT_DENSE_VECTOR_NAME
+        value: "dense"
+      - key: QDRANT_SPARSE_VECTOR_NAME
+        value: "sparse"
+      - key: QDRANT_VECTOR_SIZE
+        value: "384"
+      - key: QDRANT_DISTANCE
+        value: "Cosine"
+      - key: OPENFDA_API_KEY
+        sync: false
+      - key: RXCHAT_ATTACHMENTS_ENABLED
+        value: "False"
+      - key: Q_CLUSTER_WORKERS
+        value: "1"
+      - key: Q_CLUSTER_TIMEOUT
+        value: "14400"
+      - key: Q_CLUSTER_RETRY
+        value: "14500"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
@@ -44,6 +76,10 @@ services:
         sync: false
       - key: BREVO_SENDER_NAME_RXCHAT
         value: "RxChat"
+      - key: BREVO_SENDER_NAME
+        value: "RxChat"
+      - key: DEFAULT_FROM_EMAIL
+        value: "RxChat <noreply@rxchat.dev>"
 
       - key: PYTHON_VERSION
         value: "3.12.3"
