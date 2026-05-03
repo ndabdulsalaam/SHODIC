@@ -89,7 +89,7 @@ def _send_via_brevo(to_email, subject, plain_text, html_content):
     sender_name = getattr(
         settings,
         'BREVO_SENDER_NAME_RXCHAT',
-        getattr(settings, 'BREVO_SENDER_NAME', 'RxChat'),
+        getattr(settings, 'BREVO_SENDER_NAME_DEFAULT', 'RxChat'),
     )
 
     headers = {
