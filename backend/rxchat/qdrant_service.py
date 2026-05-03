@@ -14,7 +14,7 @@ Usage:
 Requirements:
     pip install qdrant-client
 
-Environment variables (backend/.env):
+    Environment variables (backend/.env.dev, .env.staging, or host env):
     QDRANT_URL       — your Qdrant Cloud cluster URL
     QDRANT_API_KEY   — your Qdrant Cloud API key
     QDRANT_COLLECTION — collection name
@@ -34,8 +34,6 @@ logger = logging.getLogger(__name__)
 
 # Lazy-initialised client — created once on first call
 _client = None
-
-
 
 
 def _collection_setup_hint() -> str:
@@ -61,6 +59,120 @@ def _require_qdrant_settings() -> None:
         raise RuntimeError("QDRANT_INFERENCE_MODEL is not set.")
     if not settings.QDRANT_SPARSE_MODEL:
         raise RuntimeError("QDRANT_SPARSE_MODEL is not set.")
+    if not settings.QDRANT_COLLECTION:
+        raise RuntimeError("QDRANT_COLLECTION is not set.")
+    if settings.QDRANT_DENSE_VECTOR_NAME == settings.QDRANT_SPARSE_VECTOR_NAME:
+        raise RuntimeError("QDRANT_DENSE_VECTOR_NAME and QDRANT_SPARSE_VECTOR_NAME must differ.")
+    if settings.QDRANT_VECTOR_SIZE <= 0:
+        raise RuntimeError("QDRANT_VECTOR_SIZE must be a positive integer.")
+
+
+def _qdrant_distance():
+    from qdrant_client import models  # noqa: PLC0415
+
+    aliases = {
+        "COSINE": "COSINE",
+        "DOT": "DOT",
+        "EUCLID": "EUCLID",
+        "EUCLIDEAN": "EUCLID",
+        "MANHATTAN": "MANHATTAN",
+    }
+    distance_name = aliases.get(str(settings.QDRANT_DISTANCE).strip().upper())
+    if not distance_name or not hasattr(models.Distance, distance_name):
+        supported = ", ".join(sorted(aliases))
+        raise RuntimeError(
+            f"Unsupported QDRANT_DISTANCE '{settings.QDRANT_DISTANCE}'. "
+            f"Use one of: {supported}."
+        )
+    return getattr(models.Distance, distance_name)
+
+
+def collection_config() -> dict:
+    """Return the named dense/sparse vector config used for every environment."""
+    _require_qdrant_settings()
+    from qdrant_client import models  # noqa: PLC0415
+
+    return {
+        "vectors_config": {
+            settings.QDRANT_DENSE_VECTOR_NAME: models.VectorParams(
+                size=settings.QDRANT_VECTOR_SIZE,
+                distance=_qdrant_distance(),
+            )
+        },
+        "sparse_vectors_config": {
+            settings.QDRANT_SPARSE_VECTOR_NAME: models.SparseVectorParams(),
+        },
+    }
+
+
+def active_collection_name() -> str:
+    collection = (settings.QDRANT_COLLECTION or "").strip()
+    if not collection:
+        raise RuntimeError("QDRANT_COLLECTION is not set.")
+    return collection
+
+
+def is_protected_collection(collection_name: str | None = None) -> bool:
+    collection = (collection_name or active_collection_name()).lower()
+    env_name = getattr(settings, "DJANGO_ENV", "").lower()
+    return "prod" in collection or env_name == "production"
+
+
+def collection_exists(collection_name: str | None = None) -> bool:
+    client = _get_client()
+    if not client:
+        raise RuntimeError("Qdrant is not configured. Set QDRANT_URL and QDRANT_API_KEY.")
+
+    collection = collection_name or active_collection_name()
+    try:
+        client.get_collection(collection)
+    except Exception:
+        return False
+    return True
+
+
+def ensure_collection() -> bool:
+    """Create the active Qdrant collection if missing.
+
+    Returns True when a collection was created and False when it already existed.
+    """
+    client = _get_client()
+    if not client:
+        raise RuntimeError("Qdrant is not configured. Set QDRANT_URL and QDRANT_API_KEY.")
+
+    collection = active_collection_name()
+    if collection_exists(collection):
+        ensure_payload_indexes()
+        return False
+
+    client.create_collection(
+        collection_name=collection,
+        **collection_config(),
+    )
+    ensure_payload_indexes()
+    return True
+
+
+def reset_collection() -> None:
+    """Delete and recreate the active Qdrant collection, with production guards."""
+    collection = active_collection_name()
+    if is_protected_collection(collection):
+        raise RuntimeError(
+            f"Refusing to reset protected Qdrant collection '{collection}'."
+        )
+
+    client = _get_client()
+    if not client:
+        raise RuntimeError("Qdrant is not configured. Set QDRANT_URL and QDRANT_API_KEY.")
+
+    if collection_exists(collection):
+        client.delete_collection(collection_name=collection)
+
+    client.create_collection(
+        collection_name=collection,
+        **collection_config(),
+    )
+    ensure_payload_indexes()
 
 
 def _iter_batches(items, batch_size: int):
