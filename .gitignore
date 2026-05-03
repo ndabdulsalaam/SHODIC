@@ -2,6 +2,8 @@
 
 # Backend
 backend/.env
+backend/.env.*
+!backend/.env.sample
 backend/venv/
 backend/__pycache__/
 backend/db.sqlite3
