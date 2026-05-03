@@ -13,7 +13,13 @@ that still reference ``config.settings`` directly.
 
 import os
 
-_django_env = os.getenv("DJANGO_ENV", "dev").strip().lower()
+from config.env import configure_environment
+
+configure_environment()
+
+_django_env = os.getenv("DJANGO_ENV", "").strip().lower()
+if not _django_env:
+    raise RuntimeError("DJANGO_ENV must be declared before loading Django settings.")
 
 if _django_env == "production":
     from .production import *  # noqa: F401,F403
