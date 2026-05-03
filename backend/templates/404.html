@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>404 — Page Not Found | RxChat</title>
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0f1a2e;
@@ -16,44 +24,84 @@
             min-height: 100vh;
             text-align: center;
         }
-        .container { max-width: 480px; padding: 2rem; }
+
+        .container {
+            max-width: 480px;
+            padding: 2rem;
+        }
+
         .logo {
             display: inline-flex;
             align-items: center;
             gap: 0.75rem;
             margin-bottom: 2rem;
         }
+
         .logo-icon {
-            width: 44px; height: 44px;
+            width: 44px;
+            height: 44px;
             background: linear-gradient(135deg, #2ec4b6, #20b2aa);
             border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 700; font-size: 1.1rem; color: #0f1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #0f1a2e;
         }
+
         .logo-text {
-            font-size: 1.5rem; font-weight: 700; color: #e8ecf4;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #e8ecf4;
         }
-        .logo-text span { color: #2ec4b6; }
+
+        .logo-text span {
+            color: #2ec4b6;
+        }
+
         .code {
-            font-size: 6rem; font-weight: 800;
+            font-size: 6rem;
+            font-weight: 800;
             background: linear-gradient(135deg, #2ec4b6, #20b2aa);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; line-height: 1;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
             margin-bottom: 1rem;
         }
-        h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
-        p { color: #8899b0; line-height: 1.6; margin-bottom: 2rem; }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        p {
+            color: #8899b0;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+
         .btn {
             display: inline-block;
             padding: 0.75rem 2rem;
             background: linear-gradient(135deg, #2ec4b6, #20b2aa);
-            color: #0f1a2e; font-weight: 600; font-size: 0.95rem;
-            border: none; border-radius: 8px; text-decoration: none;
+            color: #0f1a2e;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
             transition: opacity 0.2s;
         }
-        .btn:hover { opacity: 0.9; }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="logo">
@@ -63,7 +111,8 @@
         <div class="code">404</div>
         <h1>Page not found</h1>
         <p>The page you're looking for doesn't exist or has been moved. Let's get you back on track.</p>
-        <a href="/" class="btn">Back to RxChat</a>
+        <a href="https://rxchat.fildah.com" class="btn">Back to RxChat</a>
     </div>
 </body>
+
 </html>
