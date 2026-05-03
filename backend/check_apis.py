@@ -10,7 +10,7 @@ does not make live provider calls.
 
 import os
 
-from dotenv import load_dotenv
+from config.env import configure_environment
 
 
 PASS = "\033[92m✓\033[0m"
@@ -29,14 +29,11 @@ def check_openrouter():
     section("1. OpenRouter  →  configured text model")
 
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-    openrouter_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-    openrouter_model = os.getenv(
-        "OPENROUTER_TEXT_MODEL",
-        os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free"),
-    )
+    openrouter_url = os.getenv("OPENROUTER_BASE_URL", "")
+    openrouter_model = os.getenv("OPENROUTER_MODEL", "")
 
-    if not openrouter_key:
-        print(f"  {SKIP}  OPENROUTER_API_KEY not set")
+    if not openrouter_key or not openrouter_url or not openrouter_model:
+        print(f"  {SKIP}  OpenRouter env is incomplete")
         return
 
     try:
@@ -68,7 +65,7 @@ def check_qdrant():
 
     qdrant_url = os.getenv("QDRANT_URL", "")
     qdrant_key = os.getenv("QDRANT_API_KEY", "")
-    qdrant_col = os.getenv("QDRANT_COLLECTION", "rxchat")
+    qdrant_col = os.getenv("QDRANT_COLLECTION", "")
 
     if not qdrant_url or not qdrant_key:
         print(f"  {SKIP}  QDRANT_URL or QDRANT_API_KEY not set")
@@ -93,7 +90,7 @@ def check_qdrant():
 
 
 def main():
-    load_dotenv()
+    configure_environment()
     check_openrouter()
     check_qdrant()
     print(f"\n{'─' * 55}\n  Done.\n{'─' * 55}\n")
