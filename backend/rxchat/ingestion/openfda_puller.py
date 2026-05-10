@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import time
 from datetime import timedelta
 
 import requests
 
+from rxchat.models import CleanData
+
 from .base import normalize_name, utc_now
 from .nafdac_parser import clean_product, load_raw_products
 from .openfda_parser import parse_openfda
-from .storage import get_progress, save_progress, save_raw_record
+from .storage import save_clean_record
 
 logger = logging.getLogger(__name__)
 
@@ -226,22 +229,24 @@ class OpenFDAPuller:
         return {"next_skip": 0, "completed_terms": [], "completed_years": []}
 
     def _load_progress(self) -> dict:
-        progress = get_progress("openfda", self._empty_progress())
-        if not isinstance(progress, dict):
-            return self._empty_progress()
+        # No DB model — always start fresh.
+        progress = self._empty_progress()
         progress.setdefault("next_skip", 0)
         progress.setdefault("completed_terms", [])
         progress.setdefault("completed_years", [])
         return progress
 
     def _save_progress(self, progress: dict) -> None:
-        save_progress("openfda", progress)
+        # No-op: progress no longer persisted to DB.
+        pass
 
     def _save_results(self, results: list[dict], batch_key: str = "") -> None:
         for idx, label in enumerate(results):
             label_id = label.get("id") or label.get("set_id") or f"{batch_key}:{idx}"
-            save_raw_record(
+            save_clean_record(
                 "openfda",
                 str(label_id),
-                {**label, "record_type": "label", "batch_key": batch_key},
+                raw_text=json.dumps({**label, "record_type": "label", "batch_key": batch_key}, ensure_ascii=False),
+                data={**label, "record_type": "label", "batch_key": batch_key},
+                status=CleanData.STATUS_ACCEPTED,
             )
