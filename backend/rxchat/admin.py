@@ -1,21 +1,22 @@
+import json
+
 from django.contrib import admin, messages
 from django.core.management import call_command
 from django.http import HttpRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
+from django.utils.html import format_html
 
 from rxchat.ingestion.nafdac_scraper import NAFDAC_CATEGORIES
 from rxchat.ingestion.source_status import source_status_rows
 from rxchat.ingestion.update_checker import check_all_sources
 
 from .models import (
+    CleanData,
     Conversation,
     DrugChunk,
-    IngestionLog,
     Message,
-    RawSourceData,
-    ScrapeProgress,
-    SourceFileUpload,
+    RawData,
 )
 
 
@@ -44,7 +45,10 @@ class MessageAdmin(admin.ModelAdmin):
 
 
 def can_run_ingestion(user) -> bool:
-    return bool(user.is_active and (user.is_superuser or (user.is_staff and user.has_perm("rxchat.can_run_ingestion"))))
+    return bool(
+        user.is_active
+        and (user.is_superuser or (user.is_staff and user.has_perm("rxchat.can_run_ingestion")))
+    )
 
 
 def ingestion_admin_view(request: HttpRequest):
@@ -62,20 +66,30 @@ def ingestion_admin_view(request: HttpRequest):
                 file = request.FILES.get("file")
                 if not source or not file:
                     raise ValueError("Choose a source and file to upload.")
-                upload = SourceFileUpload.objects.create(
+                upload = RawData.objects.create(
                     source=source,
                     file=file,
                     description=request.POST.get("description", ""),
                 )
-                _queue_task("ingest_drugs", "--source", source)
-                messages.success(request, f"Uploaded {upload.file.name}. Processing task queued.")
+                _queue_task("parse_data", "--source", source)
+                messages.success(
+                    request,
+                    f"Uploaded {upload.file.name}. "
+                    "Parse task queued — review CleanData records, then run 'ingest_drugs'.",
+                )
+            elif action == "parse_all":
+                _queue_task("parse_data", "--all")
+                messages.success(request, "parse_data --all queued.")
+            elif action == "seed_qdrant":
+                _queue_task("seed_qdrant")
+                messages.success(request, "seed_qdrant queued.")
             elif action == "setup_schedules":
                 _queue_task("setup_ingestion_schedules")
-                messages.success(request, "Task queued - check Django Q task results.")
+                messages.success(request, "Task queued — check Django Q task results.")
             else:
                 command_args = _command_args_for_action(action, request)
                 _queue_task(*command_args)
-                messages.success(request, "Task queued - check Django Q successful or failed tasks for results.")
+                messages.success(request, "Task queued — check Django Q successful or failed tasks for results.")
         except Exception as exc:
             messages.error(request, f"Could not queue task: {exc}")
         return redirect(reverse("admin:rxchat_ingestion"))
@@ -100,7 +114,6 @@ def _queue_task(*command_args: str) -> None:
     try:
         from django_q.tasks import async_task  # noqa: PLC0415
     except ImportError:
-        # Local fallback keeps the admin usable before django-q2 is installed.
         call_command(*command_args)
         return
     async_task("django.core.management.call_command", *command_args)
@@ -137,84 +150,112 @@ def _get_urls():
 admin.site.get_urls = _get_urls
 
 
-@admin.register(RawSourceData)
-class RawSourceDataAdmin(admin.ModelAdmin):
-    list_display = ["source", "source_id", "file_name", "created_at", "updated_at"]
-    list_filter = ["source", "created_at", "updated_at"]
-    search_fields = ["source_id", "file_name", "raw_data"]
-    readonly_fields = ["created_at", "updated_at"]
+# ---------------------------------------------------------------------------
+# RawData admin
+# ---------------------------------------------------------------------------
+
+@admin.register(RawData)
+class RawDataAdmin(admin.ModelAdmin):
+    list_display = ["source", "file", "description", "uploaded_at"]
+    list_filter = ["source", "uploaded_at"]
+    search_fields = ["file", "description"]
+    readonly_fields = ["uploaded_at"]
 
     def delete_queryset(self, request, queryset):
         for obj in queryset:
             obj.delete()
 
 
-@admin.register(DrugChunk)
-class DrugChunkAdmin(admin.ModelAdmin):
-    list_display = ["raw_source", "chunk_index", "source", "text_preview", "qdrant_point_id", "embedded_at"]
-    list_filter = ["raw_source__source", "embedded_at", "created_at"]
-    search_fields = ["text", "metadata", "raw_source__source_id"]
-    readonly_fields = ["created_at", "updated_at", "embedded_at"]
+# ---------------------------------------------------------------------------
+# CleanData admin — two-step review
+# ---------------------------------------------------------------------------
 
-    def source(self, obj):
-        return obj.raw_source.source
+@admin.register(CleanData)
+class CleanDataAdmin(admin.ModelAdmin):
+    list_display = ["source", "source_id", "status_badge", "file_name", "updated_at"]
+    list_filter = ["source", "status", "updated_at"]
+    search_fields = ["source_id", "file_name", "raw_text"]
+    readonly_fields = ["source", "source_id", "file_name", "raw_id", "status", "created_at", "updated_at", "json_preview"]
+    fields = [
+        "source", "source_id", "file_name", "raw",
+        "status", "created_at", "updated_at",
+        "raw_text",
+        "json_preview",
+        "data",
+    ]
+    actions = ["accept_selected", "reset_to_draft"]
 
-    def text_preview(self, obj):
-        return obj.text[:120] + "..." if len(obj.text) > 120 else obj.text
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(self.readonly_fields)
+        if obj and obj.status != CleanData.STATUS_DRAFT:
+            ro.append("raw_text")
+        return ro
 
+    def status_badge(self, obj):
+        colours = {
+            CleanData.STATUS_DRAFT: "#888",
+            CleanData.STATUS_ACCEPTED: "#0a0",
+            CleanData.STATUS_CHUNKED: "#00a",
+        }
+        colour = colours.get(obj.status, "#888")
+        return format_html(
+            '<span style="color:{};font-weight:bold">{}</span>',
+            colour,
+            obj.get_status_display(),
+        )
+    status_badge.short_description = "Status"
 
-@admin.register(SourceFileUpload)
-class SourceFileUploadAdmin(admin.ModelAdmin):
-    list_display = ["source", "file", "processed", "uploaded_at"]
-    list_filter = ["source", "processed", "uploaded_at"]
-    search_fields = ["file", "description"]
-    actions = ["process_uploads"]
+    def json_preview(self, obj):
+        """Read-only pretty-printed JSON preview of what Accept will produce."""
+        from rxchat.models import _text_to_json  # noqa: PLC0415
+        if obj.status == CleanData.STATUS_DRAFT and obj.raw_text:
+            preview = _text_to_json(obj.source, obj.raw_text)
+        else:
+            preview = obj.data or {}
+        return format_html(
+            '<pre style="max-height:400px;overflow:auto;background:#f5f5f5;padding:8px">{}</pre>',
+            json.dumps(preview, indent=2, ensure_ascii=False),
+        )
+    json_preview.short_description = "JSON Preview (auto-generated)"
 
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        if change or obj.processed:
-            return
-        _queue_task("ingest_drugs", "--source", obj.source)
+    @admin.action(description="✅ Accept selected — convert raw_text → JSON")
+    def accept_selected(self, request, queryset):
+        accepted = 0
+        for obj in queryset.filter(status=CleanData.STATUS_DRAFT):
+            obj.accept()
+            accepted += 1
         self.message_user(
             request,
-            "Upload saved. Processing task queued - check Django Q task results.",
+            f"{accepted} record(s) accepted. Run 'ingest_drugs' to create chunks.",
             messages.SUCCESS,
         )
 
+    @admin.action(description="↩️ Reset to draft — clear JSON, re-edit raw_text")
+    def reset_to_draft(self, request, queryset):
+        reset = 0
+        for obj in queryset:
+            obj.reset_to_draft()
+            reset += 1
+        self.message_user(request, f"{reset} record(s) reset to draft.", messages.SUCCESS)
+
     def delete_queryset(self, request, queryset):
         for obj in queryset:
             obj.delete()
 
-    @admin.action(description="Process selected uploads")
-    def process_uploads(self, request, queryset):
-        sources = sorted(set(queryset.values_list("source", flat=True)))
-        for source in sources:
-            _queue_task("ingest_drugs", "--source", source)
-        self.message_user(request, f"Queued processing for {len(sources)} source(s).", messages.SUCCESS)
 
+# ---------------------------------------------------------------------------
+# DrugChunk admin
+# ---------------------------------------------------------------------------
 
-@admin.register(IngestionLog)
-class IngestionLogAdmin(admin.ModelAdmin):
-    list_display = ["source", "action", "status", "created_at"]
-    list_filter = ["source", "action", "status", "created_at"]
-    search_fields = ["details"]
-    readonly_fields = ["source", "action", "status", "details", "created_at"]
+@admin.register(DrugChunk)
+class DrugChunkAdmin(admin.ModelAdmin):
+    list_display = ["clean_data", "chunk_index", "source", "text_preview", "qdrant_point_id", "embedded_at"]
+    list_filter = ["clean_data__source", "embedded_at", "created_at"]
+    search_fields = ["text", "metadata", "clean_data__source_id"]
+    readonly_fields = ["created_at", "updated_at", "embedded_at"]
 
-    def has_add_permission(self, request):
-        return False
+    def source(self, obj):
+        return obj.clean_data.source
 
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-
-@admin.register(ScrapeProgress)
-class ScrapeProgressAdmin(admin.ModelAdmin):
-    list_display = ["source", "last_run", "updated_at"]
-    list_filter = ["source", "last_run", "updated_at"]
-    readonly_fields = ["source", "progress_data", "last_run", "updated_at"]
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
+    def text_preview(self, obj):
+        return obj.text[:120] + "..." if len(obj.text) > 120 else obj.text
