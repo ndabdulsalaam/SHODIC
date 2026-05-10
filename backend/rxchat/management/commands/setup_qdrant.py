@@ -17,8 +17,7 @@ class Command(BaseCommand):
         dense = config["vectors_config"][settings.QDRANT_DENSE_VECTOR_NAME]
         action = "created" if created else "already exists"
         self.stdout.write(self.style.SUCCESS(
-            f"Qdrant collection '{settings.QDRANT_COLLECTION}' {action} "
-            f"for {settings.DJANGO_ENV}: "
+            f"Qdrant collection '{settings.QDRANT_COLLECTION}' {action}: "
             f"dense='{settings.QDRANT_DENSE_VECTOR_NAME}' size={dense.size} "
             f"distance={dense.distance}, "
             f"sparse='{settings.QDRANT_SPARSE_VECTOR_NAME}'."
