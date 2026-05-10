@@ -49,10 +49,22 @@
                 <button type="submit" class="button">Pull OpenFDA full</button>
             </form>
 
-            <form method="post" class="ingestion-action" data-confirm="Queue full parsing and Qdrant ingestion?">
+            <form method="post" class="ingestion-action" data-confirm="Parse all uploaded source files into draft CleanData records?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="parse_all">
+                <button type="submit" class="button">Parse uploaded data</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Create DrugChunk rows from accepted CleanData records?">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="ingest_all">
                 <button type="submit" class="button default">Ingest drugs</button>
+            </form>
+
+            <form method="post" class="ingestion-action" data-confirm="Sync unembedded DrugChunk rows into Qdrant?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="seed_qdrant">
+                <button type="submit" class="button default">Seed Qdrant</button>
             </form>
 
             <form method="post" class="ingestion-action" data-confirm="Create or update default Django-Q2 schedules?">
@@ -91,7 +103,7 @@
                     <label for="description">Description</label>
                     <input id="description" name="description" type="text">
                 </p>
-                <button type="submit" class="button default">Upload and process</button>
+                <button type="submit" class="button default">Upload and parse</button>
             </form>
         </div>
     </div>
