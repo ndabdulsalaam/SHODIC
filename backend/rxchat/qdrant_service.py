@@ -391,16 +391,17 @@ def ensure_payload_indexes() -> None:
 
 def payload_for_drug_chunk(chunk) -> dict:
     metadata = chunk.metadata or {}
+    clean = chunk.clean_data
     return {
         "text": chunk.text,
-        "source": chunk.raw_source.source,
+        "source": clean.source if clean else "",
         "drug_name": metadata.get("drug_name") or metadata.get("product_name") or metadata.get("medicine_name") or "",
         "category": metadata.get("category") or "",
         "chunk_index": chunk.chunk_index,
-        "raw_source_id": chunk.raw_source_id,
+        "clean_data_id": chunk.clean_data_id,
         "source_url": metadata.get("source_url", ""),
-        "source_type": metadata.get("source_type", chunk.raw_source.source),
-        "record_id": chunk.raw_source.source_id,
+        "source_type": metadata.get("source_type", clean.source if clean else ""),
+        "record_id": clean.source_id if clean else "",
         "status": metadata.get("status", "active"),
         "is_active": metadata.get("is_active", True),
         "effective_date": metadata.get("effective_date", ""),
