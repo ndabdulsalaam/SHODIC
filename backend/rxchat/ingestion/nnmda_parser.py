@@ -3,58 +3,49 @@
 from __future__ import annotations
 
 import re
-
 from pathlib import Path
 
-from rxchat.models import SourceFileUpload
-
-from .base import DocumentChunk, chunk_text, extract_text, utc_timestamp
-from .storage import replace_chunks, save_raw_record
+from .base import DocumentChunk, chunk_text, extract_text
+from .storage import save_clean_record
 
 
 SCIENTIFIC_NAME_RE = re.compile(r"\b([A-Z][a-z]+ [a-z][a-z\-]+)\b")
 
 
-def parse_nnmda() -> tuple[list[dict], list[DocumentChunk]]:
-    documents = []
-    plants = []
-    chunks: list[DocumentChunk] = []
+def parse_nnmda(raw) -> tuple[str, list[DocumentChunk]]:
+    """Extract text from a single RawData upload."""
+    path = Path(raw.file.path)
+    text = extract_text(path)
 
-    for upload in SourceFileUpload.objects.filter(source="nnmda").order_by("uploaded_at"):
-        path = Path(upload.file.path)
-        text = extract_text(path)
-        if not text.strip():
-            continue
-        doc = {
-            "filename": path.name,
-            "title": path.stem.replace("_", " ").title(),
-            "text": text,
-            "parsed_at": utc_timestamp(),
-        }
-        documents.append(doc)
-        doc_plants = _extract_plants(text, path.name)
-        plants.extend(doc_plants)
-        raw_source = save_raw_record(
-            "nnmda",
-            f"upload:{upload.pk}",
-            {**doc, "medicinal_plants": doc_plants},
-            file_name=upload.file.name,
-        )
-        record_chunks = []
-        for idx, chunk in enumerate(chunk_text(text), start=1):
-            record_chunks.append(DocumentChunk(
-                id=f"nnmda:{upload.pk}:{idx}",
-                text=f"{doc['title']}\n\n{chunk}",
-                source="NNMDA Traditional Medicine Sources",
-                source_type="nnmda",
-                record_id=str(raw_source.source_id),
-                status="active",
-                is_active=True,
-                metadata={"filename": path.name, "drug_name": doc["title"], "category": "NNMDA"},
-            ))
-        replace_chunks(raw_source, record_chunks)
-        chunks.extend(record_chunks)
-    return documents, chunks
+    clean = save_clean_record(
+        "nnmda",
+        f"upload:{raw.pk}",
+        raw_text=text,
+        file_name=raw.file.name,
+        raw_id=raw.pk,
+    )
+
+    return text, build_chunks_from_clean(clean)
+
+
+def build_chunks_from_clean(clean) -> list[DocumentChunk]:
+    """Build chunks from an accepted CleanData record (called by ingest_drugs)."""
+    text = clean.raw_text
+    path_name = clean.file_name or ""
+    title = Path(path_name).stem.replace("_", " ").title() if path_name else "NNMDA"
+    chunks = []
+    for idx, chunk in enumerate(chunk_text(text), start=1):
+        chunks.append(DocumentChunk(
+            id=f"nnmda:{clean.pk}:{idx}",
+            text=f"{title}\n\n{chunk}",
+            source="NNMDA Traditional Medicine Sources",
+            source_type="nnmda",
+            record_id=str(clean.source_id),
+            status="active",
+            is_active=True,
+            metadata={"filename": path_name, "drug_name": title, "category": "NNMDA"},
+        ))
+    return chunks
 
 
 def _extract_plants(text: str, filename: str) -> list[dict]:
