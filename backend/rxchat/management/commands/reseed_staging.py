@@ -43,11 +43,12 @@ class Command(BaseCommand):
 
         chunks = (
             DrugChunk.objects.exclude(text="")
-            .select_related("raw_source")
-            .order_by("raw_source__source", "raw_source__source_id", "chunk_index")
+            .filter(clean_data__isnull=False)
+            .select_related("clean_data")
+            .order_by("clean_data__source", "clean_data__source_id", "chunk_index")
         )
         if options["source"]:
-            chunks = chunks.filter(raw_source__source__in=options["source"])
+            chunks = chunks.filter(clean_data__source__in=options["source"])
 
         total = chunks.count()
         limit = options["limit"]
