@@ -8,9 +8,9 @@ from typing import Any
 from django.core.management import call_command
 from django.utils import timezone
 
-from rxchat.models import SourceFileUpload
+from rxchat.models import RawData
 
-from .base import append_ingestion_log, utc_now
+from .base import utc_now
 from .source_status import source_status_rows
 
 
@@ -24,7 +24,7 @@ STATIC_SOURCE_POLICIES = {
 
 
 def newest_upload_age_days(source: str) -> int | None:
-    upload = SourceFileUpload.objects.filter(source=source).order_by("-uploaded_at").first()
+    upload = RawData.objects.filter(source=source).order_by("-uploaded_at").first()
     if not upload:
         return None
     return int((timezone.now() - upload.uploaded_at).total_seconds() // 86400)
@@ -35,28 +35,22 @@ def check_static_sources() -> list[dict[str, Any]]:
     for source, max_age in STATIC_SOURCE_POLICIES.items():
         age = newest_upload_age_days(source)
         status = "missing" if age is None else "stale" if age > max_age else "fresh"
-        result = {
+        results.append({
             "source": source,
             "status": status,
             "age_days": age,
             "max_age_days": max_age,
-        }
-        append_ingestion_log(source, "static_source_age_check", status, **result)
-        results.append(result)
+        })
     return results
 
 
 def check_all_sources() -> dict[str, Any]:
     rows = source_status_rows()
     static_results = check_static_sources()
-    summary = {
+    return {
         "manual_status": rows,
         "static_age_checks": static_results,
     }
-    append_ingestion_log("all", "source_status_check", "ok", missing=[
-        row["source"] for row in rows if row["status"] == "missing"
-    ])
-    return summary
 
 
 def run_nafdac_delta() -> None:
