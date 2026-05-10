@@ -117,12 +117,7 @@ class Command(BaseCommand):
         )
 
     def _require_dev_environment(self):
-        env_name = getattr(settings, "DJANGO_ENV", "").lower()
         collection = settings.QDRANT_COLLECTION
-        if env_name != "dev":
-            raise CommandError(
-                f"seed_dev only runs with DJANGO_ENV=dev. Current environment is '{env_name}'."
-            )
         if is_protected_collection(collection):
             raise CommandError(
                 f"Refusing to seed protected Qdrant collection '{collection}'."
