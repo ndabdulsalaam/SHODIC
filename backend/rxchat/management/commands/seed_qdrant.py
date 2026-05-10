@@ -72,7 +72,7 @@ class Command(BaseCommand):
             mode = "all" if options["all"] else "unembedded only"
             self.stdout.write(
                 f"Would index {selected_count} of {total} chunks ({mode}) "
-                f"into '{settings.QDRANT_COLLECTION}' ({settings.DJANGO_ENV})."
+                f"into '{settings.QDRANT_COLLECTION}'."
             )
             return
 
@@ -86,7 +86,7 @@ class Command(BaseCommand):
         mode = "full resync" if options["all"] else "incremental"
         self.stdout.write(self.style.SUCCESS(
             f"Qdrant seed complete ({mode}): {upserted} of {total} chunks "
-            f"indexed into '{settings.QDRANT_COLLECTION}' ({settings.DJANGO_ENV})."
+            f"indexed into '{settings.QDRANT_COLLECTION}'."
         ))
 
     def _refuse_production(self):
