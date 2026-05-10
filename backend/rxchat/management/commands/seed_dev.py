@@ -27,13 +27,10 @@ from fildah.models import (
     ProductAccess,
 )
 from rxchat.models import (
+    CleanData,
     Conversation,
     DrugChunk,
-    IngestionLog,
     Message,
-    RawSourceData,
-    ScrapeProgress,
-    SourceFileUpload,
 )
 from rxchat.qdrant_service import (
     delete_points,
@@ -102,9 +99,9 @@ class Command(BaseCommand):
                 reset_collection()
             ensure_collection()
             chunks = (
-                DrugChunk.objects.filter(raw_source__source_id__startswith=SEED_PREFIX)
-                .select_related("raw_source")
-                .order_by("raw_source__source_id", "chunk_index")
+                DrugChunk.objects.filter(clean_data__source_id__startswith=SEED_PREFIX)
+                .select_related("clean_data")
+                .order_by("clean_data__source_id", "chunk_index")
             )
             upserted = upsert_drug_chunks(chunks, batch_size=options["batch_size"])
 
@@ -112,7 +109,7 @@ class Command(BaseCommand):
             "Dev seed complete: "
             f"{len(users)} users, {len(organizations)} organizations, "
             f"{len(products)} products, "
-            f"{DrugChunk.objects.filter(raw_source__source_id__startswith=SEED_PREFIX).count()} drug chunks, "
+            f"{DrugChunk.objects.filter(clean_data__source_id__startswith=SEED_PREFIX).count()} drug chunks, "
             f"{upserted} Qdrant points."
         ))
         self.stdout.write(
@@ -137,12 +134,10 @@ class Command(BaseCommand):
         PendingLoginOTP.objects.filter(user__username__startswith=f"{SEED_PREFIX}-user-").delete()
         PasswordResetOTP.objects.filter(user__username__startswith=f"{SEED_PREFIX}-user-").delete()
         ContactMessage.objects.filter(email__startswith=f"{SEED_PREFIX}-").delete()
-        SourceFileUpload.objects.filter(description__startswith=SEED_PREFIX).delete()
-        IngestionLog.objects.filter(action__startswith=SEED_PREFIX).delete()
 
     def _clear_seed_rows(self, skip_qdrant=False):
         point_ids = list(
-            DrugChunk.objects.filter(raw_source__source_id__startswith=SEED_PREFIX)
+            DrugChunk.objects.filter(clean_data__source_id__startswith=SEED_PREFIX)
             .exclude(qdrant_point_id__isnull=True)
             .exclude(qdrant_point_id="")
             .values_list("qdrant_point_id", flat=True)
@@ -151,8 +146,7 @@ class Command(BaseCommand):
             delete_points(point_ids)
 
         self._clear_transient_seed_rows()
-        RawSourceData.objects.filter(source_id__startswith=SEED_PREFIX).delete()
-        ScrapeProgress.objects.filter(source__in=SEED_SOURCES).delete()
+        CleanData.objects.filter(source_id__startswith=SEED_PREFIX).delete()
         ProductAccess.objects.filter(user__username__startswith=f"{SEED_PREFIX}-user-").delete()
         ProductAccess.objects.filter(product__slug__startswith=f"{SEED_PREFIX}-product-").delete()
         OrganizationMember.objects.filter(organization__slug__startswith=f"{SEED_PREFIX}-org-").delete()
@@ -385,21 +379,26 @@ class Command(BaseCommand):
             )
 
             source = SEED_SOURCES[index - 1]
-            raw_source, _ = RawSourceData.objects.update_or_create(
+            clean_data, _ = CleanData.objects.update_or_create(
                 source=source,
                 source_id=f"{SEED_PREFIX}-{index}",
                 defaults={
-                    "raw_data": {
+                    "raw_text": (
+                        f"Dev Medicine {index} is a fake seeded medicine for local RxChat testing. "
+                        f"It belongs to source {source} and must never be treated as clinical truth."
+                    ),
+                    "data": {
                         "marker": SEED_PREFIX,
                         "product_name": f"Dev Medicine {index}",
                         "strength": f"{index * 100} mg",
                         "source": source,
                     },
+                    "status": CleanData.STATUS_CHUNKED,
                     "file_name": f"{SEED_PREFIX}-{index}.json",
                 },
             )
             DrugChunk.objects.update_or_create(
-                raw_source=raw_source,
+                clean_data=clean_data,
                 chunk_index=1,
                 defaults={
                     "text": (
@@ -415,23 +414,4 @@ class Command(BaseCommand):
                         "is_active": True,
                     },
                 },
-            )
-            ScrapeProgress.objects.update_or_create(
-                source=source,
-                defaults={
-                    "progress_data": {"marker": SEED_PREFIX, "last_fake_page": index},
-                    "last_run": timezone.now(),
-                },
-            )
-            IngestionLog.objects.create(
-                source=source,
-                action=f"{SEED_PREFIX}-ingest-{index}",
-                status="ok",
-                details={"marker": SEED_PREFIX, "chunk_count": 1},
-            )
-            SourceFileUpload.objects.create(
-                source=source,
-                file=f"{SEED_PREFIX}/{source}-{index}.txt",
-                description=f"{SEED_PREFIX} upload {index}",
-                processed=True,
             )
