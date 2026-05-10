@@ -1,4 +1,8 @@
 import uuid
+import ast
+import json
+import re
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -73,28 +77,167 @@ class Message(models.Model):
         return f"[{self.role}] {self.content[:50]}..."
 
 
-class RawSourceData(models.Model):
-    """Raw scraped, pulled, or uploaded source data stored in Postgres."""
+# ---------------------------------------------------------------------------
+# Data pipeline: RawData → CleanData → DrugChunk → Qdrant
+# ---------------------------------------------------------------------------
+
+class RawData(models.Model):
+    """Admin-uploaded source file. No parsing on upload — a separate
+    `parse_data` management command extracts text into CleanData."""
+    source = models.CharField(max_length=30, choices=SOURCE_CHOICES, db_index=True)
+    file = models.FileField(upload_to='raw_uploads/')
+    description = models.TextField(blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'raw data'
+        verbose_name_plural = 'raw data'
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.source}: {self.file.name}"
+
+    def delete(self, *args, **kwargs):
+        # Cascade to CleanData rows (they cascade to DrugChunk + Qdrant).
+        for clean in self.cleandata_set.all():
+            clean.delete()
+        return super().delete(*args, **kwargs)
+
+
+def _text_to_json(source: str, raw_text: str) -> dict:
+    """Convert plain extracted text back to a basic structured dict.
+
+    The exact structure mirrors what the old parsers produced so that
+    existing ingest_drugs logic can consume it unchanged.
+    """
+    parsed = _parse_structured_text(raw_text)
+    if parsed:
+        parsed.setdefault("source", source)
+        parsed.setdefault("parsed_at", timezone.now().isoformat())
+        return parsed
+
+    return {
+        "source": source,
+        "raw_text": raw_text,
+        "parsed_at": timezone.now().isoformat(),
+    }
+
+
+def _parse_structured_text(raw_text: str) -> dict:
+    text = (raw_text or "").strip()
+    if not text:
+        return {}
+
+    for parser in (json.loads, ast.literal_eval):
+        try:
+            parsed = parser(text)
+        except (SyntaxError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+
+    pairs = {}
+    for line in text.splitlines():
+        key, separator, value = line.partition(":")
+        if not separator:
+            continue
+        key = _normalise_key(key)
+        if key:
+            pairs[key] = value.strip()
+    return pairs
+
+
+def _normalise_key(value: str) -> str:
+    key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    aliases = {
+        "who_essential_medicines_list_medicine": "medicine_name",
+        "openfda_drug_label": "medicine_name",
+        "nafdac_greenbook_product": "product_name",
+    }
+    return aliases.get(key, key)
+
+
+class CleanData(models.Model):
+    """Two-step reviewed data extracted from a RawData file (or a scraper).
+
+    Stage 1 (draft):    ``parse_data`` writes plain extracted text to
+                        ``raw_text``.  The admin shows a raw preview and an
+                        auto-generated JSON preview.  The record is fully
+                        editable at this stage.
+
+    Stage 2 (accepted): The admin "Accept selected" action converts
+                        ``raw_text`` → structured JSON in ``data`` and sets
+                        ``status=accepted``.
+
+    Stage 3 (chunked):  ``ingest_drugs`` reads accepted records, creates
+                        DrugChunk rows, and sets ``status=chunked``.
+    """
+    STATUS_DRAFT = 'draft'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_CHUNKED = 'chunked'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_ACCEPTED, 'Accepted'),
+        (STATUS_CHUNKED, 'Chunked'),
+    ]
+
+    raw = models.ForeignKey(
+        RawData, on_delete=models.CASCADE,
+        null=True, blank=True,
+        help_text='Source upload this record was extracted from (null for scraped data).',
+    )
     source = models.CharField(max_length=30, choices=SOURCE_CHOICES, db_index=True)
     source_id = models.CharField(max_length=255)
-    raw_data = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES,
+        default=STATUS_DRAFT, db_index=True,
+    )
+    raw_text = models.TextField(
+        blank=True,
+        help_text='Plain extracted text — edit here before accepting.',
+    )
+    data = models.JSONField(
+        default=dict, blank=True,
+        help_text='Structured JSON — populated automatically on Accept.',
+    )
     file_name = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'raw data source'
-        verbose_name_plural = 'raw data sources'
+        verbose_name = 'clean data'
+        verbose_name_plural = 'clean data'
         ordering = ['source', 'source_id']
         constraints = [
-            models.UniqueConstraint(fields=['source', 'source_id'], name='unique_raw_source_record'),
+            models.UniqueConstraint(fields=['source', 'source_id'], name='unique_clean_record'),
         ]
         permissions = [
             ('can_run_ingestion', 'Can run ingestion tasks'),
         ]
 
+    def accept(self):
+        """Convert raw_text → structured JSON and mark as accepted."""
+        self.data = _text_to_json(self.source, self.raw_text)
+        self.status = self.STATUS_ACCEPTED
+        self.save(update_fields=['data', 'status', 'updated_at'])
+
+    def reset_to_draft(self):
+        """Clear accepted JSON and return to draft so raw_text can be re-edited."""
+        point_ids = list(
+            self.chunks.exclude(qdrant_point_id__isnull=True)
+            .exclude(qdrant_point_id='')
+            .values_list('qdrant_point_id', flat=True)
+        )
+        if point_ids:
+            from .qdrant_service import delete_points  # noqa: PLC0415
+            delete_points(point_ids)
+        self.chunks.all().delete()
+        self.data = {}
+        self.status = self.STATUS_DRAFT
+        self.save(update_fields=['data', 'status', 'updated_at'])
+
     def __str__(self):
-        return f"{self.source}:{self.source_id}"
+        return f"{self.source}:{self.source_id} [{self.status}]"
 
     def delete(self, *args, **kwargs):
         point_ids = list(
@@ -104,14 +247,13 @@ class RawSourceData(models.Model):
         )
         if point_ids:
             from .qdrant_service import delete_points  # noqa: PLC0415
-
             delete_points(point_ids)
         return super().delete(*args, **kwargs)
 
 
 class DrugChunk(models.Model):
     """Processed text chunk ready for Qdrant embedding."""
-    raw_source = models.ForeignKey(RawSourceData, on_delete=models.CASCADE, related_name='chunks')
+    clean_data = models.ForeignKey(CleanData, on_delete=models.CASCADE, related_name='chunks')
     chunk_index = models.PositiveIntegerField()
     text = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)
@@ -123,18 +265,23 @@ class DrugChunk(models.Model):
     class Meta:
         verbose_name = 'drug chunk'
         verbose_name_plural = 'drug chunks'
-        ordering = ['raw_source', 'chunk_index']
+        ordering = ['clean_data', 'chunk_index']
         constraints = [
-            models.UniqueConstraint(fields=['raw_source', 'chunk_index'], name='unique_chunk_per_raw_source'),
+            models.UniqueConstraint(fields=['clean_data', 'chunk_index'], name='unique_chunk_per_clean_data'),
         ]
 
     @property
     def source(self):
-        return self.raw_source.source
+        return self.clean_data.source
 
     @property
     def drug_name(self):
-        return self.metadata.get('drug_name') or self.metadata.get('product_name') or self.metadata.get('medicine_name') or ''
+        return (
+            self.metadata.get('drug_name')
+            or self.metadata.get('product_name')
+            or self.metadata.get('medicine_name')
+            or ''
+        )
 
     @property
     def category(self):
@@ -146,70 +293,4 @@ class DrugChunk(models.Model):
         self.save(update_fields=['qdrant_point_id', 'embedded_at', 'updated_at'])
 
     def __str__(self):
-        return f"{self.raw_source} chunk {self.chunk_index}"
-
-
-class ScrapeProgress(models.Model):
-    """Persistent scrape/pull progress, replacing local progress JSON."""
-    source = models.CharField(max_length=30, choices=SOURCE_CHOICES, unique=True)
-    progress_data = models.JSONField(default=dict, blank=True)
-    last_run = models.DateTimeField(blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'scrape progress'
-        verbose_name_plural = 'scrape progress'
-        ordering = ['source']
-
-    def __str__(self):
-        return f"{self.source} progress"
-
-
-class IngestionLog(models.Model):
-    """Database-backed ingestion event log."""
-    STATUS_CHOICES = [
-        ('started', 'Started'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
-        ('ok', 'OK'),
-        ('missing', 'Missing'),
-        ('stale', 'Stale'),
-        ('fresh', 'Fresh'),
-    ]
-
-    source = models.CharField(max_length=30, choices=SOURCE_CHOICES + [('all', 'All')], db_index=True)
-    action = models.CharField(max_length=50, db_index=True)
-    status = models.CharField(max_length=30, db_index=True)
-    details = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'ingestion log'
-        verbose_name_plural = 'ingestion logs'
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.source} {self.action} {self.status}"
-
-
-class SourceFileUpload(models.Model):
-    """Admin-uploaded source file for manual datasets."""
-    source = models.CharField(max_length=30, choices=SOURCE_CHOICES)
-    file = models.FileField(upload_to='source_uploads/')
-    description = models.TextField(blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    processed = models.BooleanField(default=False)
-
-    class Meta:
-        verbose_name = 'upload source file'
-        verbose_name_plural = 'upload source files'
-        ordering = ['-uploaded_at']
-
-    def __str__(self):
-        return f"{self.source}: {self.file.name}"
-
-    def delete(self, *args, **kwargs):
-        raw = RawSourceData.objects.filter(source=self.source, source_id=f"upload:{self.pk}").first()
-        if raw:
-            raw.delete()
-        return super().delete(*args, **kwargs)
+        return f"{self.clean_data} chunk {self.chunk_index}"
