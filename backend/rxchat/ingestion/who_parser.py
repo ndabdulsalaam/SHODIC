@@ -5,26 +5,50 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from rxchat.models import SourceFileUpload
-
-from .base import DocumentChunk, chunk_text, utc_timestamp
-from .storage import replace_chunks, save_raw_record
+from .base import DocumentChunk, chunk_text
+from .storage import save_clean_record
 
 
-def parse_who_eml() -> tuple[list[dict], list[DocumentChunk]]:
-    records = []
-    chunks: list[DocumentChunk] = []
-    for upload in SourceFileUpload.objects.filter(source="who").order_by("uploaded_at"):
-        path = Path(upload.file.path)
-        upload_records = _read_records(path)
-        for idx, record in enumerate(upload_records, start=1):
-            record = {**record, "file_name": path.name, "upload_id": upload.pk}
-            raw_source = save_raw_record("who", f"upload:{upload.pk}:row:{idx}", record, file_name=upload.file.name)
-            record_chunks = records_to_chunks([record], record_id=str(raw_source.source_id), id_prefix=f"who:{upload.pk}:{idx}")
-            replace_chunks(raw_source, record_chunks)
-            chunks.extend(record_chunks)
-            records.append(record)
-    return records, chunks
+def parse_who_eml(raw) -> tuple[list[dict], list[DocumentChunk]]:
+    """Extract records from a single RawData upload (CSV or XLSX)."""
+    path = Path(raw.file.path)
+    upload_records = _read_records(path)
+    all_chunks: list[DocumentChunk] = []
+
+    for idx, record in enumerate(upload_records, start=1):
+        record = {**record, "file_name": path.name, "upload_id": raw.pk}
+        # Represent each row as plain text for the draft stage.
+        raw_text = _record_to_text(record)
+        clean = save_clean_record(
+            "who",
+            f"upload:{raw.pk}:row:{idx}",
+            raw_text=raw_text,
+            file_name=raw.file.name,
+            raw_id=raw.pk,
+        )
+        all_chunks.extend(build_chunks_from_clean(clean, record=record))
+
+    return upload_records, all_chunks
+
+
+def build_chunks_from_clean(clean, record: dict | None = None) -> list[DocumentChunk]:
+    """Build chunks from an accepted CleanData record (called by ingest_drugs)."""
+    if record is None:
+        # Reconstruct minimal record from stored data.
+        record = clean.data or {"medicine_name": "", "category": "", "therapeutic_section": "", "formulation": "", "strength": ""}
+    return records_to_chunks([record], record_id=str(clean.source_id), id_prefix=f"who:{clean.pk}")
+
+
+def _record_to_text(record: dict) -> str:
+    title = record.get("medicine_name") or "Unknown"
+    lines = [
+        f"WHO Essential Medicines List medicine: {title}",
+        f"Category: {record.get('category', '')}",
+        f"Therapeutic section: {record.get('therapeutic_section', '')}",
+        f"Formulation: {record.get('formulation', '')}",
+        f"Strength: {record.get('strength', '')}",
+    ]
+    return "\n".join(lines)
 
 
 def _read_records(path: Path) -> list[dict]:
@@ -61,7 +85,6 @@ def _clean_row(row: dict) -> dict:
         "strength": _pick(normalized, "strength", "strengths"),
         "therapeutic_section": _pick(normalized, "therapeutic_section", "section"),
         "raw": {key: str(value).strip() for key, value in row.items() if value not in {None, ""}},
-        "parsed_at": utc_timestamp(),
     }
 
 
