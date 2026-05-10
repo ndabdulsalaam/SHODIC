@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 from pathlib import Path
 from unittest import skipUnless
@@ -10,11 +11,11 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from rxchat.ingestion.storage import save_raw_record
+from rxchat.ingestion.storage import save_clean_record
 from rxchat.ingestion.nafdac_parser import parse_nafdac, products_to_chunks
 from rxchat.ingestion.nafdac_scraper import parse_detail_html, parse_listing_html
 from rxchat.ingestion.source_status import source_status_rows
-from rxchat.models import DrugChunk, RawSourceData, SOURCE_CHOICES, SourceFileUpload
+from rxchat.models import CleanData, DrugChunk, RawData, SOURCE_CHOICES
 
 
 HAS_BS4 = importlib.util.find_spec("bs4") is not None
@@ -65,31 +66,33 @@ class NAFDACHtmlParserTests(TestCase):
 
 
 class IngestionPipelineTests(TestCase):
+    def _nafdac_clean(self, source_id, product_id, product_name, status, extra=None):
+        """Helper: create a nafdac CleanData row as the scraper would."""
+        data = {
+            "record_type": "product_detail",
+            "product_id": product_id,
+            "product_name": product_name,
+            "active_ingredients": [{"name": "Paracetamol", "strength": "500 mg"}],
+            "status": status,
+            "category": "Drugs",
+            "nrn": f"A4-{source_id}",
+            "source_url": f"https://greenbook.nafdac.gov.ng/products/details/{source_id}",
+            **(extra or {}),
+        }
+        clean = save_clean_record("nafdac", source_id, raw_text=str(data))
+        # Simulate accept() storing the structured dict
+        clean.data = data
+        clean.status = CleanData.STATUS_ACCEPTED
+        clean.save(update_fields=["data", "status", "updated_at"])
+        return clean
+
     def test_nafdac_parser_labels_inactive_product_and_suggests_active_alternative(self):
-        save_raw_record("nafdac", "1", {
-            "record_type": "product_detail",
-            "product_id": 1,
-            "product_name": "Old Para",
-            "active_ingredients": [{"name": "Paracetamol", "strength": "500 mg"}],
-            "status": "Expired",
-            "category": "Drugs",
-            "nrn": "A4-OLD",
-            "source_url": "https://greenbook.nafdac.gov.ng/products/details/1",
-        })
-        save_raw_record("nafdac", "2", {
-            "record_type": "product_detail",
-            "product_id": 2,
-            "product_name": "Active Para",
-            "active_ingredients": [{"name": "Paracetamol", "strength": "500 mg"}],
-            "status": "Active",
-            "category": "Drugs",
-            "nrn": "A4-ACTIVE",
-            "source_url": "https://greenbook.nafdac.gov.ng/products/details/2",
-        })
+        self._nafdac_clean("1", 1, "Old Para", "Expired")
+        self._nafdac_clean("2", 2, "Active Para", "Active")
 
         products, chunks = parse_nafdac()
-        old_product = next(product for product in products if product["product_id"] == 1)
-        old_chunk = next(chunk for chunk in chunks if chunk.record_id == "1")
+        old_product = next(p for p in products if p["product_id"] == 1)
+        old_chunk = next(c for c in chunks if c.record_id == "1")
 
         self.assertFalse(old_product["is_active"])
         self.assertIn("not currently marked active", old_chunk.text)
@@ -110,89 +113,116 @@ class IngestionPipelineTests(TestCase):
         self.assertEqual(len(SOURCE_CHOICES), 7)
         self.assertIn(("emdex", "EMDEX"), SOURCE_CHOICES)
 
-    def test_ingest_drugs_dry_run_parses_selected_source(self):
-        save_raw_record("nafdac", "1", {
-            "record_type": "product_detail",
-            "product_id": 1,
-            "product_name": "Active Drug",
-            "active_ingredients": [{"name": "Metformin", "strength": "500 mg"}],
-            "status": "Active",
-            "category": "Drugs",
-        })
-
-        call_command("ingest_drugs", "--source", "nafdac", "--dry-run")
-
-        chunk = DrugChunk.objects.get()
-        self.assertEqual(chunk.metadata["source_type"], "nafdac_greenbook")
-
-    def test_manual_upload_dry_run_creates_rows_without_marking_processed(self):
+    def test_parse_data_command_creates_draft_clean_records(self):
+        """parse_data writes draft CleanData; ingest_drugs skips non-accepted records."""
         with tempfile.TemporaryDirectory() as tmp:
             with override_settings(MEDIA_ROOT=tmp):
-                upload = SourceFileUpload.objects.create(
+                RawData.objects.create(
                     source="neml",
                     file=SimpleUploadedFile("neml_notes.txt", b"Paracetamol tablet 500 mg"),
                 )
+                call_command("parse_data", "--source", "neml")
 
-                call_command("ingest_drugs", "--source", "neml", "--dry-run")
+                self.assertTrue(CleanData.objects.filter(source="neml", status=CleanData.STATUS_DRAFT).exists())
+                # ingest_drugs should NOT create chunks yet (none accepted)
+                call_command("ingest_drugs", "--source", "neml")
+                self.assertEqual(DrugChunk.objects.filter(clean_data__source="neml").count(), 0)
 
-                upload.refresh_from_db()
-                self.assertFalse(upload.processed)
-                self.assertTrue(RawSourceData.objects.filter(source="neml", source_id=f"upload:{upload.pk}").exists())
-                self.assertTrue(DrugChunk.objects.filter(raw_source__source="neml").exists())
-
-    def test_emdex_upload_dry_run_creates_rows_without_marking_processed(self):
+    def test_parse_data_skips_uploads_that_already_have_clean_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             with override_settings(MEDIA_ROOT=tmp):
-                upload = SourceFileUpload.objects.create(
-                    source="emdex",
-                    file=SimpleUploadedFile("emdex_notes.txt", b"Licensed EMDEX monograph text"),
-                )
-
-                call_command("ingest_drugs", "--source", "emdex", "--dry-run")
-
-                upload.refresh_from_db()
-                self.assertFalse(upload.processed)
-                self.assertTrue(RawSourceData.objects.filter(source="emdex", source_id=f"upload:{upload.pk}").exists())
-                self.assertTrue(DrugChunk.objects.filter(raw_source__source="emdex").exists())
-
-    @patch("rxchat.management.commands.ingest_drugs.upsert_drug_chunks", return_value=1)
-    def test_manual_upload_is_marked_processed_after_qdrant_upsert(self, upsert_chunks):
-        with tempfile.TemporaryDirectory() as tmp:
-            with override_settings(MEDIA_ROOT=tmp):
-                upload = SourceFileUpload.objects.create(
+                RawData.objects.create(
                     source="neml",
                     file=SimpleUploadedFile("neml_notes.txt", b"Paracetamol tablet 500 mg"),
                 )
+                call_command("parse_data", "--source", "neml")
+                clean = CleanData.objects.get(source="neml")
+                clean.status = CleanData.STATUS_ACCEPTED
+                clean.raw_text = "Reviewed text"
+                clean.save(update_fields=["status", "raw_text", "updated_at"])
 
+                call_command("parse_data", "--source", "neml")
+
+                clean.refresh_from_db()
+                self.assertEqual(clean.status, CleanData.STATUS_ACCEPTED)
+                self.assertEqual(clean.raw_text, "Reviewed text")
+
+    def test_ingest_drugs_processes_accepted_clean_records(self):
+        """ingest_drugs creates DrugChunk rows from accepted CleanData."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                raw = RawData.objects.create(
+                    source="neml",
+                    file=SimpleUploadedFile("neml_notes.txt", b"Paracetamol tablet 500 mg"),
+                )
+                call_command("parse_data", "--source", "neml")
+                # Accept the draft record
+                CleanData.objects.filter(source="neml").update(status=CleanData.STATUS_ACCEPTED)
                 call_command("ingest_drugs", "--source", "neml")
 
-                upload.refresh_from_db()
-                self.assertTrue(upload.processed)
-                upsert_chunks.assert_called_once()
+                self.assertTrue(DrugChunk.objects.filter(clean_data__source="neml").exists())
+
+    def test_accept_structured_scraper_text_keeps_parser_shape(self):
+        data = {
+            "record_type": "product_detail",
+            "product_id": 7,
+            "product_name": "Structured Para",
+            "active_ingredients": [{"name": "Paracetamol", "strength": "500 mg"}],
+            "status": "Active",
+            "category": "Drugs",
+        }
+        clean = save_clean_record("nafdac", "7", raw_text=json.dumps(data))
+
+        clean.accept()
+        products, chunks = parse_nafdac()
+
+        clean.refresh_from_db()
+        self.assertEqual(clean.data["record_type"], "product_detail")
+        self.assertEqual(products[0]["product_name"], "Structured Para")
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(clean.status, CleanData.STATUS_CHUNKED)
 
     @patch("rxchat.qdrant_service.delete_points")
-    def test_raw_source_delete_removes_qdrant_vectors(self, delete_points):
-        raw = save_raw_record("nafdac", "delete-me", {"record_type": "product_detail", "product_id": "delete-me"})
-        DrugChunk.objects.create(raw_source=raw, chunk_index=1, text="Delete", qdrant_point_id="point-1")
+    def test_reset_to_draft_removes_existing_chunks_and_vectors(self, delete_points):
+        clean = save_clean_record("nafdac", "reset-me", raw_text="reset me")
+        clean.status = CleanData.STATUS_CHUNKED
+        clean.data = {"record_type": "product_detail"}
+        clean.save(update_fields=["status", "data", "updated_at"])
+        DrugChunk.objects.create(clean_data=clean, chunk_index=1, text="Reset", qdrant_point_id="point-1")
 
-        raw.delete()
+        clean.reset_to_draft()
+
+        self.assertFalse(clean.chunks.exists())
+        delete_points.assert_called_once_with(["point-1"])
+        clean.refresh_from_db()
+        self.assertEqual(clean.status, CleanData.STATUS_DRAFT)
+        self.assertEqual(clean.data, {})
+
+    @patch("rxchat.qdrant_service.delete_points")
+    def test_clean_data_delete_removes_qdrant_vectors(self, delete_points):
+        clean = save_clean_record("nafdac", "delete-me", raw_text="delete me")
+        DrugChunk.objects.create(clean_data=clean, chunk_index=1, text="Delete", qdrant_point_id="point-1")
+
+        clean.delete()
 
         delete_points.assert_called_once_with(["point-1"])
 
     @patch("rxchat.qdrant_service.delete_points")
-    def test_upload_delete_removes_processed_raw_source_and_qdrant_vectors(self, delete_points):
+    def test_raw_data_delete_cascades_to_clean_data_and_qdrant(self, delete_points):
         with tempfile.TemporaryDirectory() as tmp:
             with override_settings(MEDIA_ROOT=tmp):
-                upload = SourceFileUpload.objects.create(
+                raw = RawData.objects.create(
                     source="neml",
                     file=SimpleUploadedFile("neml_notes.txt", b"Paracetamol tablet 500 mg"),
                 )
-                raw = save_raw_record("neml", f"upload:{upload.pk}", {"filename": "neml_notes.txt"})
-                DrugChunk.objects.create(raw_source=raw, chunk_index=1, text="Delete", qdrant_point_id="point-1")
+                clean = save_clean_record("neml", f"upload:{raw.pk}", raw_text="Paracetamol")
+                clean.raw = raw
+                clean.save(update_fields=["raw"])
+                DrugChunk.objects.create(clean_data=clean, chunk_index=1, text="Delete", qdrant_point_id="point-1")
 
-                upload.delete()
+                raw.delete()
 
-        self.assertFalse(RawSourceData.objects.filter(source="neml", source_id=f"upload:{upload.pk}").exists())
+        self.assertFalse(CleanData.objects.filter(source="neml", source_id=f"upload:{raw.pk}").exists())
         delete_points.assert_called_once_with(["point-1"])
 
 
@@ -231,8 +261,8 @@ class QdrantHybridTests(TestCase):
 
         fake_client = self.FakeQdrantClient()
         get_client.return_value = fake_client
-        raw = save_raw_record("nafdac", "vector-test", {"record_type": "product_detail"})
-        chunk = DrugChunk.objects.create(raw_source=raw, chunk_index=0, text="Paracetamol tablet 500 mg")
+        clean = save_clean_record("nafdac", "vector-test", raw_text="vector test")
+        chunk = DrugChunk.objects.create(clean_data=clean, chunk_index=0, text="Paracetamol tablet 500 mg")
 
         upserted = upsert_drug_chunks([chunk])
 
@@ -314,7 +344,8 @@ class IngestionAdminTests(TestCase):
 
     @override_settings(ROOT_URLCONF="config.urls")
     @patch("rxchat.admin._queue_task")
-    def test_admin_ingestion_upload_creates_source_upload_and_queues_processing(self, queue_task):
+    def test_admin_ingestion_upload_creates_raw_data_and_queues_parse(self, queue_task):
+        """Upload creates RawData row and queues parse_data (not ingest_drugs directly)."""
         with tempfile.TemporaryDirectory() as tmp:
             with override_settings(MEDIA_ROOT=tmp):
                 response = self.client.post(
@@ -327,37 +358,10 @@ class IngestionAdminTests(TestCase):
                 )
 
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(SourceFileUpload.objects.filter(source="neml").exists())
-        queue_task.assert_called_once_with("ingest_drugs", "--source", "neml")
+        self.assertTrue(RawData.objects.filter(source="neml").exists())
+        queue_task.assert_called_once_with("parse_data", "--source", "neml")
 
     @override_settings(ROOT_URLCONF="config.urls")
-    @patch("rxchat.admin._queue_task")
-    def test_admin_source_file_upload_add_queues_processing(self, queue_task):
-        with tempfile.TemporaryDirectory() as tmp:
-            with override_settings(MEDIA_ROOT=tmp):
-                response = self.client.post(
-                    "/admin/rxchat/sourcefileupload/add/",
-                    {
-                        "source": "emdex",
-                        "description": "Licensed EMDEX upload",
-                        "file": SimpleUploadedFile("emdex.txt", b"EMDEX monograph"),
-                        "_save": "Save",
-                    },
-                )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(SourceFileUpload.objects.filter(source="emdex").exists())
-        queue_task.assert_called_once_with("ingest_drugs", "--source", "emdex")
-
-    @override_settings(ROOT_URLCONF="config.urls")
-    def test_admin_changelist_uses_compact_header(self):
-        response = self.client.get("/admin/rxchat/rawsourcedata/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="rxc-changelist-header"')
-        self.assertContains(response, "Select raw data source to change")
-        self.assertContains(response, 'id="toolbar"')
-
     def test_admin_ingestion_requires_permission(self):
         regular = User.objects.create_user(
             username="regular@example.com",
@@ -370,3 +374,15 @@ class IngestionAdminTests(TestCase):
         response = self.client.get("/admin/rxchat/ingestion/")
 
         self.assertEqual(response.status_code, 403)
+
+    @override_settings(ROOT_URLCONF="config.urls")
+    def test_admin_clean_data_changelist_is_accessible(self):
+        response = self.client.get("/admin/rxchat/cleandata/")
+
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(ROOT_URLCONF="config.urls")
+    def test_admin_raw_data_changelist_is_accessible(self):
+        response = self.client.get("/admin/rxchat/rawdata/")
+
+        self.assertEqual(response.status_code, 200)
