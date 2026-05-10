@@ -23,7 +23,7 @@ a retrieval pipeline.
 
 - Fildah parent brand website APIs backed by Django admin-managed content
 - Product catalog with RxChat as the first live product
-- Documentation, blog/update, page, and contact/support models
+- Documentation, blog/update, page, and contact/support model(s)
 - Shared account hub API for product access, organizations, and subscription summary
 - Streaming AI chat over server-sent events
 - Anonymous session chats without registration
