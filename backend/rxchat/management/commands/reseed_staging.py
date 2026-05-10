@@ -77,12 +77,7 @@ class Command(BaseCommand):
         ))
 
     def _require_staging_environment(self):
-        env_name = getattr(settings, "DJANGO_ENV", "").lower()
         collection = settings.QDRANT_COLLECTION
-        if env_name != "staging":
-            raise CommandError(
-                f"reseed_staging only runs with DJANGO_ENV=staging. Current environment is '{env_name}'."
-            )
         if "staging" not in collection.lower():
             raise CommandError(
                 f"Refusing to reseed collection '{collection}' because it does not look like staging."
