@@ -37,4 +37,3 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Ingestion schedules ready: {created} created, {updated} updated."
         ))
-
