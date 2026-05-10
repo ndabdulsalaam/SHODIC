@@ -7,9 +7,8 @@ services:
     startCommand: "python manage.py collectstatic --noinput && python manage.py migrate && gunicorn config.wsgi:application"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
-        value: "config.settings.production"
-      - key: DJANGO_ENV
-        value: "production"
+        value: "config.settings"
+
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
