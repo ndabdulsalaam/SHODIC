@@ -10,7 +10,7 @@ does not make live provider calls.
 
 import os
 
-from config.env import configure_environment
+from dotenv import load_dotenv
 
 
 PASS = "\033[92m✓\033[0m"
@@ -90,7 +90,7 @@ def check_qdrant():
 
 
 def main():
-    configure_environment()
+    load_dotenv()
     check_openrouter()
     check_qdrant()
     print(f"\n{'─' * 55}\n  Done.\n{'─' * 55}\n")
