@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rxchat.models import RawSourceData
+from rxchat.models import CleanData
 
 from .base import DocumentChunk, chunk_text, normalize_name, utc_timestamp
 from .nafdac_parser import clean_product, load_raw_products
@@ -44,8 +44,12 @@ def _names_from_openfda(openfda: dict) -> list[str]:
 def load_raw_labels() -> list[dict]:
     labels = []
     seen: set[str] = set()
-    for row in RawSourceData.objects.filter(source="openfda").order_by("source_id"):
-        label = row.raw_data or {}
+    rows = CleanData.objects.filter(
+        source="openfda",
+        status__in=[CleanData.STATUS_ACCEPTED, CleanData.STATUS_CHUNKED],
+    ).order_by("source_id")
+    for row in rows:
+        label = row.data or {}
         if label.get("record_type") not in {"label", None}:
             continue
         label_id = label.get("id") or label.get("set_id") or row.source_id
@@ -53,7 +57,7 @@ def load_raw_labels() -> list[dict]:
             continue
         if label_id:
             seen.add(label_id)
-        labels.append({**label, "_raw_source_id": row.id})
+        labels.append({**label, "_clean_data_id": row.id})
     return labels
 
 
@@ -97,7 +101,7 @@ def clean_label(label: dict) -> dict:
         "sections": sections,
         "source_url": "https://api.fda.gov/drug/label.json",
         "parsed_at": utc_timestamp(),
-        "_raw_source_id": label.get("_raw_source_id"),
+        "_clean_data_id": label.get("_clean_data_id"),
     }
 
 
@@ -165,12 +169,14 @@ def parse_openfda(curated: bool = False) -> tuple[list[dict], list[DocumentChunk
     chunks_by_record: dict[str, list[DocumentChunk]] = {}
     for chunk in chunks:
         chunks_by_record.setdefault(chunk.record_id, []).append(chunk)
-    raw_by_source_id = {
+    clean_by_source_id = {
         row.source_id: row
-        for row in RawSourceData.objects.filter(source="openfda", source_id__in=chunks_by_record)
+        for row in CleanData.objects.filter(source="openfda", source_id__in=chunks_by_record)
     }
     for source_id, record_chunks in chunks_by_record.items():
-        raw_source = raw_by_source_id.get(source_id)
-        if raw_source:
-            replace_chunks(raw_source, record_chunks)
+        clean = clean_by_source_id.get(source_id)
+        if clean:
+            replace_chunks(clean, record_chunks)
+            clean.status = CleanData.STATUS_CHUNKED
+            clean.save(update_fields=["status", "updated_at"])
     return labels, chunks
