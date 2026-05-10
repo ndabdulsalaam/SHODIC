@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -16,10 +17,10 @@ try:
 except ImportError:  # pragma: no cover - exercised only before requirements install
     BeautifulSoup = None
 
-from rxchat.models import RawSourceData
+from rxchat.models import CleanData
 
 from .base import split_multi_value, utc_timestamp
-from .storage import get_progress, save_progress, save_raw_record
+from .storage import save_clean_record
 
 logger = logging.getLogger(__name__)
 
@@ -284,10 +285,12 @@ class NAFDACGreenbookScraper:
             page += 1
 
         for record in listings:
-            save_raw_record(
+            save_clean_record(
                 "nafdac",
                 f"listing:{category_id}:{record['product_id']}",
-                {**record, "record_type": "listing"},
+                raw_text=json.dumps({**record, "record_type": "listing"}, ensure_ascii=False),
+                data={**record, "record_type": "listing"},
+                status=CleanData.STATUS_ACCEPTED,
             )
         return listings
 
@@ -307,15 +310,15 @@ class NAFDACGreenbookScraper:
             product_id = str(listing.get("product_id") or _detail_id_from_url(listing.get("detail_url", "")))
             if not product_id:
                 continue
-            existing = RawSourceData.objects.filter(
+            existing = CleanData.objects.filter(
                 source="nafdac",
                 source_id=product_id,
-                raw_data__record_type="product_detail",
+                data__record_type="product_detail",
             ).first()
             if existing:
                 if product_id not in scraped_ids:
                     scraped_ids.add(product_id)
-                details.append(existing.raw_data)
+                details.append(existing.data)
                 continue
             detail_url = listing.get("detail_url") or f"{self.base_url}/products/details/{product_id}"
             html = self._get(detail_url)
@@ -324,7 +327,13 @@ class NAFDACGreenbookScraper:
                 detail["category"] = listing.get("category", "")
                 detail["category_id"] = listing.get("category_id")
             detail["record_type"] = "product_detail"
-            save_raw_record("nafdac", product_id, detail)
+            save_clean_record(
+                "nafdac",
+                product_id,
+                raw_text=json.dumps(detail, ensure_ascii=False),
+                data=detail,
+                status=CleanData.STATUS_ACCEPTED,
+            )
             details.append(detail)
             scraped_ids.add(product_id)
             progress["scraped_product_ids"] = sorted(scraped_ids, key=lambda value: int(value) if value.isdigit() else value)
@@ -359,21 +368,21 @@ class NAFDACGreenbookScraper:
         return {"completed_categories": [], "last_page": {}, "scraped_product_ids": []}
 
     def _load_progress(self) -> dict:
-        progress = get_progress("nafdac", self._empty_progress())
-        if not isinstance(progress, dict):
-            return self._empty_progress()
+        # Progress is stored in-memory only (no DB model).
+        progress = self._empty_progress()
         progress.setdefault("completed_categories", [])
         progress.setdefault("last_page", {})
         progress.setdefault("scraped_product_ids", [])
         return progress
 
     def _save_progress(self, progress: dict) -> None:
-        save_progress("nafdac", progress)
+        # No-op: progress no longer persisted to DB.
+        pass
 
     def _stored_listings(self, category_id: int) -> list[dict]:
         prefix = f"listing:{category_id}:"
         return [
-            item.raw_data
-            for item in RawSourceData.objects.filter(source="nafdac", source_id__startswith=prefix)
+            item.data
+            for item in CleanData.objects.filter(source="nafdac", source_id__startswith=prefix)
             .order_by("source_id")
         ]
