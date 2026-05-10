@@ -23,20 +23,13 @@ def utc_timestamp() -> str:
 
 
 def append_ingestion_log(source: str, event: str, status: str, **details: Any) -> dict[str, Any]:
-    entry = {
+    return {
         "source": source,
         "event": event,
         "status": status,
         "checked_at": utc_timestamp(),
         "details": details,
     }
-    try:
-        from .storage import log_ingestion  # noqa: PLC0415
-
-        log_ingestion(source, event, status, **details)
-    except Exception:
-        pass
-    return entry
 
 
 def normalize_name(value: str | None) -> str:
