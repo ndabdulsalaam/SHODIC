@@ -14,7 +14,7 @@ Usage:
 Requirements:
     pip install qdrant-client
 
-    Environment variables (backend/.env.dev, .env.staging, or host env):
+    Environment variables (.env or host env):
     QDRANT_URL       — your Qdrant Cloud cluster URL
     QDRANT_API_KEY   — your Qdrant Cloud API key
     QDRANT_COLLECTION — collection name
@@ -114,8 +114,7 @@ def active_collection_name() -> str:
 
 def is_protected_collection(collection_name: str | None = None) -> bool:
     collection = (collection_name or active_collection_name()).lower()
-    env_name = getattr(settings, "DJANGO_ENV", "").lower()
-    return "prod" in collection or env_name == "production"
+    return "prod" in collection
 
 
 def collection_exists(collection_name: str | None = None) -> bool:
