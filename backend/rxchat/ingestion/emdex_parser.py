@@ -4,44 +4,43 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rxchat.models import SourceFileUpload
-
-from .base import DocumentChunk, chunk_text, extract_text, utc_timestamp
-from .storage import replace_chunks, save_raw_record
+from .base import DocumentChunk, chunk_text, extract_text
+from .storage import save_clean_record
 
 
-def parse_emdex() -> tuple[list[dict], list[DocumentChunk]]:
-    documents = []
-    chunks: list[DocumentChunk] = []
+def parse_emdex(raw) -> tuple[str, list[DocumentChunk]]:
+    """Extract text from a single RawData upload."""
+    path = Path(raw.file.path)
+    text = extract_text(path)
+    title = f"EMDEX - {path.stem}"
 
-    for upload in SourceFileUpload.objects.filter(source="emdex").order_by("uploaded_at"):
-        path = Path(upload.file.path)
-        text = extract_text(path)
-        if not text.strip():
-            continue
-        title = f"EMDEX - {path.stem}"
-        document = {
-            "filename": path.name,
-            "title": title,
-            "text": text,
-            "parsed_at": utc_timestamp(),
-            "license_note": "Licensed EMDEX upload",
-        }
-        documents.append(document)
-        raw_source = save_raw_record("emdex", f"upload:{upload.pk}", document, file_name=upload.file.name)
-        record_chunks = []
-        for idx, chunk in enumerate(chunk_text(text), start=1):
-            record_chunks.append(DocumentChunk(
-                id=f"emdex:{upload.pk}:{idx}",
-                text=f"{title}\n\n{chunk}",
-                source=title,
-                source_type="emdex",
-                record_id=str(raw_source.source_id),
-                status="active",
-                is_active=True,
-                effective_date="",
-                metadata={"filename": path.name, "drug_name": title, "category": "EMDEX"},
-            ))
-        replace_chunks(raw_source, record_chunks)
-        chunks.extend(record_chunks)
-    return documents, chunks
+    clean = save_clean_record(
+        "emdex",
+        f"upload:{raw.pk}",
+        raw_text=text,
+        file_name=raw.file.name,
+        raw_id=raw.pk,
+    )
+
+    return text, build_chunks_from_clean(clean)
+
+
+def build_chunks_from_clean(clean) -> list[DocumentChunk]:
+    """Build chunks from an accepted CleanData record (called by ingest_drugs)."""
+    text = clean.raw_text
+    path_name = clean.file_name or ""
+    title = f"EMDEX - {Path(path_name).stem}" if path_name else "EMDEX"
+    chunks = []
+    for idx, chunk in enumerate(chunk_text(text), start=1):
+        chunks.append(DocumentChunk(
+            id=f"emdex:{clean.pk}:{idx}",
+            text=f"{title}\n\n{chunk}",
+            source=title,
+            source_type="emdex",
+            record_id=str(clean.source_id),
+            status="active",
+            is_active=True,
+            effective_date="",
+            metadata={"filename": path_name, "drug_name": title, "category": "EMDEX"},
+        ))
+    return chunks
