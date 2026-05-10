@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rxchat.models import RawSourceData, SourceFileUpload
+from rxchat.models import CleanData, RawData
 
 
 @dataclass(frozen=True)
@@ -90,16 +90,18 @@ EXPECTATIONS = [
 
 def _exists(expectation: SourceExpectation) -> bool:
     if expectation.command:
-        return RawSourceData.objects.filter(source=expectation.source).exists()
-    return SourceFileUpload.objects.filter(source=expectation.source).exists()
+        # Scraper sources write directly to CleanData.
+        return CleanData.objects.filter(source=expectation.source).exists()
+    # Upload-based sources have entries in RawData.
+    return RawData.objects.filter(source=expectation.source).exists()
 
 
 def source_status_rows() -> list[dict[str, str | bool]]:
     rows = []
     for expectation in EXPECTATIONS:
         exists = _exists(expectation)
-        upload_count = SourceFileUpload.objects.filter(source=expectation.source).count()
-        raw_count = RawSourceData.objects.filter(source=expectation.source).count()
+        upload_count = RawData.objects.filter(source=expectation.source).count()
+        raw_count = CleanData.objects.filter(source=expectation.source).count()
         rows.append({
             "source": expectation.label,
             "type": expectation.kind,
