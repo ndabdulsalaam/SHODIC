@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Iterable
 
-from rxchat.models import RawSourceData
+from rxchat.models import CleanData
 
 from .base import (
     DocumentChunk,
@@ -27,12 +27,16 @@ def is_active_product(status: str | None) -> bool:
 
 def load_raw_products() -> list[dict]:
     products = []
-    for row in RawSourceData.objects.filter(source="nafdac").order_by("source_id"):
-        data = row.raw_data or {}
+    rows = CleanData.objects.filter(
+        source="nafdac",
+        status__in=[CleanData.STATUS_ACCEPTED, CleanData.STATUS_CHUNKED],
+    ).order_by("source_id")
+    for row in rows:
+        data = row.data or {}
         if data.get("record_type") not in {"product_detail", None}:
             continue
         if isinstance(data, dict) and data.get("product_id"):
-            products.append({**data, "_raw_source_id": row.id})
+            products.append({**data, "_clean_data_id": row.id})
     return products
 
 
@@ -69,7 +73,7 @@ def clean_product(product: dict) -> dict:
         "product_description": (product.get("product_description") or "").strip(),
         "scraped_at": product.get("scraped_at") or utc_timestamp(),
         "source_url": product.get("source_url") or "",
-        "_raw_source_id": product.get("_raw_source_id"),
+        "_clean_data_id": product.get("_clean_data_id"),
     }
 
 
@@ -178,12 +182,14 @@ def parse_nafdac() -> tuple[list[dict], list[DocumentChunk]]:
     chunks_by_record: dict[str, list[DocumentChunk]] = defaultdict(list)
     for chunk in chunks:
         chunks_by_record[chunk.record_id].append(chunk)
-    raw_by_source_id = {
+    clean_by_source_id = {
         row.source_id: row
-        for row in RawSourceData.objects.filter(source="nafdac", source_id__in=chunks_by_record)
+        for row in CleanData.objects.filter(source="nafdac", source_id__in=chunks_by_record)
     }
     for source_id, record_chunks in chunks_by_record.items():
-        raw_source = raw_by_source_id.get(source_id)
-        if raw_source:
-            replace_chunks(raw_source, record_chunks)
+        clean = clean_by_source_id.get(source_id)
+        if clean:
+            replace_chunks(clean, record_chunks)
+            clean.status = CleanData.STATUS_CHUNKED
+            clean.save(update_fields=["status", "updated_at"])
     return products, chunks
