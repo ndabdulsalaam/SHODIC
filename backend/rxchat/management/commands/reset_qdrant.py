@@ -31,5 +31,5 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS(
-            f"Qdrant collection '{collection}' reset for {settings.DJANGO_ENV}."
+            f"Qdrant collection '{collection}' has been reset."
         ))
