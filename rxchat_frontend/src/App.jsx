@@ -1,11 +1,15 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import ChatPage from './pages/ChatPage'
+import UnderConstructionPage from './pages/UnderConstructionPage'
 import './index.css'
 
 const AuthPage = lazy(() => import('./pages/AuthPage'))
+const isUnderConstruction = import.meta.env.VITE_UNDER_CONSTRUCTION === 'true'
 
 function App() {
+  if (isUnderConstruction) return <UnderConstructionPage />
+
   return (
     <BrowserRouter>
       <Suspense fallback={null}>
