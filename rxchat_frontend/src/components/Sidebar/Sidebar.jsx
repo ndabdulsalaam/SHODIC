@@ -1,5 +1,5 @@
-import { memo, useState, useRef, useEffect, useMemo } from 'react'
-import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlineArrowRightOnRectangle, HiOutlineCog6Tooth, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import './Sidebar.css'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -48,7 +48,7 @@ function groupConversations(conversations) {
     ].filter((group) => group.items.length > 0)
 }
 
-function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse, user, onShowAuth, onOpenSettings }) {
+function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, isOpen, onClose, collapsed, onCollapse }) {
     const [editingId, setEditingId] = useState(null)
     const [editTitle, setEditTitle] = useState('')
     const editInputRef = useRef(null)
@@ -89,26 +89,10 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
         }
     }
 
-    // Build avatar initials from profile first/last name
-    const getInitials = () => {
-        const first = user?.first_name?.charAt(0)?.toUpperCase() || ''
-        const last = user?.last_name?.charAt(0)?.toUpperCase() || ''
-        if (first && last) return `${first}${last}`
-        if (first) return first
-        return user?.email?.charAt(0)?.toUpperCase() || 'U'
-    }
-
-    // Display name: first + last from profile
-    const getDisplayName = () => {
-        const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
-        return name || user?.email || 'User'
-    }
-
     return (
         <>
             <div className={`sidebar__overlay ${isOpen ? 'sidebar__overlay--visible' : ''}`} onClick={onClose} />
             <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''} ${collapsed ? 'sidebar--collapsed' : ''}`}>
-                {/* Header */}
                 <div className="sidebar__header">
                     <div className="sidebar__header-top">
                         <div className="sidebar__logo">
@@ -131,7 +115,6 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                     </button>
                 </div>
 
-                {/* Conversations List */}
                 <nav className="sidebar__conversations">
                     {groupedConversations.map((group) => (
                         <div className="sidebar__conversation-group" key={group.label}>
@@ -203,42 +186,9 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                         </div>
                     ))}
                 </nav>
-
-                {/* Footer */}
-                <div className="sidebar__footer">
-                    {user ? (
-                        <div className="sidebar__user-profile">
-                            <div className="sidebar__user-info">
-                                <div className="sidebar__user-avatar">
-                                    {getInitials()}
-                                </div>
-                                <div className="sidebar__user-details">
-                                    <span className="sidebar__user-name">
-                                        {getDisplayName()}
-                                    </span>
-                                </div>
-                            </div>
-                            <button className="sidebar__settings-btn" onClick={onOpenSettings} title="Settings">
-                                <HiOutlineCog6Tooth size={18} />
-                            </button>
-                        </div>
-                    ) : (
-                        <button className="sidebar__user-btn" onClick={onShowAuth}>
-                            <HiOutlineArrowRightOnRectangle size={18} />
-                            <span>Sign in</span>
-                        </button>
-                    )}
-                </div>
             </aside>
         </>
     )
-}
-
-function sameUserSummary(prevUser, nextUser) {
-    return (prevUser?.id || null) === (nextUser?.id || null)
-        && (prevUser?.email || '') === (nextUser?.email || '')
-        && (prevUser?.first_name || '') === (nextUser?.first_name || '')
-        && (prevUser?.last_name || '') === (nextUser?.last_name || '')
 }
 
 function sameConversationSummaries(prevConversations = [], nextConversations = []) {
@@ -258,7 +208,6 @@ function areSidebarPropsEqual(prevProps, nextProps) {
     return prevProps.activeId === nextProps.activeId
         && prevProps.isOpen === nextProps.isOpen
         && prevProps.collapsed === nextProps.collapsed
-        && sameUserSummary(prevProps.user, nextProps.user)
         && sameConversationSummaries(prevProps.conversations, nextProps.conversations)
 }
 

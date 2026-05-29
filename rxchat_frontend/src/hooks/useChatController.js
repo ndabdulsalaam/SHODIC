@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiRequest, apiUrl, readApiResponse } from '../utils/api'
-import { cacheAuthUser, readCachedAuthUser } from '../utils/authCache'
 import { readSseStream } from '../utils/sse'
 import { productApiPath } from '../config/product'
 
@@ -66,10 +65,6 @@ export default function useChatController() {
     const [isLoading, setIsLoading] = useState(false)
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-    const [showAuthModal, setShowAuthModal] = useState(false)
-    const [authMode, setAuthMode] = useState('login')
-    const [user, setUser] = useState(() => readCachedAuthUser())
-    const [settingsOpen, setSettingsOpen] = useState(false)
     const [loadingConversationId, setLoadingConversationId] = useState(null)
     const abortControllerRef = useRef(null)
     const conversationsRef = useRef([])
@@ -213,22 +208,6 @@ export default function useChatController() {
     }, [])
 
     useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                const data = await apiRequest('/auth/me/')
-                if (data?.id) {
-                    setUser(data)
-                    cacheAuthUser(data)
-                } else {
-                    setUser(null)
-                    cacheAuthUser(null)
-                }
-            } catch { /* not logged in */ }
-        }
-        checkAuth()
-    }, [])
-
-    useEffect(() => {
         const loadConversations = async () => {
             try {
                 const data = await apiRequest(productApiPath('/conversations/'))
@@ -238,26 +217,6 @@ export default function useChatController() {
             } catch { /* offline or error */ }
         }
         loadConversations()
-    }, [user])
-
-    const handleShowAuth = useCallback((mode = 'login') => {
-        setAuthMode(mode)
-        setShowAuthModal(true)
-    }, [])
-
-    const handleLogout = useCallback(async () => {
-        try {
-            await apiRequest('/auth/logout/', { method: 'POST' })
-        } catch { /* ignore */ }
-        setUser(null)
-        cacheAuthUser(null)
-        setConversations([])
-        setActiveConversationId(null)
-    }, [])
-
-    const handleLogin = useCallback((userData) => {
-        setUser(userData)
-        cacheAuthUser(userData)
     }, [])
 
     const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
@@ -304,7 +263,6 @@ export default function useChatController() {
             _clientKey: tempUserMessageId,
             role: 'user',
             content: trimmedText,
-            attachments: [],
             created_at: messageCreatedAt,
             _pending: true,
         }
@@ -795,31 +753,22 @@ export default function useChatController() {
 
     return {
         activeConversationId,
-        authMode,
         conversations,
         handleDeleteChat,
         handleEditMessage,
-        handleLogin,
-        handleLogout,
         handleMessageVariantChange,
         handleNewChat,
         handleRenameChat,
         handleResendMessage,
         handleSelectChat,
         handleSendMessage,
-        handleShowAuth,
         handleStopGeneration,
         isLoading,
         isLoadingMessages: loadingConversationId === activeConversationId && loadingConversationId !== null,
         messages,
-        setSettingsOpen,
-        setShowAuthModal,
         setSidebarCollapsed,
         setSidebarOpen,
-        settingsOpen,
-        showAuthModal,
         sidebarCollapsed,
         sidebarOpen,
-        user,
     }
 }

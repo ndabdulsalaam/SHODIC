@@ -2,7 +2,6 @@ export const PRODUCT = Object.freeze({
     slug: 'rxchat',
     name: 'RxChat',
     apiNamespace: 'rxchat',
-    frontendDomain: 'rxchat.fildah.com',
 })
 
 export function productApiPath(path = '') {

@@ -1,5 +1,5 @@
 import { Fragment, useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { HiOutlineBars3, HiOutlineArrowRightOnRectangle, HiOutlineChevronDown } from 'react-icons/hi2'
+import { HiOutlineBars3, HiOutlineChevronDown } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
 import DateSeparator from '../DateSeparator/DateSeparator'
@@ -23,19 +23,9 @@ function getMessageDateKey(message) {
 }
 
 function getMessagePreview(message) {
-    const content = message?.content || ''
-    const attachmentNames = Array.isArray(message?.attachments)
-        ? message.attachments.map((attachment) => attachment.name).filter(Boolean).join(', ')
-        : ''
-    const preview = String(content || attachmentNames || 'Attachment').replace(/\s+/g, ' ').trim()
+    const preview = String(message?.content || '').replace(/\s+/g, ' ').trim() || 'Message'
     if (preview.length <= 50) return preview
     return `${preview.slice(0, 50)}...`
-}
-
-function hasRegeneratableAttachments(message) {
-    const attachments = Array.isArray(message?.attachments) ? message.attachments : []
-    return attachments.length > 0
-        && attachments.every((attachment) => attachment.kind === 'image' && attachment.preview_data_url)
 }
 
 function getSubmittedUserMessageToken(message) {
@@ -55,9 +45,6 @@ function ChatWindow({
     isLoading,
     isLoadingMessages,
     onToggleSidebar,
-    onShowAuth,
-    user,
-    onLogout,
     onEditMessage,
     onResendMessage,
     onMessageVariantChange,
@@ -83,6 +70,7 @@ function ChatWindow({
         hasActiveStreamRef.current = hasActiveStream
         hasPendingUserMessageRef.current = hasPendingUserMessage
     }, [hasActiveStream, hasPendingUserMessage])
+
     const userMessageNavItems = useMemo(() => (
         messages
             .map((msg, index) => ({
@@ -95,22 +83,18 @@ function ChatWindow({
 
     const showMinimap = userMessageNavItems.length > 2 && !isWelcome && !isLoadingMessages
 
-    // Suggestion chip click → pre-fill input for editing
     const handleSuggestionClick = useCallback((text) => {
         setPrefillKey((current) => current + 1)
         setPrefillText(text)
     }, [])
 
-    // Determine if the user is near the bottom of the scroll area
     const checkIfNearBottom = useCallback(() => {
         const el = messagesContainerRef.current
         if (!el) return true
-        // "Near bottom" = within 150px of the bottom edge
         const threshold = 150
         return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
     }, [])
 
-    // Track scroll position to know if user has scrolled up
     const handleScroll = useCallback(() => {
         const isNearBottom = checkIfNearBottom()
         isNearBottomRef.current = isNearBottom
@@ -163,7 +147,6 @@ function ChatWindow({
         isNearBottomRef.current = false
     }, [messages])
 
-    // New sent user messages move near the top of the pane; streamed assistant text does not auto-follow.
     useEffect(() => {
         const sentUserMessage = [...messages].reverse().find((msg) => getSubmittedUserMessageToken(msg))
         const sentToken = getSubmittedUserMessageToken(sentUserMessage)
@@ -212,14 +195,12 @@ function ChatWindow({
         for (let i = messageIndex - 1; i >= 0; i -= 1) {
             const candidate = messages[i]
             if (candidate.role === 'user' && candidate.id) {
-                const hasAttachments = Array.isArray(candidate.attachments) && candidate.attachments.length > 0
-                return !hasAttachments || hasRegeneratableAttachments(candidate) ? candidate.id : null
+                return candidate.id
             }
         }
         return null
     }
 
-    // Determine what to render in the messages area
     const renderContent = () => {
         if (isLoadingMessages) {
             return (
@@ -237,7 +218,6 @@ function ChatWindow({
             return (
                 <WelcomeScreen
                     onSuggestionClick={handleSuggestionClick}
-                    user={user}
                     inputSlot={
                         <ChatInput
                             key={prefillKey}
@@ -282,7 +262,6 @@ function ChatWindow({
 
     return (
         <div className="chat-window">
-            {/* Header */}
             <header className="chat-window__header">
                 <div className="chat-window__header-left">
                     <button className="chat-window__menu-btn" onClick={onToggleSidebar} aria-label="Toggle sidebar">
@@ -293,24 +272,8 @@ function ChatWindow({
                         <div className="chat-window__subtitle">AI Pharmacist</div>
                     </div>
                 </div>
-                {user ? (
-                    <button className="chat-window__header-logout" onClick={onLogout}>
-                        <HiOutlineArrowRightOnRectangle size={16} />
-                        Logout
-                    </button>
-                ) : (
-                    <div className="chat-window__header-actions">
-                        <button className="chat-window__header-signin" onClick={() => onShowAuth('login')}>
-                            Sign in
-                        </button>
-                        <button className="chat-window__header-badge" onClick={() => onShowAuth('register')}>
-                            Sign up for free
-                        </button>
-                    </div>
-                )}
             </header>
 
-            {/* Messages */}
             <div className="chat-window__messages-area">
                 <div
                     className="chat-window__messages"
@@ -351,7 +314,6 @@ function ChatWindow({
                 )}
             </div>
 
-            {/* Input – hidden on welcome screen since it's rendered inline */}
             {!isWelcome && (
                 <div className="chat-window__input-area">
                     <div className="chat-window__input-wrapper">

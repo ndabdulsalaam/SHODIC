@@ -5,7 +5,6 @@ import {
     HiOutlineChevronLeft,
     HiOutlineChevronRight,
     HiOutlineClipboard,
-    HiOutlineDocument,
     HiOutlinePaperAirplane,
     HiOutlinePencil,
     HiOutlineXMark,
@@ -157,11 +156,7 @@ function normalizeMarkdownMarkup(markdown = '') {
 
 function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessageId, isLoading }) {
     const isUser = message.role === 'user'
-    const attachments = Array.isArray(message.attachments) ? message.attachments : []
-    const hasAttachments = attachments.length > 0
-    const hasEditableAttachments = hasAttachments
-        && attachments.every((attachment) => attachment.kind === 'image' && attachment.preview_data_url)
-    const canEdit = isUser && onEdit && (!hasAttachments || hasEditableAttachments)
+    const canEdit = isUser && onEdit
     const variantNavigation = message._variantNavigation
     const hasVariants = Boolean(variantNavigation && variantNavigation.total > 1)
     const [isEditing, setIsEditing] = useState(false)
@@ -192,7 +187,7 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
 
     const handleEditSave = () => {
         const trimmed = editText.trim()
-        if (!isLoading && (trimmed || hasEditableAttachments) && onEdit) {
+        if (!isLoading && trimmed && onEdit) {
             onEdit(message.id, trimmed)
         }
         setIsEditing(false)
@@ -249,23 +244,6 @@ function MessageBubble({ message, onEdit, onResend, onVariantChange, resendMessa
                         </div>
                     ) : isUser ? (
                         <div className="message__user-body">
-                            {hasAttachments && (
-                                <div className="message__attachments">
-                                    {attachments.map((attachment, attachmentIndex) => (
-                                        <div
-                                            className={`message__attachment message__attachment--${attachment.kind}`}
-                                            key={`${attachment.name}-${attachmentIndex}`}
-                                        >
-                                            {attachment.kind === 'image' && attachment.preview_data_url ? (
-                                                <img src={attachment.preview_data_url} alt={attachment.name} />
-                                            ) : (
-                                                <HiOutlineDocument size={17} />
-                                            )}
-                                            <span>{attachment.name}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                             {message.content && <p>{message.content}</p>}
                         </div>
                     ) : statusLabel ? (

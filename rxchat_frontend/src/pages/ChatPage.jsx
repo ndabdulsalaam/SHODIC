@@ -1,11 +1,7 @@
-import { lazy, Suspense } from 'react'
 import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
 import useChatController from '../hooks/useChatController'
 import './ChatPage.css'
-
-const AuthModal = lazy(() => import('../components/AuthModal/AuthModal'))
-const SettingsPanel = lazy(() => import('../components/SettingsPanel/SettingsPanel'))
 
 function ChatPage() {
     const chat = useChatController()
@@ -23,10 +19,6 @@ function ChatPage() {
                 onClose={() => chat.setSidebarOpen(false)}
                 collapsed={chat.sidebarCollapsed}
                 onCollapse={() => chat.setSidebarCollapsed((prev) => !prev)}
-                user={chat.user}
-                onShowAuth={() => chat.handleShowAuth('login')}
-                onLogout={chat.handleLogout}
-                onOpenSettings={() => chat.setSettingsOpen(true)}
             />
             <ChatWindow
                 conversationId={chat.activeConversationId}
@@ -39,35 +31,11 @@ function ChatPage() {
                         ? chat.setSidebarCollapsed(false)
                         : chat.setSidebarOpen((prev) => !prev)
                 )}
-                onShowAuth={chat.handleShowAuth}
-                user={chat.user}
-                onLogout={chat.handleLogout}
                 onEditMessage={chat.handleEditMessage}
                 onResendMessage={chat.handleResendMessage}
                 onMessageVariantChange={chat.handleMessageVariantChange}
                 onStopGeneration={chat.handleStopGeneration}
             />
-            <Suspense fallback={null}>
-                {chat.showAuthModal && (
-                    <AuthModal
-                        onClose={() => chat.setShowAuthModal(false)}
-                        onLogin={chat.handleLogin}
-                        initialMode={chat.authMode}
-                    />
-                )}
-                {chat.settingsOpen && (
-                    <SettingsPanel
-                        isOpen={chat.settingsOpen}
-                        onClose={() => chat.setSettingsOpen(false)}
-                        user={chat.user}
-                        onLogout={() => {
-                            chat.setSettingsOpen(false)
-                            chat.handleLogout()
-                        }}
-                        onUserUpdate={chat.handleLogin}
-                    />
-                )}
-            </Suspense>
         </div>
     )
 }

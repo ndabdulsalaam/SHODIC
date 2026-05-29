@@ -1,5 +1,4 @@
 const LOCAL_API_BASE_URL = 'http://localhost:8000'
-const PRODUCTION_API_BASE_URL = 'https://api.fildah.com'
 
 function isLocalHost(hostname) {
     return ['localhost', '127.0.0.1', '::1'].includes(hostname)
@@ -13,7 +12,7 @@ export function getApiBaseUrl() {
         return LOCAL_API_BASE_URL
     }
 
-    return PRODUCTION_API_BASE_URL
+    throw new Error('VITE_API_BASE_URL must be set outside localhost.')
 }
 
 export const API_BASE_URL = getApiBaseUrl()

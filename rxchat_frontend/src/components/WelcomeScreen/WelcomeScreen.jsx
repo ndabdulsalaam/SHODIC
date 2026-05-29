@@ -31,19 +31,13 @@ function getGreeting() {
     return 'Good evening'
 }
 
-function WelcomeScreen({ onSuggestionClick, user, inputSlot }) {
-    const preferredName = user?.preferred_name || user?.first_name || null
+function WelcomeScreen({ onSuggestionClick, inputSlot }) {
     const greeting = getGreeting()
 
     return (
         <div className="welcome">
             <div className="welcome__hero">
-                <h1 className="welcome__greeting">
-                    {preferredName
-                        ? `${greeting}, ${preferredName}.`
-                        : `${greeting}.`
-                    }
-                </h1>
+                <h1 className="welcome__greeting">{greeting}.</h1>
                 <p className="welcome__tagline">How can I help you today?</p>
             </div>
 
@@ -68,7 +62,7 @@ function WelcomeScreen({ onSuggestionClick, user, inputSlot }) {
             </div>
 
             <div className="welcome__disclaimer">
-                <strong>⚠️ Disclaimer:</strong> RxChat provides general health information only. Always consult a qualified healthcare professional for medical advice.
+                <strong>Disclaimer:</strong> RxChat provides general health information only. Always consult a qualified healthcare professional for medical advice.
             </div>
         </div>
     )
