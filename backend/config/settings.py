@@ -1,19 +1,14 @@
-"""
-Base Django settings shared by dev, staging, and production.
-"""
+"""Django settings for the RxChat project."""
 
 import importlib.util
 import os
-import sys
 from pathlib import Path
 
 import dj_database_url
-from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[1]
 
-# Load backend/.env when present. Host-provided environment variables still win.
 load_dotenv(BASE_DIR / ".env")
 
 
@@ -39,35 +34,15 @@ def env_list(name, default):
     ]
 
 
-def env_required(name):
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise ImproperlyConfigured(f"{name} must be set for this environment.")
-    return value
-
-
-def env_required_list(name):
-    values = env_list(name, "")
-    if not values:
-        raise ImproperlyConfigured(
-            f"{name} must contain at least one comma-separated value."
-        )
-    return values
-
-
-def database_config(required=False, conn_max_age=0, ssl_require=False):
+def database_config():
     database_url = os.getenv("DATABASE_URL", "").strip()
     if database_url:
         return {
             "default": dj_database_url.parse(
                 database_url,
-                conn_max_age=conn_max_age,
-                ssl_require=ssl_require,
+                conn_max_age=env_int("DATABASE_CONN_MAX_AGE", 600),
             )
         }
-
-    if required:
-        raise ImproperlyConfigured("DATABASE_URL must be set for this environment.")
 
     return {
         "default": {
@@ -77,13 +52,11 @@ def database_config(required=False, conn_max_age=0, ssl_require=False):
     }
 
 
-DJANGO_ENV = os.getenv("DJANGO_ENV", "dev")
+SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-rxchat-local-key-change-me")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-dev-key-change-before-shared-use")
+DEBUG = env_bool("DEBUG", True)
 
-DEBUG = env_bool("DEBUG", False)
-
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "")
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -92,13 +65,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # Third party
     "rest_framework",
     "corsheaders",
-    # Local
-    "fildah",
     "rxchat",
-    "accounts",
 ]
 
 if importlib.util.find_spec("django_q"):
@@ -106,7 +75,6 @@ if importlib.util.find_spec("django_q"):
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -136,7 +104,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = database_config(required=False)
+DATABASES = database_config()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -152,86 +120,42 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"]
+STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
-
-if "test" in sys.argv:
-    STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.StaticFilesStorage"
-    MIDDLEWARE = [
-        middleware
-        for middleware in MIDDLEWARE
-        if middleware != "whitenoise.middleware.WhiteNoiseMiddleware"
-    ]
-
-# WhiteNoise configuration
-WHITENOISE_USE_FINDERS = False
-WHITENOISE_MANIFEST_STRICT = False
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Browser origins allowed to call the API with session cookies.
-ALLOWED_ORIGINS = env_list("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = env_list("ALLOWED_ORIGINS", "http://localhost:5173")
 CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
-
-# Trusted browser origins for cross-site session POSTs.
 CSRF_TRUSTED_ORIGINS = ALLOWED_ORIGINS
 
-# DRF
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "config.authentication.CsrfExemptSessionAuthentication",
-    ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
 }
 
-# LLM Configuration (OpenRouter)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BACKUP_API_KEY = os.getenv("OPENROUTER_BACKUP_API_KEY", "")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_HTTP_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:5173")
 OPENROUTER_TEXT_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free")
-OPENROUTER_VISION_MODEL = os.getenv(
-    "OPENROUTER_VISION_MODEL",
-    "google/gemma-4-31b-it:free",
-)
-OPENROUTER_VISION_MODEL_FALLBACK = os.getenv(
-    "OPENROUTER_VISION_MODEL_FALLBACK",
-    "baidu/qianfan-ocr-fast:free",
-)
 OPENROUTER_TEXT_MAX_TOKENS = env_int("OPENROUTER_TEXT_MAX_TOKENS", 2048)
 OPENROUTER_REASONING_MAX_TOKENS = env_int("OPENROUTER_REASONING_MAX_TOKENS", 4096)
 
-# Vector DB - Qdrant Cloud (for RAG retrieval)
 QDRANT_URL = os.getenv("QDRANT_URL", "")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rxchat")
-QDRANT_INFERENCE_MODEL = os.getenv(
-    "QDRANT_INFERENCE_MODEL",
-    "intfloat/multilingual-e5-small",
-)
+QDRANT_INFERENCE_MODEL = os.getenv("QDRANT_INFERENCE_MODEL", "intfloat/multilingual-e5-small")
 QDRANT_SPARSE_MODEL = os.getenv("QDRANT_SPARSE_MODEL", "qdrant/bm25")
 QDRANT_DENSE_VECTOR_NAME = os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense")
 QDRANT_SPARSE_VECTOR_NAME = os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse")
-QDRANT_VECTOR_SIZE = int(os.getenv("QDRANT_VECTOR_SIZE", "384"))
+QDRANT_VECTOR_SIZE = env_int("QDRANT_VECTOR_SIZE", 384)
 QDRANT_DISTANCE = os.getenv("QDRANT_DISTANCE", "Cosine")
 
-# Data acquisition
 OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY", "")
-
-# Chat attachments are intentionally paused until the frontend upload flow is
-# ready to ship again. Existing persisted image previews can still be resent.
-RXCHAT_ATTACHMENTS_ENABLED = env_bool("RXCHAT_ATTACHMENTS_ENABLED", False)
 
 Q_CLUSTER = {
     "name": "rxchat",
@@ -242,30 +166,8 @@ Q_CLUSTER = {
     "save_limit": 50,
 }
 
-# Email - Brevo HTTP API (primary), Django console (dev fallback)
-BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
-BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "")
-BREVO_SENDER_NAME_RXCHAT = os.getenv(
-    "BREVO_SENDER_NAME_RXCHAT",
-    os.getenv("BREVO_SENDER_NAME", "RxChat"),
-)
-BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", BREVO_SENDER_NAME_RXCHAT)
-
-# Django email backend (used as fallback when BREVO_API_KEY is not set)
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = (
-    f"{BREVO_SENDER_NAME_RXCHAT} <{BREVO_SENDER_EMAIL}>"
-    if BREVO_SENDER_EMAIL
-    else "RxChat <noreply@rxchat.dev>"
-)
-
-# Google OAuth
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-
-# Session - 30-day sliding session to match trusted device window
-SESSION_COOKIE_AGE = 30 * 24 * 60 * 60
-SESSION_COOKIE_SECURE = False
-SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SECURE = False
-CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = env_int("SESSION_COOKIE_AGE", 30 * 24 * 60 * 60)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", False)
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", False)
+CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")

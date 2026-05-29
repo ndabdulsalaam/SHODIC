@@ -34,6 +34,7 @@ def check_openrouter():
         "OPENROUTER_TEXT_MODEL",
         os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free"),
     )
+    openrouter_referer = os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:5173")
 
     if not openrouter_key:
         print(f"  {SKIP}  OPENROUTER_API_KEY not set")
@@ -47,7 +48,7 @@ def check_openrouter():
             base_url=openrouter_url,
             timeout=30,
             default_headers={
-                "HTTP-Referer": "https://rxchat.dev",
+                "HTTP-Referer": openrouter_referer,
                 "X-Title": "RxChat",
             },
         )
