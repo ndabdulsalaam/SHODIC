@@ -249,28 +249,6 @@ was found. \
 When in doubt, ask one clarifying question or advise checking with the \
 appropriate clinician rather than speculating."""
 
-IMAGE_ANALYSIS_PROMPT = """\
-The user has attached one or more images. Examine each image carefully.
-If an image appears to be a PRESCRIPTION, transcribe visible text, identify
-medications, dosages, instructions, and flag illegible parts. If it appears
-to be a PILL or PACKAGING, identify the drug name, strength, and manufacturer
-where visible. If it appears to show a BODY PART, describe observations, do
-not diagnose, and suggest consulting a clinician if needed. If it appears to
-be a LAB RESULT, summarize findings, flag abnormal values, and suggest
-possible diagnoses cautiously without being assertive. For unclear
-prescriptions, recommend confirming with a pharmacist."""
-
-DOCUMENT_ANALYSIS_PROMPT = """\
-The user has attached one or more documents. Review the extracted or parsed
-content. If a document appears to be a PRESCRIPTION or ORDER, list all
-medications, dosages, routes, and flag interactions or unusual dosing. If it
-appears to be a LAB REPORT, flag abnormal values and explain clinical
-significance. If it is a DRUG MONOGRAPH, extract the specific information the
-user asks about. If it is a SPREADSHEET, interpret the data and summarize key
-findings. Relate the analysis to the user's specific question. If content is
-truncated or unclear, say so."""
-
-
 # ──────────────────────────────────────────────────────────────────────
 # 5. HELPERS
 # ──────────────────────────────────────────────────────────────────────
@@ -334,81 +312,8 @@ def build_user_message(
     return f"{NO_CONTEXT_NOTE}\n\nUSER ROLE: {role}\nUSER QUESTION: {query}"
 
 
-def _format_document_sections(document_sections: list | None) -> str:
-    """Format extracted Office document text for the dynamic user turn."""
-    if not document_sections:
-        return ""
-
-    sections = []
-    for section in document_sections:
-        name = section.get("name", "document")
-        text = (section.get("text") or "").strip()
-        if not text:
-            text = "[No readable text was extracted.]"
-        sections.append(
-            f"DOCUMENT CONTENT (from: {name}):\n---\n{text}\n---"
-        )
-    return "\n\n".join(sections)
-
-
-def _build_attachment_user_text(
-    query: str,
-    chunks: list | None,
-    role: str,
-    attachments: list | None,
-    document_sections: list | None,
-) -> str:
-    """Build the text part that accompanies optional multimodal attachments."""
-    attachments = attachments or []
-    has_image = any(item.get("kind") == "image" for item in attachments)
-    has_document = any(item.get("kind") == "file" for item in attachments) or bool(document_sections)
-
-    prompt_blocks = []
-    if has_image:
-        prompt_blocks.append(IMAGE_ANALYSIS_PROMPT)
-    if has_document:
-        prompt_blocks.append(DOCUMENT_ANALYSIS_PROMPT)
-
-    document_block = _format_document_sections(document_sections)
-    if document_block:
-        prompt_blocks.append(document_block)
-
-    prompt_blocks.append(build_user_message(query, chunks=chunks, role=role))
-    return "\n\n".join(prompt_blocks)
-
-
-def _build_user_content(text_part: str, attachments: list | None):
-    """Return OpenRouter-compatible user content, string or multimodal parts."""
-    attachments = attachments or []
-    if not attachments:
-        return text_part
-
-    content = [{"type": "text", "text": text_part}]
-    for attachment in attachments:
-        if attachment.get("kind") == "image":
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": attachment["data_url"]},
-            })
-        elif attachment.get("kind") == "file":
-            content.append({
-                "type": "file",
-                "file": {
-                    "filename": attachment["name"],
-                    "file_data": attachment["data_url"],
-                },
-            })
-    return content
-
-
-def _select_models(attachments: list | None) -> list[str]:
-    """Return an ordered list of models to try (primary, then fallback)."""
-    if any(item.get("kind") == "image" for item in attachments or []):
-        models = [settings.OPENROUTER_VISION_MODEL]
-        fallback = settings.OPENROUTER_VISION_MODEL_FALLBACK
-        if fallback and fallback != models[0]:
-            models.append(fallback)
-        return models
+def _select_models() -> list[str]:
+    """Return the text model used for standard RxChat responses."""
     return [settings.OPENROUTER_TEXT_MODEL]
 
 
@@ -424,15 +329,6 @@ def _length_limit_message() -> str:
         "\n\nI'll pause there so the answer stays readable. "
         "Which part would you like me to expand on next?"
     )
-
-
-def _build_pdf_plugin(attachments: list | None):
-    if any(item.get("type") == "application/pdf" for item in attachments or []):
-        return [{
-            "id": "file-parser",
-            "pdf": {"engine": "cloudflare-ai"},
-        }]
-    return None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -454,7 +350,7 @@ def _get_client(api_key=None):
         api_key=api_key,
         base_url=settings.OPENROUTER_BASE_URL,
         default_headers={
-            'HTTP-Referer': 'https://rxchat.dev',
+            'HTTP-Referer': settings.OPENROUTER_HTTP_REFERER,
             'X-Title': 'RxChat',
         },
     )
@@ -537,8 +433,6 @@ def stream_ai_events(
     user_message,
     conversation_history=None,
     role="patient",
-    attachments=None,
-    document_sections=None,
 ):
     """Stream typed AI events for a pharmacy-related query.
 
@@ -552,15 +446,10 @@ def stream_ai_events(
         conversation_history:  List of prior messages
             [{'role': 'user'|'assistant', 'content': '...'}]
         role:  One of 'patient', 'pharmacist', 'physician', 'nurse', 'other'.
-        attachments:  List of image/PDF attachment dicts to send to OpenRouter.
-        document_sections:  Extracted Office document text blocks.
 
     Yields:
         dict: ``{"type": "status", ...}`` or ``{"type": "text", ...}``.
     """
-    attachments = attachments or []
-    document_sections = document_sections or []
-
     primary_key = settings.OPENROUTER_API_KEY
     backup_key = settings.OPENROUTER_BACKUP_API_KEY
     key_attempts = [("primary", primary_key)]
@@ -572,14 +461,13 @@ def stream_ai_events(
         yield _text_event(_get_fallback_response())
         return
 
-    models_to_try = _select_models(attachments)
+    models_to_try = _select_models()
 
     use_reasoner = _is_complex_query(user_message, role)
 
     logger.info(
         f"Provider: OpenRouter | Models: {models_to_try} "
-        f"(role={role}, complex={use_reasoner}, attachments={len(attachments)}, "
-        f"documents={len(document_sections)})"
+        f"(role={role}, complex={use_reasoner})"
     )
 
     system_message = build_system_message(role)
@@ -603,20 +491,16 @@ def stream_ai_events(
     else:
         logger.info("RAG: No chunks retrieved — LLM will answer from training data")
 
-    user_text_part = _build_attachment_user_text(
+    user_text_part = build_user_message(
         user_message,
         chunks=chunks,
         role=role,
-        attachments=attachments,
-        document_sections=document_sections,
     )
 
     messages.append({
         "role": "user",
-        "content": _build_user_content(user_text_part, attachments),
+        "content": user_text_part,
     })
-
-    pdf_plugin = _build_pdf_plugin(attachments)
 
     yield _status_event("thinking")
 
@@ -631,9 +515,6 @@ def stream_ai_events(
         create_kwargs["max_tokens"] = _response_token_budget(use_reasoner)
         if not use_reasoner:
             create_kwargs["temperature"] = 0.7
-
-        if pdf_plugin:
-            create_kwargs["extra_body"] = {"plugins": pdf_plugin}
 
         for attempt_index, (key_label, api_key) in enumerate(key_attempts):
             if not api_key:

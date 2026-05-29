@@ -1,16 +1,12 @@
-import base64
 import json
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .ai_service import (
-    _build_pdf_plugin,
-    _build_user_content,
     _select_models,
     build_system_message,
     build_user_message,
@@ -18,30 +14,6 @@ from .ai_service import (
 )
 from .models import Conversation, Message
 from .serializers import ChatInputSerializer
-
-
-def data_url(mime_type, payload=b"file"):
-    encoded = base64.b64encode(payload).decode("ascii")
-    return f"data:{mime_type};base64,{encoded}"
-
-
-def image_attachment(name="prescription.jpg"):
-    return {
-        "kind": "image",
-        "name": name,
-        "type": "image/jpeg",
-        "data_url": data_url("image/jpeg"),
-        "preview_data_url": data_url("image/jpeg", b"preview"),
-    }
-
-
-def pdf_attachment(name="report.pdf"):
-    return {
-        "kind": "file",
-        "name": name,
-        "type": "application/pdf",
-        "data_url": data_url("application/pdf"),
-    }
 
 
 class ChatPromptTests(TestCase):
@@ -79,87 +51,32 @@ class ChatPromptTests(TestCase):
         self.assertNotIn("RETRIEVED CONTEXT", user_message)
         self.assertNotIn("Answer based strictly", user_message)
 
-    @override_settings(
-        OPENROUTER_TEXT_MODEL="text-model",
-        OPENROUTER_VISION_MODEL="vision-model",
-    )
-    def test_model_selection_uses_vision_when_any_image_is_present(self):
-        self.assertEqual(_select_models([]), ["text-model"])
-        self.assertEqual(_select_models([pdf_attachment()]), ["text-model"])
-        self.assertIn(
-            "vision-model",
-            _select_models([pdf_attachment(), image_attachment()]),
-        )
-
-    def test_multimodal_content_includes_multiple_images_and_pdf(self):
-        content = _build_user_content(
-            "Review these attachments",
-            [image_attachment("a.jpg"), image_attachment("b.jpg"), pdf_attachment()],
-        )
-
-        self.assertEqual(content[0], {"type": "text", "text": "Review these attachments"})
-        self.assertEqual([part["type"] for part in content], ["text", "image_url", "image_url", "file"])
-        self.assertEqual(content[3]["file"]["filename"], "report.pdf")
-
-    def test_pdf_plugin_uses_cloudflare_ai_parser(self):
-        self.assertIsNone(_build_pdf_plugin([image_attachment()]))
-        self.assertEqual(
-            _build_pdf_plugin([pdf_attachment()]),
-            [{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}],
-        )
+    @override_settings(OPENROUTER_TEXT_MODEL="text-model")
+    def test_model_selection_uses_text_model_only(self):
+        self.assertEqual(_select_models(), ["text-model"])
 
 
 class ChatInputSerializerTests(TestCase):
-    def test_rejects_attachment_only_message_while_paused(self):
-        serializer = ChatInputSerializer(data={
-            "message": "",
-            "attachments": [image_attachment()],
-        })
-
-        self.assertFalse(serializer.is_valid())
-        self.assertIn("Attachments are temporarily unavailable.", str(serializer.errors))
-
-    def test_requires_message_or_attachment(self):
+    def test_requires_message(self):
         serializer = ChatInputSerializer(data={"message": ""})
 
         self.assertFalse(serializer.is_valid())
+        self.assertIn("message", serializer.errors)
 
-    def test_rejects_more_than_three_attachments(self):
+    def test_trims_message(self):
+        serializer = ChatInputSerializer(data={"message": "  What is metformin?  "})
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["message"], "What is metformin?")
+
+    def test_rejects_attachments_key(self):
         serializer = ChatInputSerializer(data={
-            "message": "Review",
-            "attachments": [
-                image_attachment("one.jpg"),
-                image_attachment("two.jpg"),
-                image_attachment("three.jpg"),
-                image_attachment("four.jpg"),
-            ],
+            "message": "Review this",
+            "attachments": [{"name": "rx.jpg"}],
         })
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("attachments", serializer.errors)
-
-    def test_rejects_legacy_doc_files(self):
-        serializer = ChatInputSerializer(data={
-            "message": "Review",
-            "attachments": [{
-                "kind": "file",
-                "name": "old.doc",
-                "type": "application/msword",
-                "data_url": data_url("application/msword"),
-            }],
-        })
-
-        self.assertFalse(serializer.is_valid())
-
-    @override_settings(RXCHAT_ATTACHMENTS_ENABLED=True)
-    def test_accepts_supported_attachment_when_enabled(self):
-        serializer = ChatInputSerializer(data={
-            "message": "",
-            "attachments": [image_attachment()],
-        })
-
-        self.assertTrue(serializer.is_valid(), serializer.errors)
-        self.assertEqual(serializer.validated_data["attachments"][0]["extension"], ".jpg")
 
 
 class ChatAiServiceTests(TestCase):
@@ -167,7 +84,6 @@ class ChatAiServiceTests(TestCase):
         OPENROUTER_API_KEY="primary",
         OPENROUTER_BACKUP_API_KEY="backup",
         OPENROUTER_TEXT_MODEL="text-model",
-        OPENROUTER_VISION_MODEL="vision-model",
     )
     @patch("rxchat.ai_service.retrieve_context", return_value=[])
     @patch("rxchat.ai_service._get_client")
@@ -175,7 +91,8 @@ class ChatAiServiceTests(TestCase):
         class Chunk:
             def __init__(self, text):
                 self.choices = [type("Choice", (), {
-                    "delta": type("Delta", (), {"content": text})()
+                    "delta": type("Delta", (), {"content": text})(),
+                    "finish_reason": None,
                 })()]
 
         primary_client = type("Client", (), {})()
@@ -281,6 +198,13 @@ class ChatApiTests(TestCase):
     def _consume_stream(self, response):
         return b"".join(response.streaming_content).decode("utf-8")
 
+    def _session_key(self, client=None):
+        client = client or self.client
+        session = client.session
+        session["rxchat_test_session"] = True
+        session.save()
+        return session.session_key
+
     def _set_conversation_updated_at(self, conversation, updated_at):
         Conversation.objects.filter(id=conversation.id).update(updated_at=updated_at)
         conversation.refresh_from_db()
@@ -307,6 +231,7 @@ class ChatApiTests(TestCase):
         user_message = conversation.messages.get(role="user")
         assistant_message = conversation.messages.get(role="assistant")
 
+        self.assertEqual(conversation.session_key, self.client.session.session_key)
         self.assertIn("event: meta", body)
         self.assertIn("event: status", body)
         self.assertLess(body.index("event: status"), body.index("data: Hello"))
@@ -315,6 +240,11 @@ class ChatApiTests(TestCase):
         self.assertIn("event: done", body)
         self.assertIn(f'"message_id": "{assistant_message.id}"', body)
         self.assertEqual(assistant_message.content, "Hello from RxChat")
+
+        args, kwargs = mock_stream.call_args
+        self.assertEqual(args[0], "What is paracetamol used for?")
+        self.assertEqual(kwargs["role"], "patient")
+        self.assertNotIn("attachments", kwargs)
 
     @patch("rxchat.views.stream_ai_events")
     def test_send_message_saves_partial_assistant_when_stream_closes(self, mock_stream):
@@ -340,27 +270,26 @@ class ChatApiTests(TestCase):
         assistant_message = conversation.messages.get(role="assistant")
         self.assertEqual(assistant_message.content, "Partial answer")
 
-    def test_list_conversations_orders_newest_updated_first(self):
-        user = User.objects.create_user(username="history@example.com", email="history@example.com", password="password123")
-        older = Conversation.objects.create(user=user, title="Older")
-        newer = Conversation.objects.create(user=user, title="Newer")
+    def test_list_conversations_orders_newest_updated_first_for_session(self):
+        session_key = self._session_key()
+        older = Conversation.objects.create(session_key=session_key, title="Older")
+        newer = Conversation.objects.create(session_key=session_key, title="Newer")
         now = timezone.now()
         self._set_conversation_updated_at(older, now - timedelta(days=3))
         self._set_conversation_updated_at(newer, now - timedelta(hours=1))
 
-        self.client.force_authenticate(user=user)
         response = self.client.get("/rxchat/conversations/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([str(item["id"]) for item in response.data], [str(newer.id), str(older.id)])
 
-    def test_list_conversations_is_limited_to_owner(self):
-        owner = User.objects.create_user(username="list-owner@example.com", email="list-owner@example.com", password="password123")
-        other = User.objects.create_user(username="list-other@example.com", email="list-other@example.com", password="password123")
-        owned = Conversation.objects.create(user=owner, title="Visible")
-        Conversation.objects.create(user=other, title="Hidden")
+    def test_list_conversations_is_limited_to_current_session(self):
+        owner_key = self._session_key()
+        other_client = APIClient()
+        other_key = self._session_key(other_client)
+        owned = Conversation.objects.create(session_key=owner_key, title="Visible")
+        Conversation.objects.create(session_key=other_key, title="Hidden")
 
-        self.client.force_authenticate(user=owner)
         response = self.client.get("/rxchat/conversations/")
 
         self.assertEqual(response.status_code, 200)
@@ -369,11 +298,10 @@ class ChatApiTests(TestCase):
     @patch("rxchat.views.stream_ai_events")
     def test_send_message_touches_existing_conversation_before_stream_is_consumed(self, mock_stream):
         mock_stream.return_value = iter(["Later answer"])
-        user = User.objects.create_user(username="send-touch@example.com", email="send-touch@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Existing chat")
+        session_key = self._session_key()
+        conversation = Conversation.objects.create(session_key=session_key, title="Existing chat")
         stale_time = self._set_conversation_updated_at(conversation, timezone.now() - timedelta(days=2))
 
-        self.client.force_authenticate(user=user)
         response = self.client.post(
             "/rxchat/send/",
             {"message": "Follow up", "conversation_id": str(conversation.id)},
@@ -389,110 +317,66 @@ class ChatApiTests(TestCase):
         body = self._consume_stream(response)
         self.assertIn('"conversation_updated_at"', body)
 
-    @patch("rxchat.views.stream_ai_events")
-    def test_edit_message_touches_conversation_before_stream_is_consumed(self, mock_stream):
-        mock_stream.return_value = iter(["Edited answer"])
-        user = User.objects.create_user(username="edit-touch@example.com", email="edit-touch@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Edit touch")
-        user_message = Message.objects.create(conversation=conversation, role="user", content="Original")
-        Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
-        stale_time = self._set_conversation_updated_at(conversation, timezone.now() - timedelta(days=2))
-
-        self.client.force_authenticate(user=user)
-        response = self.client.put(
-            f"/rxchat/messages/{user_message.id}/",
-            {"content": "Updated question"},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        conversation.refresh_from_db()
-        user_message.refresh_from_db()
-        self.assertGreater(conversation.updated_at, stale_time)
-        self.assertEqual(user_message.content, "Updated question")
-        mock_stream.assert_not_called()
-
-        body = self._consume_stream(response)
-        self.assertIn('"conversation_updated_at"', body)
-
-    @patch("rxchat.views.stream_ai_events")
-    def test_resend_message_touches_conversation_before_stream_is_consumed(self, mock_stream):
-        mock_stream.return_value = iter(["Regenerated answer"])
-        user = User.objects.create_user(username="resend-touch@example.com", email="resend-touch@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Resend touch")
-        user_message = Message.objects.create(conversation=conversation, role="user", content="Question")
-        old_assistant = Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
-        stale_time = self._set_conversation_updated_at(conversation, timezone.now() - timedelta(days=2))
-
-        self.client.force_authenticate(user=user)
-        response = self.client.post(f"/rxchat/messages/{user_message.id}/resend/")
-
-        self.assertEqual(response.status_code, 200)
-        conversation.refresh_from_db()
-        self.assertGreater(conversation.updated_at, stale_time)
-        self.assertFalse(Message.objects.filter(id=old_assistant.id).exists())
-        mock_stream.assert_not_called()
-
-        body = self._consume_stream(response)
-        self.assertIn('"conversation_updated_at"', body)
-
-    @patch("rxchat.views.stream_ai_events")
-    def test_send_message_meta_event_escapes_json_title(self, mock_stream):
-        mock_stream.return_value = iter(["Safe answer"])
+    def test_send_message_rejects_conversation_from_other_session(self):
+        other_client = APIClient()
+        other_key = self._session_key(other_client)
+        conversation = Conversation.objects.create(session_key=other_key, title="Other session")
 
         response = self.client.post(
             "/rxchat/send/",
-            {"message": 'What about "quoted" dosing?'},
+            {"message": "Follow up", "conversation_id": str(conversation.id)},
             format="json",
         )
-
-        self.assertEqual(response.status_code, 200)
-        body = self._consume_stream(response)
-        meta_line = next(
-            line for line in body.splitlines()
-            if line.startswith('data: {"conversation_id"')
-        )
-        meta = json.loads(meta_line.removeprefix("data: "))
-
-        self.assertEqual(meta["conversation_title"], 'What about "quoted" dosing?')
-
-    @patch("rxchat.views.stream_ai_events")
-    def test_send_message_rejects_new_attachments_while_paused(self, mock_stream):
-        mock_stream.return_value = iter(["Attachment answer"])
-
-        response = self.client.post(
-            "/rxchat/send/",
-            {
-                "message": "",
-                "attachments": [image_attachment()],
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Attachments are temporarily unavailable.", str(response.data))
-        self.assertFalse(Conversation.objects.exists())
-        mock_stream.assert_not_called()
-
-    def test_conversation_detail_is_limited_to_owner(self):
-        owner = User.objects.create_user(username="owner@example.com", email="owner@example.com", password="password123")
-        other = User.objects.create_user(username="other@example.com", email="other@example.com", password="password123")
-        conversation = Conversation.objects.create(user=owner, title="Owner chat")
-
-        self.client.force_authenticate(user=other)
-        response = self.client.get(f"/rxchat/conversations/{conversation.id}/")
 
         self.assertEqual(response.status_code, 404)
 
     @patch("rxchat.views.stream_ai_events")
+    def test_send_message_rejects_attachments_payload(self, mock_stream):
+        response = self.client.post(
+            "/rxchat/send/",
+            {"message": "Review", "attachments": [{"name": "rx.jpg"}]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("attachments", response.data)
+        self.assertFalse(Conversation.objects.exists())
+        mock_stream.assert_not_called()
+
+    def test_conversation_detail_is_limited_to_session(self):
+        other_client = APIClient()
+        other_key = self._session_key(other_client)
+        conversation = Conversation.objects.create(session_key=other_key, title="Other chat")
+
+        response = self.client.get(f"/rxchat/conversations/{conversation.id}/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_rename_and_delete_conversation_for_session(self):
+        session_key = self._session_key()
+        conversation = Conversation.objects.create(session_key=session_key, title="Original")
+
+        rename = self.client.patch(
+            f"/rxchat/conversations/{conversation.id}/rename/",
+            {"title": "Updated"},
+            format="json",
+        )
+        self.assertEqual(rename.status_code, 200)
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.title, "Updated")
+
+        delete = self.client.delete(f"/rxchat/conversations/{conversation.id}/delete/")
+        self.assertEqual(delete.status_code, 204)
+        self.assertFalse(Conversation.objects.filter(id=conversation.id).exists())
+
+    @patch("rxchat.views.stream_ai_events")
     def test_edit_message_replaces_following_messages_and_streams_new_assistant_id(self, mock_stream):
         mock_stream.return_value = iter(["Edited answer"])
-        user = User.objects.create_user(username="editor@example.com", email="editor@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Edit chat")
+        session_key = self._session_key()
+        conversation = Conversation.objects.create(session_key=session_key, title="Edit chat")
         user_message = Message.objects.create(conversation=conversation, role="user", content="Original")
         Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
 
-        self.client.force_authenticate(user=user)
         response = self.client.put(
             f"/rxchat/messages/{user_message.id}/",
             {"content": "Updated question"},
@@ -514,12 +398,11 @@ class ChatApiTests(TestCase):
     @patch("rxchat.views.stream_ai_events")
     def test_resend_message_uses_user_message_and_replaces_old_assistant_response(self, mock_stream):
         mock_stream.return_value = iter(["Regenerated answer"])
-        user = User.objects.create_user(username="resend@example.com", email="resend@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Resend chat")
+        session_key = self._session_key()
+        conversation = Conversation.objects.create(session_key=session_key, title="Resend chat")
         user_message = Message.objects.create(conversation=conversation, role="user", content="Question")
         old_assistant = Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
 
-        self.client.force_authenticate(user=user)
         response = self.client.post(f"/rxchat/messages/{user_message.id}/resend/")
 
         self.assertEqual(response.status_code, 200)
@@ -532,92 +415,10 @@ class ChatApiTests(TestCase):
         self.assertIn(f'"message_id": "{assistant_message.id}"', body)
 
     def test_resend_rejects_assistant_message_id(self):
-        user = User.objects.create_user(username="assistant-id@example.com", email="assistant-id@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Invalid resend")
+        session_key = self._session_key()
+        conversation = Conversation.objects.create(session_key=session_key, title="Invalid resend")
         assistant_message = Message.objects.create(conversation=conversation, role="assistant", content="Answer")
 
-        self.client.force_authenticate(user=user)
         response = self.client.post(f"/rxchat/messages/{assistant_message.id}/resend/")
 
         self.assertEqual(response.status_code, 404)
-
-    @patch("rxchat.views.stream_ai_events")
-    def test_edit_allows_image_attachment_message_with_saved_preview(self, mock_stream):
-        mock_stream.return_value = iter(["Updated image answer"])
-        user = User.objects.create_user(username="attachment-edit@example.com", email="attachment-edit@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Attachment edit")
-        user_message = Message.objects.create(
-            conversation=conversation,
-            role="user",
-            content="Please review the attached files/images.",
-            attachments=[{
-                "kind": "image",
-                "name": "rx.jpg",
-                "type": "image/jpeg",
-                "preview_data_url": data_url("image/jpeg", b"preview"),
-            }],
-        )
-        Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
-
-        self.client.force_authenticate(user=user)
-        response = self.client.put(
-            f"/rxchat/messages/{user_message.id}/",
-            {"content": "Updated"},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self._consume_stream(response)
-
-        user_message.refresh_from_db()
-        self.assertEqual(user_message.content, "Updated")
-        self.assertEqual(conversation.messages.count(), 2)
-
-        args, kwargs = mock_stream.call_args
-        self.assertEqual(args[0], "Updated")
-        self.assertEqual(kwargs["attachments"][0]["name"], "rx.jpg")
-        self.assertEqual(kwargs["attachments"][0]["data_url"], data_url("image/jpeg", b"preview"))
-
-    @patch("rxchat.views.stream_ai_events")
-    def test_resend_allows_image_attachment_message_with_saved_preview(self, mock_stream):
-        mock_stream.return_value = iter(["Regenerated image answer"])
-        user = User.objects.create_user(username="attachment-resend-image@example.com", email="attachment-resend-image@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Attachment resend image")
-        user_message = Message.objects.create(
-            conversation=conversation,
-            role="user",
-            content="",
-            attachments=[{
-                "kind": "image",
-                "name": "rx.jpg",
-                "type": "image/jpeg",
-                "preview_data_url": data_url("image/jpeg", b"preview"),
-            }],
-        )
-        Message.objects.create(conversation=conversation, role="assistant", content="Old answer")
-
-        self.client.force_authenticate(user=user)
-        response = self.client.post(f"/rxchat/messages/{user_message.id}/resend/")
-
-        self.assertEqual(response.status_code, 200)
-        self._consume_stream(response)
-
-        args, kwargs = mock_stream.call_args
-        self.assertEqual(args[0], "Please review the attached files/images.")
-        self.assertEqual(kwargs["attachments"][0]["name"], "rx.jpg")
-        self.assertEqual(kwargs["attachments"][0]["data_url"], data_url("image/jpeg", b"preview"))
-
-    def test_resend_rejects_attachment_message(self):
-        user = User.objects.create_user(username="attachment-resend@example.com", email="attachment-resend@example.com", password="password123")
-        conversation = Conversation.objects.create(user=user, title="Attachment resend")
-        user_message = Message.objects.create(
-            conversation=conversation,
-            role="user",
-            content="Please review the attached files/images.",
-            attachments=[{"kind": "file", "name": "report.pdf", "type": "application/pdf"}],
-        )
-
-        self.client.force_authenticate(user=user)
-        response = self.client.post(f"/rxchat/messages/{user_message.id}/resend/")
-
-        self.assertEqual(response.status_code, 400)

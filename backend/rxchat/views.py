@@ -1,59 +1,41 @@
 import json
-import tempfile
 
 from django.db.models import Count
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from django.http import StreamingHttpResponse
+
+from .ai_service import stream_ai_events
 from .models import Conversation, Message
 from .serializers import (
-    ConversationSerializer,
-    ConversationListSerializer,
     ChatInputSerializer,
-    parse_data_url,
+    ConversationListSerializer,
+    ConversationSerializer,
 )
-from .ai_service import stream_ai_events
 
 
-DEFAULT_ATTACHMENT_PROMPT = "Please review the attached files/images."
-OFFICE_EXTENSIONS = {'.docx', '.pptx', '.xls', '.xlsx'}
-MAX_DOCUMENT_CHARS_PER_ATTACHMENT = 20000
-MAX_DOCUMENT_CHARS_TOTAL = 45000
+DEFAULT_ROLE = 'patient'
 MAX_HISTORY_MESSAGES = 10
 
 
-def _get_owner_filter(request):
-    """Return filter kwargs for the current user or session."""
-    if request.user.is_authenticated:
-        return {'user': request.user}
-    # Ensure session exists for anonymous users
+def _get_session_key(request):
     if not request.session.session_key:
         request.session.create()
-    return {'session_key': request.session.session_key}
+    return request.session.session_key
 
 
-def _get_user_role(request):
-    """Get the user's role from their profile, defaulting to 'patient'."""
-    if request.user.is_authenticated:
-        try:
-            return request.user.profile.role or 'patient'
-        except Exception:
-            pass
-    return 'patient'
+def _get_owner_filter(request):
+    return {'session_key': _get_session_key(request)}
 
 
 def _get_owned_user_message(message_id, owner):
-    filters = {
-        'id': message_id,
-        'role': 'user',
-    }
-    if owner.get('user'):
-        filters['conversation__user'] = owner['user']
-    else:
-        filters['conversation__session_key'] = owner.get('session_key')
-    return Message.objects.select_related('conversation').get(**filters)
+    return Message.objects.select_related('conversation').get(
+        id=message_id,
+        role='user',
+        conversation__session_key=owner['session_key'],
+    )
 
 
 def _conversation_history_before(conversation, message, limit=MAX_HISTORY_MESSAGES):
@@ -83,32 +65,32 @@ def _sse_text(chunk):
 
 def _normalize_ai_event(event):
     if isinstance(event, str):
-        return {"type": "text", "content": event}
+        return {'type': 'text', 'content': event}
     if not isinstance(event, dict):
         return None
 
-    event_type = event.get("type")
-    if event_type == "status":
+    event_type = event.get('type')
+    if event_type == 'status':
         return {
-            "type": "status",
-            "phase": event.get("phase"),
-            "label": event.get("label") or event.get("phase") or "Thinking",
+            'type': 'status',
+            'phase': event.get('phase'),
+            'label': event.get('label') or event.get('phase') or 'Thinking',
         }
-    if event_type == "text":
+    if event_type == 'text':
         return {
-            "type": "text",
-            "content": event.get("content", ""),
+            'type': 'text',
+            'content': event.get('content', ''),
         }
     return None
 
 
 def _save_streamed_assistant(conversation, full_response, stream_state):
-    if stream_state.get("saved"):
-        return stream_state.get("message")
+    if stream_state.get('saved'):
+        return stream_state.get('message')
 
-    ai_content = "".join(full_response)
+    ai_content = ''.join(full_response)
     if not ai_content:
-        stream_state["saved"] = True
+        stream_state['saved'] = True
         return None
 
     ai_message = Message.objects.create(
@@ -117,50 +99,39 @@ def _save_streamed_assistant(conversation, full_response, stream_state):
         content=ai_content,
     )
     updated_at = _touch_conversation(conversation)
-    stream_state["saved"] = True
-    stream_state["message"] = ai_message
-    stream_state["updated_at"] = updated_at
+    stream_state['saved'] = True
+    stream_state['message'] = ai_message
+    stream_state['updated_at'] = updated_at
     return ai_message
 
 
-def _stream_chat_completion(
-    *,
-    conversation,
-    ai_user_text,
-    history,
-    role,
-    meta,
-    attachments=None,
-    document_sections=None,
-):
+def _stream_chat_completion(*, conversation, ai_user_text, history, meta):
     """Return an SSE response that streams and persists one assistant reply."""
 
     def event_stream():
         full_response = []
-        stream_state = {"saved": False}
+        stream_state = {'saved': False}
 
         try:
-            yield _sse_json("meta", meta)
+            yield _sse_json('meta', meta)
 
             for raw_event in stream_ai_events(
                 ai_user_text,
                 conversation_history=history,
-                role=role,
-                attachments=attachments,
-                document_sections=document_sections,
+                role=DEFAULT_ROLE,
             ):
                 event = _normalize_ai_event(raw_event)
                 if not event:
                     continue
 
-                if event["type"] == "status":
-                    yield _sse_json("status", {
-                        "phase": event["phase"],
-                        "label": event["label"],
+                if event['type'] == 'status':
+                    yield _sse_json('status', {
+                        'phase': event['phase'],
+                        'label': event['label'],
                     })
                     continue
 
-                chunk = event["content"]
+                chunk = event['content']
                 if not chunk:
                     continue
                 full_response.append(chunk)
@@ -168,10 +139,10 @@ def _stream_chat_completion(
 
             ai_message = _save_streamed_assistant(conversation, full_response, stream_state)
             if ai_message:
-                yield _sse_json("done", {
-                    "conversation_id": str(conversation.id),
-                    "conversation_updated_at": stream_state["updated_at"].isoformat(),
-                    "message_id": str(ai_message.id),
+                yield _sse_json('done', {
+                    'conversation_id': str(conversation.id),
+                    'conversation_updated_at': stream_state['updated_at'].isoformat(),
+                    'message_id': str(ai_message.id),
                 })
         finally:
             _save_streamed_assistant(conversation, full_response, stream_state)
@@ -185,190 +156,53 @@ def _stream_chat_completion(
     return response
 
 
-def _attachment_metadata(attachments):
-    """Return safe-to-persist metadata without original uploaded data."""
-    metadata = []
-    for attachment in attachments:
-        item = {
-            'kind': attachment['kind'],
-            'name': attachment['name'],
-            'type': attachment['type'],
-            'size_bytes': attachment.get('size_bytes', 0),
-        }
-        if attachment['kind'] == 'image' and attachment.get('preview_data_url'):
-            item['preview_data_url'] = attachment['preview_data_url']
-        metadata.append(item)
-    return metadata
-
-
-def _llm_attachments(attachments):
-    """Only images and PDFs are sent to OpenRouter as binary content parts."""
-    return [
-        {
-            'kind': attachment['kind'],
-            'name': attachment['name'],
-            'type': attachment['type'],
-            'data_url': attachment['data_url'],
-        }
-        for attachment in attachments
-        if attachment['kind'] == 'image' or attachment['extension'] == '.pdf'
-    ]
-
-
-def _stored_image_attachments_for_llm(attachments):
-    """Rebuild image-only LLM attachments from persisted preview metadata."""
-    llm_attachments = []
-    for attachment in attachments or []:
-        if attachment.get('kind') != 'image' or not attachment.get('preview_data_url'):
-            return None
-
-        llm_attachments.append({
-            'kind': 'image',
-            'name': attachment.get('name') or 'image',
-            'type': attachment.get('type') or 'image/jpeg',
-            'data_url': attachment['preview_data_url'],
-        })
-
-    return llm_attachments
-
-
-def _truncate_document_text(text, remaining_chars):
-    allowed = min(MAX_DOCUMENT_CHARS_PER_ATTACHMENT, remaining_chars)
-    if allowed <= 0:
-        return "[Content omitted because the extracted document limit was reached.]"
-    text = (text or '').strip()
-    if len(text) <= allowed:
-        return text
-    return (
-        text[:allowed].rstrip()
-        + "\n\n[Content truncated because the extracted document was too long.]"
-    )
-
-
-def _extract_office_document_sections(attachments):
-    """Extract Office documents to markdown text with MarkItDown."""
-    office_attachments = [
-        attachment for attachment in attachments
-        if attachment.get('extension') in OFFICE_EXTENSIONS
-    ]
-    if not office_attachments:
-        return []
-
-    try:
-        from markitdown import MarkItDown
-    except ImportError as exc:
-        raise ValueError(
-            "Document extraction is unavailable. Please install markitdown and try again."
-        ) from exc
-
-    converter = MarkItDown()
-    sections = []
-    used_chars = 0
-
-    for attachment in office_attachments:
-        try:
-            _, file_bytes = parse_data_url(attachment['data_url'])
-            with tempfile.NamedTemporaryFile(suffix=attachment['extension']) as tmp:
-                tmp.write(file_bytes)
-                tmp.flush()
-                result = converter.convert(tmp.name)
-        except Exception as exc:
-            raise ValueError(f"Could not extract text from {attachment['name']}.") from exc
-
-        extracted = getattr(result, 'text_content', '') or ''
-        text = _truncate_document_text(
-            extracted,
-            MAX_DOCUMENT_CHARS_TOTAL - used_chars,
-        )
-        used_chars += len(text)
-        sections.append({
-            'name': attachment['name'],
-            'text': text,
-        })
-
-    return sections
-
-
-
 @api_view(['POST'])
 def send_message(request):
-    """
-    POST /rxchat/send/
-    Send a message and get a streamed AI response via SSE.
-    Body: { "message": "...", "conversation_id": "..." }
-    """
+    """Send a text message and stream the AI response via SSE."""
     serializer = ChatInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    requested_text = serializer.validated_data.get('message', '')
-    attachments = serializer.validated_data.get('attachments', [])
-    user_text = requested_text
-    ai_user_text = requested_text or DEFAULT_ATTACHMENT_PROMPT
+    user_text = serializer.validated_data['message']
     conv_id = serializer.validated_data.get('conversation_id')
-
-    try:
-        document_sections = _extract_office_document_sections(attachments)
-    except ValueError as exc:
-        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-    safe_attachments = _attachment_metadata(attachments)
-    ai_attachments = _llm_attachments(attachments)
-
-    # Role comes from the user's profile, not the request body
-    role = _get_user_role(request)
     owner = _get_owner_filter(request)
 
-    # Get or create conversation
     if conv_id:
         try:
             conversation = Conversation.objects.get(id=conv_id, **owner)
         except Conversation.DoesNotExist:
             return Response(
                 {'error': 'Conversation not found'},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
     else:
-        title_source = requested_text or ', '.join(item['name'] for item in safe_attachments) or DEFAULT_ATTACHMENT_PROMPT
-        title = title_source[:50] + ('...' if len(title_source) > 50 else '')
+        title = user_text[:50] + ('...' if len(user_text) > 50 else '')
         conversation = Conversation.objects.create(title=title, **owner)
 
-    # Save user message
     user_message = Message.objects.create(
         conversation=conversation,
         role='user',
         content=user_text,
-        attachments=safe_attachments,
     )
     conversation_updated_at = _touch_conversation(conversation)
-
-    # Get conversation history for context
     history = _conversation_history_before(conversation, user_message)
-
-    # Check for role override on the conversation
-    effective_role = getattr(conversation, 'role_override', None) or role
 
     return _stream_chat_completion(
         conversation=conversation,
-        ai_user_text=ai_user_text,
+        ai_user_text=user_text,
         history=history,
-        role=effective_role,
-        attachments=ai_attachments,
-        document_sections=document_sections,
         meta={
-            "conversation_id": str(conversation.id),
-            "conversation_title": conversation.title,
-            "conversation_updated_at": conversation_updated_at.isoformat(),
-            "user_message_id": str(user_message.id),
+            'conversation_id': str(conversation.id),
+            'conversation_title': conversation.title,
+            'conversation_created_at': conversation.created_at.isoformat(),
+            'conversation_updated_at': conversation_updated_at.isoformat(),
+            'user_message_id': str(user_message.id),
         },
     )
 
 
 @api_view(['GET'])
 def list_conversations(request):
-    """
-    GET /rxchat/conversations/
-    List all conversations for the current user/session.
-    """
+    """List all conversations for the current browser session."""
     owner = _get_owner_filter(request)
     conversations = (
         Conversation.objects
@@ -382,10 +216,7 @@ def list_conversations(request):
 
 @api_view(['GET'])
 def get_conversation(request, conversation_id):
-    """
-    GET /rxchat/conversations/<id>/
-    Get a conversation with all messages.
-    """
+    """Get a conversation with all messages for the current session."""
     owner = _get_owner_filter(request)
     try:
         conversation = (
@@ -397,7 +228,7 @@ def get_conversation(request, conversation_id):
     except Conversation.DoesNotExist:
         return Response(
             {'error': 'Conversation not found'},
-            status=status.HTTP_404_NOT_FOUND
+            status=status.HTTP_404_NOT_FOUND,
         )
     serializer = ConversationSerializer(conversation)
     return Response(serializer.data)
@@ -405,17 +236,14 @@ def get_conversation(request, conversation_id):
 
 @api_view(['DELETE'])
 def delete_conversation(request, conversation_id):
-    """
-    DELETE /rxchat/conversations/<id>/
-    Delete a conversation.
-    """
+    """Delete a conversation owned by the current session."""
     owner = _get_owner_filter(request)
     try:
         conversation = Conversation.objects.get(id=conversation_id, **owner)
     except Conversation.DoesNotExist:
         return Response(
             {'error': 'Conversation not found'},
-            status=status.HTTP_404_NOT_FOUND
+            status=status.HTTP_404_NOT_FOUND,
         )
     conversation.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
@@ -423,25 +251,21 @@ def delete_conversation(request, conversation_id):
 
 @api_view(['PATCH'])
 def rename_conversation(request, conversation_id):
-    """
-    PATCH /rxchat/conversations/<id>/rename/
-    Rename a conversation title.
-    Body: { "title": "New Title" }
-    """
+    """Rename a conversation title owned by the current session."""
     owner = _get_owner_filter(request)
     try:
         conversation = Conversation.objects.get(id=conversation_id, **owner)
     except Conversation.DoesNotExist:
         return Response(
             {'error': 'Conversation not found'},
-            status=status.HTTP_404_NOT_FOUND
+            status=status.HTTP_404_NOT_FOUND,
         )
 
     title = request.data.get('title', '').strip()
     if not title:
         return Response(
             {'error': 'Title cannot be empty'},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     conversation.title = title[:200]
@@ -451,15 +275,15 @@ def rename_conversation(request, conversation_id):
 
 @api_view(['PUT'])
 def edit_message(request, message_id):
-    """
-    PUT /rxchat/messages/<id>/
-    Edit a user message and regenerate the AI response.
-    This deletes all messages after the edited one, updates it,
-    and streams a new AI response.
-    Body: { "content": "Updated question" }
-    """
+    """Edit a user message and regenerate the assistant response."""
     owner = _get_owner_filter(request)
     content = request.data.get('content', '').strip()
+
+    if not content:
+        return Response(
+            {'error': 'Content cannot be empty'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
         message = _get_owned_user_message(message_id, owner)
@@ -467,60 +291,34 @@ def edit_message(request, message_id):
     except Message.DoesNotExist:
         return Response(
             {'error': 'Message not found'},
-            status=status.HTTP_404_NOT_FOUND
+            status=status.HTTP_404_NOT_FOUND,
         )
 
-    llm_attachments = _stored_image_attachments_for_llm(message.attachments)
-    if message.attachments and llm_attachments is None:
-        return Response(
-            {'error': 'Only image messages with saved previews can be edited. Please send a new message with the files attached again.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    if not content and not llm_attachments:
-        return Response(
-            {'error': 'Content cannot be empty'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Delete all messages after this one
     Message.objects.filter(
         conversation=conversation,
         created_at__gt=message.created_at,
     ).delete()
 
-    # Update the message content
     message.content = content
     message.save()
     conversation_updated_at = _touch_conversation(conversation)
-
-    # Get conversation history up to the edited message
     history = _conversation_history_before(conversation, message)
 
-    role = _get_user_role(request)
-    effective_role = getattr(conversation, 'role_override', None) or role
     return _stream_chat_completion(
         conversation=conversation,
-        ai_user_text=content or DEFAULT_ATTACHMENT_PROMPT,
+        ai_user_text=content,
         history=history,
-        role=effective_role,
-        attachments=llm_attachments,
         meta={
-            "conversation_id": str(conversation.id),
-            "conversation_updated_at": conversation_updated_at.isoformat(),
-            "edited_message_id": str(message.id),
+            'conversation_id': str(conversation.id),
+            'conversation_updated_at': conversation_updated_at.isoformat(),
+            'edited_message_id': str(message.id),
         },
     )
 
 
 @api_view(['POST'])
 def resend_message(request, message_id):
-    """
-    POST /rxchat/messages/<id>/resend/
-    Resend a user message to regenerate the AI response.
-    Deletes the existing AI response (if any) after this message
-    and streams a new one.
-    """
+    """Regenerate an assistant response from a previous user message."""
     owner = _get_owner_filter(request)
 
     try:
@@ -529,36 +327,22 @@ def resend_message(request, message_id):
     except Message.DoesNotExist:
         return Response(
             {'error': 'Message not found'},
-            status=status.HTTP_404_NOT_FOUND
+            status=status.HTTP_404_NOT_FOUND,
         )
 
-    llm_attachments = _stored_image_attachments_for_llm(message.attachments)
-    if message.attachments and llm_attachments is None:
-        return Response(
-            {'error': 'Only image messages with saved previews can be regenerated. Please send a new message with the files attached again.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Delete all messages after this user message
     Message.objects.filter(
         conversation=conversation,
         created_at__gt=message.created_at,
     ).delete()
     conversation_updated_at = _touch_conversation(conversation)
-
-    # Get conversation history up to and including this message
     history = _conversation_history_before(conversation, message)
 
-    role = _get_user_role(request)
-    effective_role = getattr(conversation, 'role_override', None) or role
     return _stream_chat_completion(
         conversation=conversation,
-        ai_user_text=message.content or DEFAULT_ATTACHMENT_PROMPT,
+        ai_user_text=message.content,
         history=history,
-        role=effective_role,
-        attachments=llm_attachments,
         meta={
-            "conversation_id": str(conversation.id),
-            "conversation_updated_at": conversation_updated_at.isoformat(),
+            'conversation_id': str(conversation.id),
+            'conversation_updated_at': conversation_updated_at.isoformat(),
         },
     )

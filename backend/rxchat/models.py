@@ -1,6 +1,6 @@
 import uuid
+
 from django.db import models
-from django.contrib.auth.models import User
 from django.utils import timezone
 
 
@@ -24,23 +24,16 @@ SOURCE_CHOICES = [
 
 
 class Conversation(models.Model):
-    """A chat conversation (session)."""
+    """A chat conversation owned by an anonymous browser session."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='conversations')
-    session_key = models.CharField(max_length=40, null=True, blank=True, db_index=True)
+    session_key = models.CharField(max_length=40, db_index=True)
     title = models.CharField(max_length=200, default='New Conversation')
-    role_override = models.CharField(
-        max_length=30, null=True, blank=True,
-        help_text='Per-conversation role override (e.g. nurse, physician). '
-                  'If set, overrides the user profile role for this conversation only.',
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-updated_at']
         indexes = [
-            models.Index(fields=['user', '-updated_at'], name='rxchat_conv_user_upd_idx'),
             models.Index(fields=['session_key', '-updated_at'], name='rxchat_conv_sess_upd_idx'),
         ]
 
@@ -49,7 +42,7 @@ class Conversation(models.Model):
 
 
 class Message(models.Model):
-    """A single message in a conversation."""
+    """A single text message in a conversation."""
     ROLE_CHOICES = [
         ('user', 'User'),
         ('assistant', 'Assistant'),
@@ -59,7 +52,6 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     content = models.TextField()
-    attachments = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

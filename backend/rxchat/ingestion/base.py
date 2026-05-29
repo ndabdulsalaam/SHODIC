@@ -143,7 +143,7 @@ def extract_text(path: Path) -> str:
                     pages.append(page.extract_text() or "")
             return "\n\n".join(page for page in pages if page.strip())
         except Exception:
-            return _markitdown_text(path)
+            return ""
     if suffix in {".xlsx", ".xlsm"}:
         try:
             import openpyxl  # noqa: PLC0415
@@ -158,19 +158,9 @@ def extract_text(path: Path) -> str:
                         lines.append(" | ".join(values))
             return "\n".join(lines)
         except Exception:
-            return _markitdown_text(path)
+            return ""
     if suffix in {".csv", ".tsv"}:
         return path.read_text(encoding="utf-8", errors="ignore")
     if suffix in {".txt", ".md"}:
         return path.read_text(encoding="utf-8", errors="ignore")
-    return _markitdown_text(path)
-
-
-def _markitdown_text(path: Path) -> str:
-    try:
-        from markitdown import MarkItDown  # noqa: PLC0415
-
-        result = MarkItDown().convert(str(path))
-        return getattr(result, "text_content", "") or ""
-    except Exception:
-        return ""
+    return ""

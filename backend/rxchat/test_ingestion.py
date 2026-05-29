@@ -281,25 +281,22 @@ class IngestionAdminTests(TestCase):
         self.client.force_login(self.user)
 
     @override_settings(ROOT_URLCONF="config.urls")
-    def test_admin_defaults_to_fildah_project_view(self):
+    def test_admin_index_shows_rxchat_admin(self):
         response = self.client.get("/admin/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Fildah Admin")
-        self.assertContains(response, 'data-admin-project="fildah"')
-        self.assertContains(response, 'data-admin-project="rxchat"')
-        self.assertContains(response, 'class="app-accounts')
+        self.assertContains(response, "RxChat Administration")
         self.assertContains(response, 'class="app-rxchat')
+        self.assertContains(response, "Upload source files")
 
     @override_settings(ROOT_URLCONF="config.urls")
-    def test_admin_rxchat_project_filters_index_to_rxchat(self):
-        response = self.client.get("/admin/?project=rxchat")
+    def test_admin_ingestion_page_loads_for_superuser(self):
+        response = self.client.get("/admin/rxchat/ingestion/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-admin-project="rxchat"')
-        self.assertContains(response, 'class="app-rxchat')
-        self.assertContains(response, "Data ingestion")
-        self.assertNotContains(response, 'class="app-accounts')
+        self.assertContains(response, "Data Ingestion")
+        self.assertContains(response, "Upload Manual Source")
+        self.assertContains(response, "Source Status")
 
     @override_settings(ROOT_URLCONF="config.urls")
     @patch("rxchat.admin._queue_task")
@@ -350,11 +347,10 @@ class IngestionAdminTests(TestCase):
         queue_task.assert_called_once_with("ingest_drugs", "--source", "emdex")
 
     @override_settings(ROOT_URLCONF="config.urls")
-    def test_admin_changelist_uses_compact_header(self):
+    def test_admin_raw_source_changelist_loads(self):
         response = self.client.get("/admin/rxchat/rawsourcedata/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="rxc-changelist-header"')
         self.assertContains(response, "Select raw data source to change")
         self.assertContains(response, 'id="toolbar"')
 

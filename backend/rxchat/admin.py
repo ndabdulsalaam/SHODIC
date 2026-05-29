@@ -8,6 +8,11 @@ from rxchat.ingestion.nafdac_scraper import NAFDAC_CATEGORIES
 from rxchat.ingestion.source_status import source_status_rows
 from rxchat.ingestion.update_checker import check_all_sources
 
+admin.site.site_header = 'RxChat Administration'
+admin.site.site_title = 'RxChat Admin'
+admin.site.index_title = 'Dashboard'
+
+
 from .models import (
     Conversation,
     DrugChunk,
@@ -27,7 +32,7 @@ class MessageInline(admin.TabularInline):
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ['title', 'user', 'session_key', 'created_at', 'updated_at']
+    list_display = ['title', 'session_key', 'created_at', 'updated_at']
     list_filter = ['created_at']
     search_fields = ['title']
     inlines = [MessageInline]
