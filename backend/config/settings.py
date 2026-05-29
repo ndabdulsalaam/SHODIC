@@ -1,4 +1,4 @@
-"""Django settings for the RxChat project."""
+"""Django settings for the SHODIC project."""
 
 import importlib.util
 import os
@@ -52,7 +52,7 @@ def database_config():
     }
 
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-rxchat-local-key-change-me")
+SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-shodic-local-key-change-me")
 
 DEBUG = env_bool("DEBUG", True)
 
@@ -67,7 +67,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
-    "rxchat",
+    "shodic",
 ]
 
 if importlib.util.find_spec("django_q"):
@@ -138,16 +138,14 @@ REST_FRAMEWORK = {
 }
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_BACKUP_API_KEY = os.getenv("OPENROUTER_BACKUP_API_KEY", "")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-OPENROUTER_HTTP_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:5173")
-OPENROUTER_TEXT_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free")
+OPENROUTER_TEXT_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
 OPENROUTER_TEXT_MAX_TOKENS = env_int("OPENROUTER_TEXT_MAX_TOKENS", 2048)
 OPENROUTER_REASONING_MAX_TOKENS = env_int("OPENROUTER_REASONING_MAX_TOKENS", 4096)
 
 QDRANT_URL = os.getenv("QDRANT_URL", "")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rxchat")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "shodic")
 QDRANT_INFERENCE_MODEL = os.getenv("QDRANT_INFERENCE_MODEL", "intfloat/multilingual-e5-small")
 QDRANT_SPARSE_MODEL = os.getenv("QDRANT_SPARSE_MODEL", "qdrant/bm25")
 QDRANT_DENSE_VECTOR_NAME = os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense")
@@ -158,7 +156,7 @@ QDRANT_DISTANCE = os.getenv("QDRANT_DISTANCE", "Cosine")
 OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY", "")
 
 Q_CLUSTER = {
-    "name": "rxchat",
+    "name": "shodic",
     "workers": 1,
     "timeout": 14400,
     "retry": 14500,
