@@ -42,7 +42,7 @@ Frontend default: `http://localhost:5173`. On localhost, `VITE_API_BASE_URL` can
 
 ## Environment
 
-Minimum backend `.env` values:
+Minimum local backend `.env` values:
 
 ```env
 SECRET_KEY=change-me
@@ -51,18 +51,39 @@ ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
 ALLOWED_ORIGINS=http://localhost:5173
 DATABASE_URL=
 OPENROUTER_API_KEY=your_openrouter_api_key
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=openrouter/free
 QDRANT_URL=
 QDRANT_API_KEY=
-QDRANT_COLLECTION=shodic
 OPENFDA_API_KEY=
 ```
+
+For deployment, set `DEBUG=False`, use your deployed backend host in `ALLOWED_HOSTS`, use your frontend URL in `ALLOWED_ORIGINS`, and set `DATABASE_URL`. OpenRouter base URL, model, token limits, and Qdrant collection can be left unset unless you want to override the defaults.
 
 Frontend `.env` is only needed when the API is not on localhost:
 
 ```env
 VITE_API_BASE_URL=http://localhost:8000
+```
+
+## Deploy
+
+Render backend:
+
+```text
+Root Directory: backend
+Build Command: pip install -r requirements.txt && python manage.py collectstatic --noinput
+Start Command: python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+Included Paths: backend/**
+```
+
+Vercel frontend:
+
+```text
+Root Directory: frontend
+Framework Preset: Vite
+Build Command: default
+Output Directory: default
+Install Command: default
+Environment: VITE_API_BASE_URL=https://your-render-backend.onrender.com
 ```
 
 ## API
