@@ -25,6 +25,7 @@ Environment variables (backend/.env):
 """
 
 import logging
+import threading
 import uuid
 from itertools import islice
 
@@ -34,8 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Lazy-initialised client — created once on first call
 _client = None
-
-
+_client_lock = threading.Lock()
 
 
 def _collection_setup_hint() -> str:
@@ -91,13 +91,17 @@ def _get_client():
     try:
         from qdrant_client import QdrantClient  # noqa: PLC0415
 
-        _client = QdrantClient(
-            url=qdrant_url,
-            api_key=qdrant_key,
-            cloud_inference=True,
-        )
-        logger.info("Qdrant client initialised successfully.")
-        return _client
+        with _client_lock:
+            if _client is not None:
+                return _client
+
+            _client = QdrantClient(
+                url=qdrant_url,
+                api_key=qdrant_key,
+                cloud_inference=True,
+            )
+            logger.info("Qdrant client initialised successfully.")
+            return _client
 
     except ImportError:
         logger.error(

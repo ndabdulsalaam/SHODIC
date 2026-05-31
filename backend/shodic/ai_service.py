@@ -15,8 +15,11 @@ Prompt hierarchy (top → cached, bottom → dynamic per-request):
 """
 
 import logging
-from openai import OpenAI
+import re
+import threading
+
 from django.conf import settings
+from openai import OpenAI
 from .qdrant_service import retrieve_context
 
 logger = logging.getLogger(__name__)
@@ -335,6 +338,10 @@ def _length_limit_message() -> str:
 # 6. LLM CLIENT  (OpenRouter only)
 # ──────────────────────────────────────────────────────────────────────
 
+_client_lock = threading.Lock()
+_clients = {}
+
+
 def _get_client(api_key=None):
     """Return an OpenAI-compatible client configured for OpenRouter.
 
@@ -346,10 +353,16 @@ def _get_client(api_key=None):
         logger.error("OPENROUTER_API_KEY is not set — cannot create LLM client")
         return None
 
-    return OpenAI(
-        api_key=api_key,
-        base_url=settings.OPENROUTER_BASE_URL,
-    )
+    cache_key = (api_key, settings.OPENROUTER_BASE_URL)
+    with _client_lock:
+        client = _clients.get(cache_key)
+        if client is None:
+            client = OpenAI(
+                api_key=api_key,
+                base_url=settings.OPENROUTER_BASE_URL,
+            )
+            _clients[cache_key] = client
+        return client
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -375,6 +388,10 @@ _COMPLEX_INDICATORS = [
     "pharmacokinetic", "pharmacodynamic", "mechanism of action",
     "bioavailability", "half-life", "cyp450", "cyp3a4", "cyp2d6",
 ]
+_COMPLEX_QUERY_RE = re.compile(
+    "|".join(re.escape(indicator) for indicator in sorted(_COMPLEX_INDICATORS, key=len, reverse=True)),
+    re.IGNORECASE,
+)
 
 
 def _is_complex_query(query: str, role: str) -> bool:
@@ -383,12 +400,8 @@ def _is_complex_query(query: str, role: str) -> bool:
     Returns True when the question involves drug interactions, dosing
     adjustments, or multi-step clinical reasoning — regardless of role.
     """
-    query_lower = query.lower()
-
-    # Check for complexity indicators
-    for indicator in _COMPLEX_INDICATORS:
-        if indicator in query_lower:
-            return True
+    if _COMPLEX_QUERY_RE.search(query):
+        return True
 
     # Multiple drug names (crude heuristic: query has 2+ capitalised
     # words that could be drug names after removing common words)
@@ -466,7 +479,7 @@ def stream_ai_events(
     messages = [{"role": "system", "content": system_message}]
 
     if conversation_history:
-        for msg in conversation_history[-10:]:
+        for msg in conversation_history:
             messages.append({
                 "role": msg["role"],
                 "content": msg["content"],
