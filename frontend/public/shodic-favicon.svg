@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SHODIC hospital cross">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#2B1A0D" stroke="#FFF1C9" stroke-width="2"/>
+  <rect x="28" y="15" width="8" height="34" rx="3" fill="#F0B846"/>
+  <rect x="15" y="28" width="34" height="8" rx="3" fill="#F0B846"/>
+</svg>
