@@ -108,7 +108,7 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                     </div>
                     <button className="sidebar__new-chat" onClick={onNewChat}>
                         <HiOutlinePlus size={16} />
-                        New Conversation
+                        New Session
                     </button>
                 </div>
 

@@ -15,13 +15,13 @@ const suggestions = [
     },
     {
         icon: <HiOutlineQuestionMarkCircle size={16} />,
-        label: 'OTC Suggestions',
-        text: 'What can I take for seasonal allergies?',
+        label: 'Patient Counselling',
+        text: 'How should I counsel a patient taking amlodipine?',
     },
     {
         icon: <HiOutlineClipboardDocumentList size={16} />,
         label: 'Dosage Guide',
-        text: "What's the recommended dose of amoxicillin for adults?",
+        text: "What's the usual adult dose of amoxicillin?",
     },
 ]
 
@@ -39,7 +39,7 @@ function WelcomeScreen({ onSuggestionClick, inputSlot }) {
         <div className="welcome">
             <div className="welcome__hero">
                 <h1 className="welcome__greeting">{greeting}.</h1>
-                <p className="welcome__tagline">How can I help you today?</p>
+                <p className="welcome__tagline">What medication question can I help with?</p>
             </div>
 
             {/* Chat input rendered inline between greeting and chips */}

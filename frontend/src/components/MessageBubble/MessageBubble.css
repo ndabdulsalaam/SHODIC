@@ -46,17 +46,18 @@
 }
 
 .message--user .message__bubble {
-    background: #f4f7f6;
-    color: var(--color-text);
-    border: 1px solid rgba(46, 196, 182, 0.35);
+    background: var(--color-secondary-soft);
+    color: var(--color-primary-dark);
+    border: 1px solid rgba(169, 111, 9, 0.24);
     border-top-right-radius: var(--radius-sm);
 }
 
 .message--ai .message__bubble {
-    background: transparent;
+    background: rgba(255, 253, 246, 0.72);
     color: var(--color-text);
-    padding-left: var(--space-2);
-    padding-right: var(--space-1);
+    border-left: 3px solid rgba(217, 154, 27, 0.55);
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
 }
 
 .message__status {
@@ -266,11 +267,11 @@
     max-height: 70vh;
     -webkit-overflow-scrolling: touch;
     margin: var(--space-4) 0;
-    border: 1px solid #e3e3e3;
-    border-radius: 10px;
-    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-raised);
     scrollbar-width: thin;
-    scrollbar-color: #c4c4c4 transparent;
+    scrollbar-color: var(--color-border) transparent;
 }
 
 .message__table-wrapper::-webkit-scrollbar {
@@ -282,12 +283,12 @@
 }
 
 .message__table-wrapper::-webkit-scrollbar-thumb {
-    background: #c4c4c4;
+    background: var(--color-border);
     border-radius: 10px;
 }
 
 .message__table-wrapper::-webkit-scrollbar-thumb:hover {
-    background: #a0a0a0;
+    background: var(--color-text-muted);
 }
 
 /* Base table – uses renderer-provided column weights, not equal columns */
@@ -322,15 +323,15 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: #f9f9f9;
-    font-weight: 600;
+    background: var(--color-warning-soft);
+    font-weight: 800;
     font-size: 0.8rem;
-    color: #374151;
+    color: var(--color-primary-dark);
     text-align: left;
     padding: 10px 16px;
-    border-bottom: 1px solid #e3e3e3;
+    border-bottom: 1px solid var(--color-border);
     white-space: normal;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
     min-width: 0;
     overflow-wrap: normal;
     word-break: normal;
@@ -339,8 +340,8 @@
 /* Body cells */
 .message__markdown td {
     padding: 10px 16px;
-    color: #4b5563;
-    border-bottom: 1px solid #f0f0f0;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border-light);
     vertical-align: top;
     white-space: normal;
     line-height: 1.55;
@@ -365,12 +366,12 @@
 
 /* Zebra striping */
 .message__markdown tbody tr:nth-child(even) {
-    background: #fafafa;
+    background: rgba(247, 241, 228, 0.48);
 }
 
 /* Row hover */
 .message__markdown tbody tr:hover {
-    background: rgba(46, 196, 182, 0.05);
+    background: rgba(217, 154, 27, 0.08);
     transition: background 0.15s ease;
 }
 
@@ -381,16 +382,16 @@
 
 /* Inline code */
 .message__markdown code {
-    background: rgba(46, 196, 182, 0.1);
+    background: var(--color-secondary-soft);
     padding: 1px 6px;
     border-radius: var(--radius-sm);
     font-size: 0.88em;
-    font-family: 'Fira Code', 'Consolas', monospace;
+    font-family: 'Consolas', monospace;
 }
 
 /* Code blocks */
 .message__markdown pre {
-    background: var(--color-primary);
+    background: var(--color-primary-dark);
     border-radius: var(--radius-md);
     padding: var(--space-3) var(--space-4);
     margin: var(--space-3) 0;
@@ -411,7 +412,7 @@
     border-left: 3px solid var(--color-secondary);
     margin: var(--space-3) 0;
     padding: var(--space-2) var(--space-4);
-    background: rgba(46, 196, 182, 0.04);
+    background: var(--color-warning-soft);
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
     color: var(--color-text-secondary);
 }
@@ -431,7 +432,7 @@
 .message__markdown a {
     color: var(--color-secondary-dark);
     text-decoration: underline;
-    text-decoration-color: rgba(46, 196, 182, 0.3);
+    text-decoration-color: rgba(169, 111, 9, 0.34);
     text-underline-offset: 2px;
     transition: all var(--transition-fast);
 }
@@ -444,7 +445,7 @@
 /* Warning highlight for drug interactions */
 .message__bubble .warning,
 .message__markdown .warning {
-    background: rgba(230, 57, 70, 0.08);
+    background: rgba(181, 64, 52, 0.08);
     border-left: 3px solid var(--color-error);
     padding: var(--space-2) var(--space-3);
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -464,8 +465,8 @@
     }
 
     .message--ai .message__bubble {
-        padding-left: var(--space-1);
-        padding-right: 0;
+        padding-left: var(--space-3);
+        padding-right: var(--space-3);
     }
 }
 
@@ -500,7 +501,7 @@
 }
 
 .message__action-btn:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-warning-soft);
     color: var(--color-text);
 }
 
@@ -595,7 +596,7 @@
 .message__edit-textarea:focus {
     outline: none;
     border-color: var(--color-secondary);
-    box-shadow: 0 0 0 2px rgba(46, 196, 182, 0.15);
+    box-shadow: 0 0 0 2px rgba(217, 154, 27, 0.16);
 }
 
 .message__edit-actions {
@@ -619,7 +620,7 @@
 
 .message__edit-btn--send {
     background: var(--color-secondary);
-    color: var(--color-primary);
+    color: var(--color-primary-dark);
 }
 
 .message__edit-btn--send:hover {
@@ -628,12 +629,12 @@
 }
 
 .message__edit-btn--cancel {
-    background: var(--color-surface-hover);
+    background: var(--color-warning-soft);
     color: var(--color-text-secondary);
 }
 
 .message__edit-btn--cancel:hover {
-    background: rgba(230, 57, 70, 0.1);
+    background: rgba(181, 64, 52, 0.10);
     color: var(--color-error);
     transform: translateY(-1px);
 }
