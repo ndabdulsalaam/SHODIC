@@ -1,10 +1,11 @@
 import { Fragment, useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { HiOutlineBars3, HiOutlineChevronDown } from 'react-icons/hi2'
+import { HiOutlineBars3, HiOutlineChevronDown, HiOutlinePencilSquare } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
 import DateSeparator from '../DateSeparator/DateSeparator'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
 import { PRODUCT } from '../../config/product'
+import { getSessionContextChips } from '../../utils/sessionContext'
 import './ChatWindow.css'
 
 function getMessageDomId(message, index) {
@@ -50,6 +51,8 @@ function ChatWindow({
     onResendMessage,
     onMessageVariantChange,
     onStopGeneration,
+    sessionContext,
+    onEditSessionContext,
 }) {
     const messagesEndRef = useRef(null)
     const messagesContainerRef = useRef(null)
@@ -64,6 +67,7 @@ function ChatWindow({
     const [showScrollButton, setShowScrollButton] = useState(false)
 
     const isWelcome = !isLoadingMessages && messages.length === 0
+    const contextChips = getSessionContextChips(sessionContext)
     const hasActiveStream = messages.some((msg) => msg.role === 'assistant' && msg._streaming)
     const hasPendingUserMessage = messages.some((msg) => Boolean(getSubmittedUserMessageToken(msg)))
 
@@ -270,8 +274,25 @@ function ChatWindow({
                     </button>
                     <div>
                         <div className="chat-window__title">{PRODUCT.name}</div>
-                        <div className="chat-window__subtitle">AI Pharmacist</div>
+                        <div className="chat-window__subtitle">Hospital medication assistant</div>
                     </div>
+                </div>
+
+                <div className="chat-window__context" aria-label="Session context">
+                    <div className="chat-window__context-chips">
+                        {contextChips.map((chip) => (
+                            <span className="chat-window__context-chip" key={chip}>{chip}</span>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        className="chat-window__context-edit"
+                        onClick={onEditSessionContext}
+                        aria-label="Edit session context"
+                        title="Edit session context"
+                    >
+                        <HiOutlinePencilSquare size={18} />
+                    </button>
                 </div>
             </header>
 

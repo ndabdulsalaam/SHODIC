@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest, apiUrl, readApiResponse } from '../utils/api'
 import { readSseStream } from '../utils/sse'
 import { productApiPath } from '../config/product'
+import {
+    DEFAULT_SESSION_CONTEXT,
+    isSessionContextComplete,
+    loadLastSessionContext,
+    normalizeSessionContext,
+    prepareSessionContextPayload,
+    saveLastSessionContext,
+} from '../utils/sessionContext'
 
 const DEFAULT_STREAM_STATUS_LABEL = 'Checking sources'
 
@@ -31,6 +39,10 @@ function preserveConversationFields(conversation, fallback = {}) {
         created_at: conversation.created_at ?? fallback.created_at ?? null,
         updated_at: conversation.updated_at ?? fallback.updated_at ?? conversation.created_at ?? fallback.created_at ?? null,
         message_count: conversation.message_count ?? fallback.message_count ?? 0,
+        role: conversation.role ?? fallback.role ?? DEFAULT_SESSION_CONTEXT.role,
+        subject: conversation.subject ?? fallback.subject ?? DEFAULT_SESSION_CONTEXT.subject,
+        patient_sex: conversation.patient_sex ?? fallback.patient_sex ?? DEFAULT_SESSION_CONTEXT.patient_sex,
+        pregnancy_status: conversation.pregnancy_status ?? fallback.pregnancy_status ?? DEFAULT_SESSION_CONTEXT.pregnancy_status,
         messages: conversation.messages ?? fallback.messages ?? [],
         _loaded: conversation._loaded ?? fallback._loaded ?? false,
     }
@@ -148,6 +160,11 @@ export default function useChatController() {
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [loadingConversationId, setLoadingConversationId] = useState(null)
+    const [newConversationContext, setNewConversationContext] = useState(null)
+    const [sessionContextDraft, setSessionContextDraft] = useState(() => loadLastSessionContext())
+    const [sessionContextModalOpen, setSessionContextModalOpen] = useState(true)
+    const [sessionContextError, setSessionContextError] = useState('')
+    const [isSavingSessionContext, setIsSavingSessionContext] = useState(false)
     const abortControllerRef = useRef(null)
     const conversationsRef = useRef([])
     const editVariantsRef = useRef({})
@@ -166,6 +183,10 @@ export default function useChatController() {
                 created_at: metadata.created_at ?? conversation.created_at,
                 updated_at: metadata.updated_at ?? conversation.updated_at,
                 message_count: metadata.message_count ?? conversation.message_count,
+                role: metadata.role ?? conversation.role,
+                subject: metadata.subject ?? conversation.subject,
+                patient_sex: metadata.patient_sex ?? conversation.patient_sex,
+                pregnancy_status: metadata.pregnancy_status ?? conversation.pregnancy_status,
             }
         })))
     }, [])
@@ -313,6 +334,16 @@ export default function useChatController() {
         conversations.find((conversation) => conversation.id === activeConversationId)
     ), [activeConversationId, conversations])
     const messages = activeConversation?.messages || []
+    const sessionContext = normalizeSessionContext(activeConversation || newConversationContext || sessionContextDraft)
+    const sessionContextModalKey = [
+        sessionContextModalOpen ? 'open' : 'closed',
+        sessionContextDraft.role,
+        sessionContextDraft.subject,
+        sessionContextDraft.patient_sex,
+        sessionContextDraft.pregnancy_status,
+        activeConversationId || 'new',
+    ].join(':')
+    const canDismissSessionContextModal = Boolean(activeConversationId || newConversationContext)
 
     const loadConversationMessages = useCallback(async (conversationId) => {
         const conversation = conversationsRef.current.find((item) => item.id === conversationId)
@@ -341,6 +372,53 @@ export default function useChatController() {
         }
     }, [])
 
+    const handleOpenSessionContextModal = useCallback(() => {
+        setSessionContextDraft(normalizeSessionContext(activeConversation || newConversationContext || sessionContextDraft))
+        setSessionContextError('')
+        setSessionContextModalOpen(true)
+    }, [activeConversation, newConversationContext, sessionContextDraft])
+
+    const handleCloseSessionContextModal = useCallback(() => {
+        if (!activeConversationId && !newConversationContext) return
+        setSessionContextModalOpen(false)
+        setSessionContextError('')
+    }, [activeConversationId, newConversationContext])
+
+    const handleSaveSessionContext = useCallback(async (context) => {
+        const normalizedContext = normalizeSessionContext(context)
+        if (!isSessionContextComplete(normalizedContext)) return
+
+        setSessionContextError('')
+        setSessionContextDraft(normalizedContext)
+        saveLastSessionContext(normalizedContext)
+
+        if (!activeConversationId) {
+            setNewConversationContext(normalizedContext)
+            setSessionContextModalOpen(false)
+            return
+        }
+
+        setIsSavingSessionContext(true)
+        try {
+            const data = await apiRequest(productApiPath(`/conversations/${activeConversationId}/context/`), {
+                method: 'PATCH',
+                body: JSON.stringify(prepareSessionContextPayload(normalizedContext)),
+            })
+
+            setConversations((prev) => prev.map((conversation) => (
+                conversation.id === activeConversationId
+                    ? preserveConversationFields({ ...conversation, ...data }, conversation)
+                    : conversation
+            )))
+            setSessionContextModalOpen(false)
+        } catch (err) {
+            console.warn('Could not update session context:', err)
+            setSessionContextError('Could not save session context. Please try again.')
+        } finally {
+            setIsSavingSessionContext(false)
+        }
+    }, [activeConversationId])
+
     const handleSendMessage = useCallback(async (payload) => {
         const { text } = normalizeSendPayload(payload)
         const trimmedText = text.trim()
@@ -348,6 +426,12 @@ export default function useChatController() {
         const localTitleSource = trimmedText || 'New Conversation'
 
         const requestConversationId = activeConversationId
+        const contextForNewConversation = normalizeSessionContext(newConversationContext)
+        if (!requestConversationId && !isSessionContextComplete(contextForNewConversation)) {
+            setSessionContextDraft(normalizeSessionContext(newConversationContext || sessionContextDraft))
+            setSessionContextModalOpen(true)
+            return
+        }
         let actualConvId = requestConversationId || `pending-conversation-${Date.now()}`
         const messageCreatedAt = new Date().toISOString()
         const tempUserMessageId = `pending-user-${Date.now()}`
@@ -388,6 +472,7 @@ export default function useChatController() {
                     created_at: messageCreatedAt,
                     updated_at: messageCreatedAt,
                     message_count: 1,
+                    ...contextForNewConversation,
                     messages: [userMsg, aiMsg],
                     _loaded: true,
                 }),
@@ -406,7 +491,7 @@ export default function useChatController() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: trimmedText,
-                    ...(requestConversationId ? { conversation_id: requestConversationId } : {}),
+                    ...(requestConversationId ? { conversation_id: requestConversationId } : prepareSessionContextPayload(contextForNewConversation)),
                 }),
                 signal: controller.signal,
             })
@@ -454,6 +539,10 @@ export default function useChatController() {
                                 title: parsed.conversation_title ?? conversation.title,
                                 created_at: parsed.conversation_created_at ?? conversation.created_at,
                                 updated_at: conversationUpdatedAt,
+                                role: parsed.role ?? conversation.role,
+                                subject: parsed.subject ?? conversation.subject,
+                                patient_sex: parsed.patient_sex ?? conversation.patient_sex,
+                                pregnancy_status: parsed.pregnancy_status ?? conversation.pregnancy_status,
                                 messages: nextMessages,
                                 _loaded: true,
                             }
@@ -486,15 +575,22 @@ export default function useChatController() {
             abortControllerRef.current = null
             setIsLoading(false)
         }
-    }, [activeConversationId, removeStreamingMessage, streamAssistantResponse])
+    }, [activeConversationId, newConversationContext, removeStreamingMessage, sessionContextDraft, streamAssistantResponse])
 
     const handleNewChat = useCallback(() => {
         setActiveConversationId(null)
+        setNewConversationContext(null)
+        setSessionContextDraft(loadLastSessionContext())
+        setSessionContextError('')
+        setSessionContextModalOpen(true)
         setSidebarOpen(false)
     }, [])
 
     const handleSelectChat = useCallback((id) => {
         setActiveConversationId(id)
+        setNewConversationContext(null)
+        setSessionContextModalOpen(false)
+        setSessionContextError('')
         setSidebarOpen(false)
         loadConversationMessages(id)
     }, [loadConversationMessages])
@@ -510,6 +606,9 @@ export default function useChatController() {
         setConversations((prev) => prev.filter((conversation) => conversation.id !== id))
         if (activeConversationId === id) {
             setActiveConversationId(null)
+            setNewConversationContext(null)
+            setSessionContextDraft(loadLastSessionContext())
+            setSessionContextModalOpen(true)
         }
     }, [activeConversationId])
 
@@ -618,6 +717,10 @@ export default function useChatController() {
                     if (parsed.conversation_id && parsed.conversation_updated_at) {
                         applyConversationMetadata(parsed.conversation_id, {
                             updated_at: parsed.conversation_updated_at,
+                            role: parsed.role,
+                            subject: parsed.subject,
+                            patient_sex: parsed.patient_sex,
+                            pregnancy_status: parsed.pregnancy_status,
                         })
                     }
                     if (parsed.edited_message_id) clearEditedMessagePending()
@@ -721,6 +824,10 @@ export default function useChatController() {
                     if (parsed.conversation_id && parsed.conversation_updated_at) {
                         applyConversationMetadata(parsed.conversation_id, {
                             updated_at: parsed.conversation_updated_at,
+                            role: parsed.role,
+                            subject: parsed.subject,
+                            patient_sex: parsed.patient_sex,
+                            pregnancy_status: parsed.pregnancy_status,
                         })
                     }
                 },
@@ -790,14 +897,24 @@ export default function useChatController() {
         handleEditMessage,
         handleMessageVariantChange,
         handleNewChat,
+        handleOpenSessionContextModal,
         handleRenameChat,
+        handleSaveSessionContext,
+        handleCloseSessionContextModal,
         handleResendMessage,
         handleSelectChat,
         handleSendMessage,
         handleStopGeneration,
+        canDismissSessionContextModal,
         isLoading,
         isLoadingMessages: loadingConversationId === activeConversationId && loadingConversationId !== null,
+        isSavingSessionContext,
         messages,
+        sessionContext,
+        sessionContextDraft,
+        sessionContextError,
+        sessionContextModalKey,
+        sessionContextModalOpen,
         setSidebarCollapsed,
         setSidebarOpen,
         sidebarCollapsed,

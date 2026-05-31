@@ -1,5 +1,6 @@
 import Sidebar from '../components/Sidebar/Sidebar'
 import ChatWindow from '../components/ChatWindow/ChatWindow'
+import SessionContextModal from '../components/SessionContextModal/SessionContextModal'
 import useChatController from '../hooks/useChatController'
 import './ChatPage.css'
 
@@ -35,6 +36,18 @@ function ChatPage() {
                 onResendMessage={chat.handleResendMessage}
                 onMessageVariantChange={chat.handleMessageVariantChange}
                 onStopGeneration={chat.handleStopGeneration}
+                sessionContext={chat.sessionContext}
+                onEditSessionContext={chat.handleOpenSessionContextModal}
+            />
+            <SessionContextModal
+                key={chat.sessionContextModalKey}
+                isOpen={chat.sessionContextModalOpen}
+                initialContext={chat.sessionContextDraft}
+                canDismiss={chat.canDismissSessionContextModal}
+                isSaving={chat.isSavingSessionContext}
+                error={chat.sessionContextError}
+                onClose={chat.handleCloseSessionContextModal}
+                onSubmit={chat.handleSaveSessionContext}
             />
         </div>
     )
