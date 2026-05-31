@@ -99,19 +99,8 @@ export function saveLastSessionContext(context) {
 }
 
 export function getSessionContextChips(context = {}) {
-    const normalized = normalizeSessionContext(context)
-    const chips = []
-    const roleLabel = getLabel(ROLE_OPTIONS, normalized.role)
-    const sexLabel = getLabel(PATIENT_SEX_OPTIONS, normalized.patient_sex)
-    const pregnancyLabel = getLabel(PREGNANCY_OPTIONS, normalized.pregnancy_status)
-
-    if (roleLabel) chips.push(roleLabel)
-    if (sexLabel) chips.push(`${sexLabel} patient`)
-    if (normalized.patient_sex === 'female' && pregnancyLabel) chips.push(pregnancyLabel)
-    if (normalized.subject === 'other_patient') chips.push('For another patient')
-    if (normalized.subject === 'general') chips.push('General information')
-
-    return chips
+    const roleLabel = getLabel(ROLE_OPTIONS, normalizeSessionContext(context).role)
+    return roleLabel ? [roleLabel] : []
 }
 
 export function prepareSessionContextPayload(context = {}) {
