@@ -1,9 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
+import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark } from 'react-icons/hi2'
 import { PRODUCT } from '../../config/product'
 import './Sidebar.css'
 
-const DAY_MS = 24 * 60 * 60 * 1000
 
 function getConversationTimestamp(conversation) {
     const rawDate = conversation?.updated_at || conversation?.created_at || ''
@@ -16,13 +15,10 @@ function getStartOfLocalDay(date) {
 }
 
 function groupConversations(conversations) {
-    const now = new Date()
-    const todayStart = getStartOfLocalDay(now)
-    const sevenDaysAgo = now.getTime() - (7 * DAY_MS)
+    const todayStart = getStartOfLocalDay(new Date())
     const groups = {
         today: [],
-        sevenDays: [],
-        older: [],
+        previous: [],
     }
 
     conversations.forEach((conversation) => {
@@ -32,20 +28,14 @@ function groupConversations(conversations) {
             return
         }
 
-        if (timestamp >= sevenDaysAgo) {
-            groups.sevenDays.push(conversation)
-            return
-        }
-
-        groups.older.push(conversation)
+        groups.previous.push(conversation)
     })
 
     const sortNewestFirst = (items) => [...items].sort((a, b) => getConversationTimestamp(b) - getConversationTimestamp(a))
 
     return [
         { label: 'Today', items: sortNewestFirst(groups.today) },
-        { label: 'Recent', items: sortNewestFirst(groups.sevenDays) },
-        { label: 'Older', items: sortNewestFirst(groups.older) },
+        { label: 'Previous', items: sortNewestFirst(groups.previous) },
     ].filter((group) => group.items.length > 0)
 }
 
@@ -100,7 +90,7 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                             <span className="sidebar__logo-text">{PRODUCT.name}</span>
                         </div>
                         <button className="sidebar__collapse-btn" onClick={onCollapse} title="Hide sidebar">
-                            <HiOutlineChevronDoubleLeft size={16} />
+                            <HiOutlineXMark size={18} />
                         </button>
                         <button className="sidebar__close-btn" onClick={onClose} aria-label="Close sidebar">
                             <HiOutlineXMark size={20} />
