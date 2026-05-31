@@ -2,7 +2,8 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -51,6 +52,24 @@ class ChatPromptTests(TestCase):
         self.assertNotIn("RETRIEVED CONTEXT", user_message)
         self.assertNotIn("Answer based strictly", user_message)
 
+    def test_patient_context_is_added_to_model_only_prompt(self):
+        user_message = build_user_message(
+            "Can this patient use co-amoxiclav?",
+            chunks=[],
+            role="physician",
+            patient_context={
+                "subject": "other_patient",
+                "patient_sex": "female",
+                "pregnancy_status": "pregnant",
+            },
+        )
+
+        self.assertIn("USER ROLE: physician", user_message)
+        self.assertIn("PATIENT SAFETY CONTEXT", user_message)
+        self.assertIn("another patient", user_message)
+        self.assertIn("Patient sex/gender for medication safety: female", user_message)
+        self.assertIn("Pregnancy/breastfeeding context: pregnant", user_message)
+
     @override_settings(OPENROUTER_TEXT_MODEL="text-model")
     def test_model_selection_uses_text_model_only(self):
         self.assertEqual(_select_models(), ["text-model"])
@@ -77,6 +96,36 @@ class ChatInputSerializerTests(TestCase):
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("attachments", serializer.errors)
+
+    def test_accepts_male_or_female_patient_sex_only(self):
+        valid = ChatInputSerializer(data={
+            "message": "Review this",
+            "patient_sex": "male",
+        })
+        invalid = ChatInputSerializer(data={
+            "message": "Review this",
+            "patient_sex": "unknown",
+        })
+
+        self.assertTrue(valid.is_valid(), valid.errors)
+        self.assertEqual(valid.validated_data["pregnancy_status"], "not_applicable")
+        self.assertFalse(invalid.is_valid())
+        self.assertIn("patient_sex", invalid.errors)
+
+    def test_requires_pregnancy_context_for_female_patient(self):
+        missing = ChatInputSerializer(data={
+            "message": "Review this",
+            "patient_sex": "female",
+        })
+        present = ChatInputSerializer(data={
+            "message": "Review this",
+            "patient_sex": "female",
+            "pregnancy_status": "pregnant",
+        })
+
+        self.assertFalse(missing.is_valid())
+        self.assertIn("pregnancy_status", missing.errors)
+        self.assertTrue(present.is_valid(), present.errors)
 
 
 class ChatAiServiceTests(TestCase):
@@ -170,7 +219,7 @@ class ChatAiServiceTests(TestCase):
         mock_retrieve.assert_called_once()
 
 
-class ChatApiTests(TestCase):
+class ChatApiTests(TransactionTestCase):
     def setUp(self):
         self.client = APIClient()
 
@@ -223,7 +272,40 @@ class ChatApiTests(TestCase):
         args, kwargs = mock_stream.call_args
         self.assertEqual(args[0], "What is paracetamol used for?")
         self.assertEqual(kwargs["role"], "patient")
+        self.assertEqual(kwargs["patient_context"]["role"], "patient")
         self.assertNotIn("attachments", kwargs)
+
+    @patch("shodic.views.stream_ai_events")
+    def test_send_message_saves_context_and_passes_role_to_ai(self, mock_stream):
+        mock_stream.return_value = iter(["Clinical answer"])
+
+        response = self.client.post(
+            "/shodic/send/",
+            {
+                "message": "Can this patient use co-amoxiclav?",
+                "role": "physician",
+                "subject": "other_patient",
+                "patient_sex": "female",
+                "pregnancy_status": "pregnant",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = self._consume_stream(response)
+        conversation = Conversation.objects.get()
+
+        self.assertEqual(conversation.role, "physician")
+        self.assertEqual(conversation.subject, "other_patient")
+        self.assertEqual(conversation.patient_sex, "female")
+        self.assertEqual(conversation.pregnancy_status, "pregnant")
+        self.assertIn('\"role\": \"physician\"', body)
+        self.assertIn('\"patient_sex\": \"female\"', body)
+
+        args, kwargs = mock_stream.call_args
+        self.assertEqual(args[0], "Can this patient use co-amoxiclav?")
+        self.assertEqual(kwargs["role"], "physician")
+        self.assertEqual(kwargs["patient_context"]["patient_sex"], "female")
 
     @patch("shodic.views.stream_ai_events")
     def test_send_message_saves_partial_assistant_when_stream_closes(self, mock_stream):
@@ -244,6 +326,7 @@ class ChatApiTests(TestCase):
         if hasattr(iterator, "close"):
             iterator.close()
         response.close()
+        connection.connect()
 
         conversation = Conversation.objects.get()
         assistant_message = conversation.messages.get(role="assistant")
@@ -352,6 +435,46 @@ class ChatApiTests(TestCase):
         delete = self.client.delete(f"/shodic/conversations/{conversation.id}/delete/")
         self.assertEqual(delete.status_code, 204)
         self.assertFalse(Conversation.objects.filter(id=conversation.id).exists())
+
+    def test_update_context_for_session(self):
+        session_key = self._session_key()
+        conversation = Conversation.objects.create(session_key=session_key, title="Context chat")
+
+        response = self.client.patch(
+            f"/shodic/conversations/{conversation.id}/context/",
+            {
+                "role": "nurse",
+                "subject": "other_patient",
+                "patient_sex": "female",
+                "pregnancy_status": "breastfeeding",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.role, "nurse")
+        self.assertEqual(conversation.subject, "other_patient")
+        self.assertEqual(conversation.patient_sex, "female")
+        self.assertEqual(conversation.pregnancy_status, "breastfeeding")
+        self.assertEqual(response.data["role"], "nurse")
+
+    def test_update_context_is_limited_to_session(self):
+        other_client = APIClient()
+        other_key = self._session_key(other_client)
+        conversation = Conversation.objects.create(session_key=other_key, title="Other context")
+
+        response = self.client.patch(
+            f"/shodic/conversations/{conversation.id}/context/",
+            {
+                "role": "pharmacist",
+                "subject": "self",
+                "patient_sex": "male",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     @patch("shodic.views.stream_ai_events")
     def test_edit_message_replaces_following_messages_and_streams_new_assistant_id(self, mock_stream):

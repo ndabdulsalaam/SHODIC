@@ -13,10 +13,11 @@ from .serializers import (
     ChatInputSerializer,
     ConversationListSerializer,
     ConversationSerializer,
+    SESSION_CONTEXT_FIELDS,
+    SessionContextSerializer,
 )
 
 
-DEFAULT_ROLE = 'patient'
 MAX_HISTORY_MESSAGES = 10
 
 
@@ -28,6 +29,18 @@ def _get_session_key(request):
 
 def _get_owner_filter(request):
     return {'session_key': _get_session_key(request)}
+
+
+def _conversation_context_payload(conversation):
+    return {field: getattr(conversation, field) for field in SESSION_CONTEXT_FIELDS}
+
+
+def _validated_context_data(serializer):
+    return {
+        field: serializer.validated_data[field]
+        for field in SESSION_CONTEXT_FIELDS
+        if field in serializer.validated_data
+    }
 
 
 def _get_owned_user_message(message_id, owner):
@@ -105,7 +118,7 @@ def _save_streamed_assistant(conversation, full_response, stream_state):
     return ai_message
 
 
-def _stream_chat_completion(*, conversation, ai_user_text, history, meta):
+def _stream_chat_completion(*, conversation, ai_user_text, history, meta, role, patient_context):
     """Return an SSE response that streams and persists one assistant reply."""
 
     def event_stream():
@@ -118,7 +131,8 @@ def _stream_chat_completion(*, conversation, ai_user_text, history, meta):
             for raw_event in stream_ai_events(
                 ai_user_text,
                 conversation_history=history,
-                role=DEFAULT_ROLE,
+                role=role,
+                patient_context=patient_context,
             ):
                 event = _normalize_ai_event(raw_event)
                 if not event:
@@ -165,6 +179,7 @@ def send_message(request):
     user_text = serializer.validated_data['message']
     conv_id = serializer.validated_data.get('conversation_id')
     owner = _get_owner_filter(request)
+    context_data = _validated_context_data(serializer)
 
     if conv_id:
         try:
@@ -176,7 +191,7 @@ def send_message(request):
             )
     else:
         title = user_text[:50] + ('...' if len(user_text) > 50 else '')
-        conversation = Conversation.objects.create(title=title, **owner)
+        conversation = Conversation.objects.create(title=title, **owner, **context_data)
 
     user_message = Message.objects.create(
         conversation=conversation,
@@ -196,7 +211,10 @@ def send_message(request):
             'conversation_created_at': conversation.created_at.isoformat(),
             'conversation_updated_at': conversation_updated_at.isoformat(),
             'user_message_id': str(user_message.id),
+            **_conversation_context_payload(conversation),
         },
+        role=conversation.role,
+        patient_context=_conversation_context_payload(conversation),
     )
 
 
@@ -232,6 +250,32 @@ def get_conversation(request, conversation_id):
         )
     serializer = ConversationSerializer(conversation)
     return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+def update_conversation_context(request, conversation_id):
+    """Update role and patient context for future replies in a conversation."""
+    owner = _get_owner_filter(request)
+    try:
+        conversation = Conversation.objects.get(id=conversation_id, **owner)
+    except Conversation.DoesNotExist:
+        return Response(
+            {'error': 'Conversation not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = SessionContextSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    update_fields = []
+    for field, value in _validated_context_data(serializer).items():
+        setattr(conversation, field, value)
+        update_fields.append(field)
+
+    if update_fields:
+        conversation.save(update_fields=update_fields)
+
+    return Response(ConversationSerializer(conversation).data)
 
 
 @api_view(['DELETE'])
@@ -312,7 +356,10 @@ def edit_message(request, message_id):
             'conversation_id': str(conversation.id),
             'conversation_updated_at': conversation_updated_at.isoformat(),
             'edited_message_id': str(message.id),
+            **_conversation_context_payload(conversation),
         },
+        role=conversation.role,
+        patient_context=_conversation_context_payload(conversation),
     )
 
 
@@ -344,5 +391,8 @@ def resend_message(request, message_id):
         meta={
             'conversation_id': str(conversation.id),
             'conversation_updated_at': conversation_updated_at.isoformat(),
+            **_conversation_context_payload(conversation),
         },
+        role=conversation.role,
+        patient_context=_conversation_context_payload(conversation),
     )

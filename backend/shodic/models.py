@@ -23,11 +23,67 @@ SOURCE_CHOICES = [
 ]
 
 
+ROLE_PATIENT = 'patient'
+ROLE_PHARMACIST = 'pharmacist'
+ROLE_PHYSICIAN = 'physician'
+ROLE_NURSE = 'nurse'
+ROLE_OTHER = 'other'
+
+ROLE_CHOICES = [
+    (ROLE_PATIENT, 'Patient'),
+    (ROLE_PHARMACIST, 'Pharmacist'),
+    (ROLE_PHYSICIAN, 'Physician'),
+    (ROLE_NURSE, 'Nurse'),
+    (ROLE_OTHER, 'Other health professional'),
+]
+
+SUBJECT_SELF = 'self'
+SUBJECT_OTHER_PATIENT = 'other_patient'
+SUBJECT_GENERAL = 'general'
+
+SUBJECT_CHOICES = [
+    (SUBJECT_SELF, 'Myself'),
+    (SUBJECT_OTHER_PATIENT, 'Another patient'),
+    (SUBJECT_GENERAL, 'General information'),
+]
+
+PATIENT_SEX_MALE = 'male'
+PATIENT_SEX_FEMALE = 'female'
+
+PATIENT_SEX_CHOICES = [
+    (PATIENT_SEX_MALE, 'Male'),
+    (PATIENT_SEX_FEMALE, 'Female'),
+]
+
+PREGNANCY_NOT_APPLICABLE = 'not_applicable'
+PREGNANCY_NOT_PREGNANT = 'not_pregnant_or_breastfeeding'
+PREGNANCY_PREGNANT = 'pregnant'
+PREGNANCY_BREASTFEEDING = 'breastfeeding'
+PREGNANCY_UNSURE = 'unsure'
+
+PREGNANCY_STATUS_CHOICES = [
+    (PREGNANCY_NOT_APPLICABLE, 'Not applicable'),
+    (PREGNANCY_NOT_PREGNANT, 'Not pregnant or breastfeeding'),
+    (PREGNANCY_PREGNANT, 'Pregnant'),
+    (PREGNANCY_BREASTFEEDING, 'Breastfeeding'),
+    (PREGNANCY_UNSURE, 'Unsure'),
+]
+
+
 class Conversation(models.Model):
     """A chat conversation owned by an anonymous browser session."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session_key = models.CharField(max_length=40, db_index=True)
     title = models.CharField(max_length=200, default='New Conversation')
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default=ROLE_PATIENT)
+    subject = models.CharField(max_length=30, choices=SUBJECT_CHOICES, default=SUBJECT_SELF)
+    patient_sex = models.CharField(max_length=10, choices=PATIENT_SEX_CHOICES, blank=True, default='')
+    pregnancy_status = models.CharField(
+        max_length=40,
+        choices=PREGNANCY_STATUS_CHOICES,
+        blank=True,
+        default='',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(default=timezone.now)
 

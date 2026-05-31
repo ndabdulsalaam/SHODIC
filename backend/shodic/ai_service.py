@@ -233,6 +233,7 @@ MODEL-ONLY BACKGROUND:
 -----------------
 
 USER ROLE: {role}
+{patient_context_block}
 USER QUESTION: {query}
 
 Use this background quietly where it helps. If it does not answer the \
@@ -251,6 +252,50 @@ renal/hepatic impairment. Do not tell the user that no background material \
 was found. \
 When in doubt, ask one clarifying question or advise checking with the \
 appropriate clinician rather than speculating."""
+
+SUBJECT_LABELS = {
+    "self": "the user is asking about themself",
+    "other_patient": "the user is asking about another patient",
+    "general": "the user is asking for general information",
+}
+
+PATIENT_SEX_LABELS = {
+    "male": "male",
+    "female": "female",
+}
+
+PREGNANCY_STATUS_LABELS = {
+    "not_applicable": "not applicable",
+    "not_pregnant_or_breastfeeding": "not pregnant or breastfeeding",
+    "pregnant": "pregnant",
+    "breastfeeding": "breastfeeding",
+    "unsure": "pregnancy or breastfeeding status is unsure",
+}
+
+
+def format_patient_context(patient_context: dict | None = None) -> str:
+    """Format user-supplied session context for model-only safety use."""
+    patient_context = patient_context or {}
+    lines = []
+
+    subject = SUBJECT_LABELS.get(patient_context.get("subject"))
+    if subject:
+        lines.append(f"Conversation subject: {subject}.")
+
+    patient_sex = PATIENT_SEX_LABELS.get(patient_context.get("patient_sex"))
+    if patient_sex:
+        lines.append(f"Patient sex/gender for medication safety: {patient_sex}.")
+
+    pregnancy_status_key = patient_context.get("pregnancy_status")
+    pregnancy_status = PREGNANCY_STATUS_LABELS.get(pregnancy_status_key)
+    if pregnancy_status and pregnancy_status_key != "not_applicable":
+        lines.append(f"Pregnancy/breastfeeding context: {pregnancy_status}.")
+
+    if not lines:
+        return ""
+
+    return "PATIENT SAFETY CONTEXT:\n" + "\n".join(f"- {line}" for line in lines)
+
 
 # ──────────────────────────────────────────────────────────────────────
 # 5. HELPERS
@@ -290,6 +335,7 @@ def build_user_message(
     query: str,
     chunks: list | None = None,
     role: str = "patient",
+    patient_context: dict | None = None,
 ) -> str:
     """Build the user-turn message, injecting RAG context when available.
 
@@ -300,19 +346,27 @@ def build_user_message(
                  Pass ``None`` or ``[]`` when Qdrant returns nothing.
         role:    The user's professional role (used as a reminder in the
                  context block alongside the system message role).
+        patient_context:  Session context such as subject, patient sex, and
+                 pregnancy/breastfeeding status for medication safety.
 
     Returns:
         A formatted string to send as the user turn to the LLM.
     """
+    patient_context_block = format_patient_context(patient_context)
     if chunks:
         context_str = format_retrieved_chunks(chunks)
         return RAG_CONTEXT_TEMPLATE.format(
             context_chunks=context_str,
             role=role,
+            patient_context_block=patient_context_block,
             query=query,
         )
     # No RAG context: prepend the no-context note so the model is aware.
-    return f"{NO_CONTEXT_NOTE}\n\nUSER ROLE: {role}\nUSER QUESTION: {query}"
+    context_lines = [NO_CONTEXT_NOTE, f"USER ROLE: {role}"]
+    if patient_context_block:
+        context_lines.append(patient_context_block)
+    context_lines.append(f"USER QUESTION: {query}")
+    return "\n\n".join(context_lines)
 
 
 def _select_models() -> list[str]:
@@ -442,6 +496,7 @@ def stream_ai_events(
     user_message,
     conversation_history=None,
     role="patient",
+    patient_context=None,
 ):
     """Stream typed AI events for a pharmacy-related query.
 
@@ -455,6 +510,7 @@ def stream_ai_events(
         conversation_history:  List of prior messages
             [{'role': 'user'|'assistant', 'content': '...'}]
         role:  One of 'patient', 'pharmacist', 'physician', 'nurse', 'other'.
+        patient_context:  Dict with subject, patient_sex, and pregnancy_status.
 
     Yields:
         dict: ``{"type": "status", ...}`` or ``{"type": "text", ...}``.
@@ -499,6 +555,7 @@ def stream_ai_events(
         user_message,
         chunks=chunks,
         role=role,
+        patient_context=patient_context,
     )
 
     messages.append({
