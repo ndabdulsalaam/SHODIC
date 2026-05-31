@@ -129,19 +129,6 @@ def _command_args_for_action(action: str, request: HttpRequest) -> tuple[str, ..
     return mapping[action]
 
 
-_original_get_urls = admin.site.get_urls
-
-
-def _get_urls():
-    custom = [
-        path("shodic/ingestion/", admin.site.admin_view(ingestion_admin_view), name="shodic_ingestion"),
-    ]
-    return custom + _original_get_urls()
-
-
-admin.site.get_urls = _get_urls
-
-
 @admin.register(RawSourceData)
 class RawSourceDataAdmin(admin.ModelAdmin):
     list_display = ["source", "source_id", "file_name", "created_at", "updated_at"]
@@ -149,9 +136,11 @@ class RawSourceDataAdmin(admin.ModelAdmin):
     search_fields = ["source_id", "file_name", "raw_data"]
     readonly_fields = ["created_at", "updated_at"]
 
-    def delete_queryset(self, request, queryset):
-        for obj in queryset:
-            obj.delete()
+    def get_urls(self):
+        custom_urls = [
+            path("ingestion/", self.admin_site.admin_view(ingestion_admin_view), name="shodic_ingestion"),
+        ]
+        return custom_urls + super().get_urls()
 
 
 @admin.register(DrugChunk)
