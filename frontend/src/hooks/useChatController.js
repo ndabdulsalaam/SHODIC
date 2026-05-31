@@ -168,6 +168,7 @@ export default function useChatController() {
     const abortControllerRef = useRef(null)
     const conversationsRef = useRef([])
     const editVariantsRef = useRef({})
+    const previousActiveConversationIdRef = useRef(null)
 
     useEffect(() => {
         conversationsRef.current = conversations
@@ -343,7 +344,7 @@ export default function useChatController() {
         sessionContextDraft.pregnancy_status,
         activeConversationId || 'new',
     ].join(':')
-    const canDismissSessionContextModal = Boolean(activeConversationId || newConversationContext)
+    const canDismissSessionContextModal = true
 
     const loadConversationMessages = useCallback(async (conversationId) => {
         const conversation = conversationsRef.current.find((item) => item.id === conversationId)
@@ -379,10 +380,19 @@ export default function useChatController() {
     }, [activeConversation, newConversationContext, sessionContextDraft])
 
     const handleCloseSessionContextModal = useCallback(() => {
-        if (!activeConversationId && !newConversationContext) return
         setSessionContextModalOpen(false)
         setSessionContextError('')
-    }, [activeConversationId, newConversationContext])
+
+        if (!activeConversationId && !newConversationContext && previousActiveConversationIdRef.current) {
+            const previousConversationId = previousActiveConversationIdRef.current
+            previousActiveConversationIdRef.current = null
+            setActiveConversationId(previousConversationId)
+            loadConversationMessages(previousConversationId)
+            return
+        }
+
+        previousActiveConversationIdRef.current = null
+    }, [activeConversationId, loadConversationMessages, newConversationContext])
 
     const handleSaveSessionContext = useCallback(async (context) => {
         const normalizedContext = normalizeSessionContext(context)
@@ -393,6 +403,7 @@ export default function useChatController() {
         saveLastSessionContext(normalizedContext)
 
         if (!activeConversationId) {
+            previousActiveConversationIdRef.current = null
             setNewConversationContext(normalizedContext)
             setSessionContextModalOpen(false)
             return
@@ -578,15 +589,17 @@ export default function useChatController() {
     }, [activeConversationId, newConversationContext, removeStreamingMessage, sessionContextDraft, streamAssistantResponse])
 
     const handleNewChat = useCallback(() => {
+        previousActiveConversationIdRef.current = activeConversationId
         setActiveConversationId(null)
         setNewConversationContext(null)
         setSessionContextDraft(loadLastSessionContext())
         setSessionContextError('')
         setSessionContextModalOpen(true)
         setSidebarOpen(false)
-    }, [])
+    }, [activeConversationId])
 
     const handleSelectChat = useCallback((id) => {
+        previousActiveConversationIdRef.current = null
         setActiveConversationId(id)
         setNewConversationContext(null)
         setSessionContextModalOpen(false)
@@ -605,6 +618,7 @@ export default function useChatController() {
         }
         setConversations((prev) => prev.filter((conversation) => conversation.id !== id))
         if (activeConversationId === id) {
+            previousActiveConversationIdRef.current = null
             setActiveConversationId(null)
             setNewConversationContext(null)
             setSessionContextDraft(loadLastSessionContext())
