@@ -35,30 +35,6 @@
     min-height: 52px;
 }
 
-.chat-input__icon-btn {
-    flex-shrink: 0;
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--color-text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition-fast);
-}
-
-.chat-input__icon-btn:hover:not(:disabled),
-.chat-input__icon-btn--active {
-    background: var(--color-surface-hover);
-    color: var(--color-primary-dark);
-}
-
-.chat-input__icon-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-}
-
 .chat-input__textarea {
     flex: 1;
     border: none;
@@ -76,86 +52,6 @@
 
 .chat-input__textarea::placeholder {
     color: var(--color-text-muted);
-}
-
-.chat-input__dictation {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    min-height: 48px;
-    padding: 3px 0 3px var(--space-1);
-}
-
-.chat-input__dictation-actions {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-1);
-}
-
-.chat-input__dictation-action {
-    flex-shrink: 0;
-    width: 36px;
-    height: 40px;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--color-text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-}
-
-.chat-input__dictation-action:hover {
-    background: var(--color-surface-hover);
-}
-
-.chat-input__dictation-action:active {
-    transform: scale(0.96);
-}
-
-.chat-input__dictation-action--confirm {
-    background: transparent;
-    color: var(--color-text);
-}
-
-.chat-input__dictation-action--confirm:hover {
-    background: var(--color-surface-hover);
-}
-
-.chat-input__waveform {
-    flex: 1;
-    min-width: 0;
-    height: 42px;
-    border-radius: var(--radius-md);
-    background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1px;
-    padding: 0;
-    overflow: hidden;
-}
-
-.chat-input__waveform span {
-    flex: 1 1 1px;
-    width: 2px;
-    min-width: 1px;
-    max-width: 2px;
-    height: 19px;
-    border-radius: 999px;
-    background: var(--color-primary-dark);
-    opacity: 0.95;
-    transform-origin: center;
-    transform: scaleY(var(--wave-scale, 0.12));
-    transition: transform 42ms linear;
-    will-change: transform;
-}
-
-.chat-input__waveform:not(.chat-input__waveform--active) span {
-    opacity: 0.45;
 }
 
 .chat-input__error {
@@ -226,8 +122,6 @@
         gap: var(--space-1);
     }
 
-    .chat-input__icon-btn,
-    .chat-input__dictation-action,
     .chat-input__send,
     .chat-input__stop {
         width: 38px;
