@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { HiOutlineChatBubbleLeftRight, HiOutlinePlus, HiOutlineTrash, HiOutlinePencil, HiOutlineCheck, HiOutlineXMark, HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
+import { PRODUCT } from '../../config/product'
 import './Sidebar.css'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -96,11 +97,7 @@ function Sidebar({ conversations, activeId, onNewChat, onSelectChat, onDeleteCha
                 <div className="sidebar__header">
                     <div className="sidebar__header-top">
                         <div className="sidebar__logo">
-                            <span className="sidebar__logo-text">
-                                <span className="sidebar__logo-r">R</span>
-                                <span className="sidebar__logo-x">x</span>
-                                <span className="sidebar__logo-chat">Chat</span>
-                            </span>
+                            <span className="sidebar__logo-text">{PRODUCT.name}</span>
                         </div>
                         <button className="sidebar__collapse-btn" onClick={onCollapse} title="Hide sidebar">
                             <HiOutlineChevronDoubleLeft size={16} />
@@ -208,6 +205,12 @@ function areSidebarPropsEqual(prevProps, nextProps) {
     return prevProps.activeId === nextProps.activeId
         && prevProps.isOpen === nextProps.isOpen
         && prevProps.collapsed === nextProps.collapsed
+        && prevProps.onNewChat === nextProps.onNewChat
+        && prevProps.onSelectChat === nextProps.onSelectChat
+        && prevProps.onDeleteChat === nextProps.onDeleteChat
+        && prevProps.onRenameChat === nextProps.onRenameChat
+        && prevProps.onClose === nextProps.onClose
+        && prevProps.onCollapse === nextProps.onCollapse
         && sameConversationSummaries(prevProps.conversations, nextProps.conversations)
 }
 

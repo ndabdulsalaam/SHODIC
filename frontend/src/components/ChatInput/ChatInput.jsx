@@ -29,7 +29,7 @@ function ChatInput({ onSend, isLoading, onStop, prefillText }) {
         isActive: waveformActive,
         start: startWaveform,
         stop: stopWaveform,
-    } = useAudioWaveform(128)
+    } = useAudioWaveform(36)
     const {
         isSupported: speechSupported,
         isListening,

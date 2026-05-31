@@ -1,4 +1,5 @@
 import { HiOutlineBeaker, HiOutlineShieldExclamation, HiOutlineQuestionMarkCircle, HiOutlineClipboardDocumentList } from 'react-icons/hi2'
+import { PRODUCT } from '../../config/product'
 import './WelcomeScreen.css'
 
 const suggestions = [
@@ -62,7 +63,7 @@ function WelcomeScreen({ onSuggestionClick, inputSlot }) {
             </div>
 
             <div className="welcome__disclaimer">
-                <strong>Disclaimer:</strong> SHODIC provides general health information only. Always consult a qualified healthcare professional for medical advice.
+                <strong>Disclaimer:</strong> {PRODUCT.name} provides general health information only. Always consult a qualified healthcare professional for medical advice.
             </div>
         </div>
     )

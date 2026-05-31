@@ -4,6 +4,7 @@ import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
 import DateSeparator from '../DateSeparator/DateSeparator'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
+import { PRODUCT } from '../../config/product'
 import './ChatWindow.css'
 
 function getMessageDomId(message, index) {
@@ -268,7 +269,7 @@ function ChatWindow({
                         <HiOutlineBars3 size={20} />
                     </button>
                     <div>
-                        <div className="chat-window__title">SHODIC</div>
+                        <div className="chat-window__title">{PRODUCT.name}</div>
                         <div className="chat-window__subtitle">AI Pharmacist</div>
                     </div>
                 </div>
