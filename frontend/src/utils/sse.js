@@ -79,12 +79,16 @@ export async function readSseStream(response, handlers) {
     const decoder = new TextDecoder()
     const streamParser = createSseParser(handlers)
 
-    while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        streamParser.push(decoder.decode(value, { stream: true }))
-    }
+    try {
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            streamParser.push(decoder.decode(value, { stream: true }))
+        }
 
-    streamParser.push(decoder.decode())
-    streamParser.flush()
+        streamParser.push(decoder.decode())
+        streamParser.flush()
+    } finally {
+        reader.releaseLock()
+    }
 }
