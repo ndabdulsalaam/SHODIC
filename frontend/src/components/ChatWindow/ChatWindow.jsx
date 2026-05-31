@@ -1,8 +1,7 @@
-import { Fragment, useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { HiOutlineBars3, HiOutlineChevronDown, HiOutlinePencilSquare } from 'react-icons/hi2'
 import MessageBubble from '../MessageBubble/MessageBubble'
 import ChatInput from '../ChatInput/ChatInput'
-import DateSeparator from '../DateSeparator/DateSeparator'
 import WelcomeScreen from '../WelcomeScreen/WelcomeScreen'
 import { PRODUCT } from '../../config/product'
 import { getSessionContextChips } from '../../utils/sessionContext'
@@ -15,13 +14,6 @@ function getMessageDomId(message, index) {
 
 function getMessageRenderKey(message, index) {
     return message._clientKey ?? message.id ?? index
-}
-
-function getMessageDateKey(message) {
-    if (!message?.created_at) return ''
-    const date = new Date(message.created_at)
-    if (Number.isNaN(date.getTime())) return ''
-    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
 }
 
 function getMessagePreview(message) {
@@ -240,25 +232,23 @@ function ChatWindow({
             <>
                 {messages.map((msg, i) => {
                     const resendMessageId = msg.role === 'assistant' ? findResendMessageId(i) : null
-                    const currentDateKey = getMessageDateKey(msg)
-                    const previousDateKey = getMessageDateKey(messages[i - 1])
-                    const shouldShowDateSeparator = currentDateKey && currentDateKey !== previousDateKey
                     const messageDomId = getMessageDomId(msg, i)
 
                     return (
-                        <Fragment key={getMessageRenderKey(msg, i)}>
-                            {shouldShowDateSeparator && <DateSeparator date={msg.created_at} />}
-                            <div id={messageDomId} className="chat-window__message-anchor">
-                                <MessageBubble
-                                    message={msg}
-                                    onEdit={onEditMessage}
-                                    onResend={onResendMessage}
-                                    onVariantChange={onMessageVariantChange}
-                                    resendMessageId={resendMessageId}
-                                    isLoading={isLoading}
-                                />
-                            </div>
-                        </Fragment>
+                        <div
+                            key={getMessageRenderKey(msg, i)}
+                            id={messageDomId}
+                            className="chat-window__message-anchor"
+                        >
+                            <MessageBubble
+                                message={msg}
+                                onEdit={onEditMessage}
+                                onResend={onResendMessage}
+                                onVariantChange={onMessageVariantChange}
+                                resendMessageId={resendMessageId}
+                                isLoading={isLoading}
+                            />
+                        </div>
                     )
                 })}
             </>
