@@ -29,7 +29,7 @@ class Conversation(models.Model):
     session_key = models.CharField(max_length=40, db_index=True)
     title = models.CharField(max_length=200, default='New Conversation')
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ['-updated_at']
@@ -53,7 +53,6 @@ class Message(models.Model):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['created_at']
@@ -87,18 +86,6 @@ class RawSourceData(models.Model):
 
     def __str__(self):
         return f"{self.source}:{self.source_id}"
-
-    def delete(self, *args, **kwargs):
-        point_ids = list(
-            self.chunks.exclude(qdrant_point_id__isnull=True)
-            .exclude(qdrant_point_id='')
-            .values_list('qdrant_point_id', flat=True)
-        )
-        if point_ids:
-            from .qdrant_service import delete_points  # noqa: PLC0415
-
-            delete_points(point_ids)
-        return super().delete(*args, **kwargs)
 
 
 class DrugChunk(models.Model):

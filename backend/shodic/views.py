@@ -269,7 +269,7 @@ def rename_conversation(request, conversation_id):
         )
 
     conversation.title = title[:200]
-    conversation.save()
+    conversation.save(update_fields=['title'])
     return Response({'id': str(conversation.id), 'title': conversation.title})
 
 
@@ -300,7 +300,7 @@ def edit_message(request, message_id):
     ).delete()
 
     message.content = content
-    message.save()
+    message.save(update_fields=['content'])
     conversation_updated_at = _touch_conversation(conversation)
     history = _conversation_history_before(conversation, message)
 

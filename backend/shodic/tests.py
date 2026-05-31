@@ -334,6 +334,10 @@ class ChatApiTests(TestCase):
     def test_rename_and_delete_conversation_for_session(self):
         session_key = self._session_key()
         conversation = Conversation.objects.create(session_key=session_key, title="Original")
+        original_updated_at = self._set_conversation_updated_at(
+            conversation,
+            timezone.now() - timedelta(days=1),
+        )
 
         rename = self.client.patch(
             f"/shodic/conversations/{conversation.id}/rename/",
@@ -343,6 +347,7 @@ class ChatApiTests(TestCase):
         self.assertEqual(rename.status_code, 200)
         conversation.refresh_from_db()
         self.assertEqual(conversation.title, "Updated")
+        self.assertEqual(conversation.updated_at, original_updated_at)
 
         delete = self.client.delete(f"/shodic/conversations/{conversation.id}/delete/")
         self.assertEqual(delete.status_code, 204)
