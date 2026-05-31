@@ -96,8 +96,8 @@
     width: 100%;
     margin-top: var(--space-6);
     padding: var(--space-3) var(--space-4);
-    background: var(--color-accent-soft);
-    border: 1px solid rgba(98, 122, 68, 0.22);
+    background: var(--color-warning-soft);
+    border: 1px solid rgba(169, 111, 9, 0.24);
     border-radius: var(--radius-md);
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
@@ -105,7 +105,7 @@
 }
 
 .welcome__disclaimer strong {
-    color: var(--color-accent-dark);
+    color: var(--color-secondary-dark);
 }
 
 @media (max-width: 760px) {
