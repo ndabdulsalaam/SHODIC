@@ -264,7 +264,7 @@ function ChatWindow({
                     </button>
                     <div>
                         <div className="chat-window__title">{PRODUCT.name}</div>
-                        <div className="chat-window__subtitle">Hospital medication assistant</div>
+                        <div className="chat-window__subtitle">{PRODUCT.subtitle}</div>
                     </div>
                 </div>
 
