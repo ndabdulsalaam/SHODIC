@@ -1,9 +1,9 @@
 export const PRODUCT = Object.freeze({
     slug: 'shodic',
-    name: 'SHODIC',
+    name: 'SHO-DIC',
     subtitle: 'Hospital medication assistant',
-    documentTitle: 'SHODIC — Hospital medication assistant',
-    description: 'SHODIC is a hospital medication assistant for medication safety, drug interactions, and patient-centered medicine information.',
+    documentTitle: 'SHO-DIC — Hospital medication assistant',
+    description: 'SHO-DIC is a hospital medication assistant for medication safety, drug interactions, and patient-centered medicine information.',
     apiNamespace: 'shodic',
 })
 
